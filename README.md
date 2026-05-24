@@ -74,7 +74,7 @@ The backend server (Java / Spring Boot) is **not open source**, but the full sou
 - Setup and deployment guide
 - A unique upgrade key for future version discounts
 
-**[Buy Backend Source — $49](https://mindio.me)**
+**[Buy Backend Source — $49](https://payhip.com/b/lsvQW)**
 
 Upgrade pricing: $19–$29 for future versions (using your unique key).
 
