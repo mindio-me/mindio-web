@@ -9,5 +9,6 @@ RUN npm run generate
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV BACKEND_HOST=server
 EXPOSE 80
