@@ -60,10 +60,9 @@ spec:
       template: GIT
       spec:
         source:
-          git:
-            repo: GITHUB
-            repoID: 1247446367
-            branch: main
+          source: GITHUB
+          repo: 1247446367
+          branch: main
         buildConfig:
           dockerfilePath: Dockerfile.server
         ports:
@@ -88,22 +87,21 @@ spec:
             default: ${ZEABUR_WEB_DOMAIN}/api
           WORKNOTES_FRONTEND_BASE_URL:
             default: ${ZEABUR_WEB_DOMAIN}
-        depends_on:
+        dependencies:
           - db
 
     - name: web
       template: GIT
       spec:
         source:
-          git:
-            repo: GITHUB
-            repoID: 1247446367
-            branch: main
+          source: GITHUB
+          repo: 1247446367
+          branch: main
         buildConfig:
           dockerfilePath: Dockerfile
         ports:
           - id: web
             port: 80
             type: HTTP
-        depends_on:
+        dependencies:
           - server
