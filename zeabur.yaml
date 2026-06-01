@@ -82,11 +82,11 @@ spec:
             dir: /app/uploads
         env:
           SPRING_DATASOURCE_URL:
-            default: "jdbc:mysql://${DB_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+            default: "jdbc:mysql://db:3306/mindio?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
           DB_USERNAME:
-            default: ${MYSQL_USER}
+            default: mindio
           DB_PASSWORD:
-            default: ${MYSQL_PASSWORD}
+            default: ${DB_PASSWORD}
           JWT_SECRET:
             default: ${JWT_SECRET}
           WORKNOTES_UPLOAD_PATH:
