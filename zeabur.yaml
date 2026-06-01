@@ -48,6 +48,9 @@ spec:
             expose: true
           MYSQL_ROOT_PASSWORD:
             default: ${DB_ROOT_PASSWORD}
+          MYSQL_HOST:
+            default: ${CONTAINER_HOSTNAME}
+            expose: true
           MYSQL_PORT:
             default: "3306"
             expose: true
