@@ -48,9 +48,6 @@ spec:
             expose: true
           MYSQL_ROOT_PASSWORD:
             default: ${DB_ROOT_PASSWORD}
-          MYSQL_HOST:
-            default: ${CONTAINER_HOSTNAME}
-            expose: true
           MYSQL_PORT:
             default: "3306"
             expose: true
@@ -82,11 +79,11 @@ spec:
             dir: /app/uploads
         env:
           SPRING_DATASOURCE_URL:
-            default: "jdbc:mysql://db:3306/mindio?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+            default: "jdbc:mysql://${DB_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
           DB_USERNAME:
-            default: mindio
+            default: ${MYSQL_USER}
           DB_PASSWORD:
-            default: ${DB_PASSWORD}
+            default: ${MYSQL_PASSWORD}
           JWT_SECRET:
             default: ${JWT_SECRET}
           WORKNOTES_UPLOAD_PATH:
