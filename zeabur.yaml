@@ -82,7 +82,7 @@ spec:
             dir: /app/uploads
         env:
           SPRING_DATASOURCE_URL:
-            default: "jdbc:mysql://${MYSQL_HOST}:${MYSQL_PORT}/${MYSQL_DATABASE}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+            default: "jdbc:mysql://db:3306/mindio?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
           DB_USERNAME:
             default: mindio
           DB_PASSWORD:
