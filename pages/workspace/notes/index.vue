@@ -295,21 +295,21 @@
                     </el-dropdown-item>
                     <el-dropdown-item v-if="isEditorjsNote" command="translate-english">
                       <i class="el-icon-s-opportunity" style="margin-right:4px;"></i>
-                      翻译为英文
+                      {{ $t('workspace.notes.translate') }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="isEditorjsNote" command="publish-wechat">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="#07c160" style="margin-right:4px;vertical-align:-2px;"><path d="M8.7 10.6c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9zm5.1 0c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9zM12 2C6.48 2 2 6.03 2 11c0 2.7 1.24 5.12 3.2 6.8L4 22l4.83-1.61A10.63 10.63 0 0012 21c5.52 0 10-4.03 10-9S17.52 2 12 2z"/></svg>
-                      发布到微信
+                      {{ $t('workspace.notes.publishWeChat') }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="isEditorjsNote" command="publish-linkedin">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="#0077B5" style="margin-right:4px;vertical-align:-2px;"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
-                      发布到 LinkedIn
+                      {{ $t('workspace.notes.publishLinkedIn') }}
                     </el-dropdown-item>
                     <el-dropdown-item command="export-pdf">
                       <i class="el-icon-document" style="margin-right:4px;"></i>
-                      导出为 PDF
+                      {{ $t('workspace.notes.exportPdf') }}
                     </el-dropdown-item>
-                    <el-dropdown-item command="delete"><i class="el-icon-delete"></i> 删除</el-dropdown-item>
+                    <el-dropdown-item command="delete"><i class="el-icon-delete"></i> {{ $t('common.delete') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </el-dropdown>
             </div>

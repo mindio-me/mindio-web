@@ -121,7 +121,10 @@
       "saved": "已保存",
       "saveFailed": "保存失败",
       "outline": "大纲",
-      "recentNotes": "最近笔记"
+      "recentNotes": "最近笔记",
+      "publishWeChat": "发布到微信",
+      "publishLinkedIn": "发布到 LinkedIn",
+      "exportPdf": "导出为 PDF"
     },
     "createNote": {
       "title": "创建新笔记",

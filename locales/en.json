@@ -121,7 +121,10 @@
       "saved": "Saved",
       "saveFailed": "Save failed",
       "outline": "Outline",
-      "recentNotes": "Recent Notes"
+      "recentNotes": "Recent Notes",
+      "publishWeChat": "Publish to WeChat",
+      "publishLinkedIn": "Publish to LinkedIn",
+      "exportPdf": "Export as PDF"
     },
     "createNote": {
       "title": "Create Note",
