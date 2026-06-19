@@ -10,10 +10,27 @@
             icon="el-icon-folder-add"
             style="width:100%"
             @click="openAddDialog"
-          >添加目录</el-button>
+          >{{ $t('workspace.localMedia.addDirectory') }}</el-button>
         </div>
 
         <div v-loading="loadingDirs" class="dir-list">
+          <div
+            class="dir-item dir-item-all"
+            :class="{ active: isAllSelected }"
+            :title="$t('workspace.localMedia.emptyTitle')"
+            @click="selectAllDirectories"
+          >
+            <div class="dir-item-main">
+              <i class="el-icon-files dir-icon"></i>
+              <div class="dir-item-info">
+                <div class="dir-item-name">{{ $t('workspace.localMedia.allDir') }}</div>
+                <div class="dir-item-meta">
+                  <span class="doc-count">{{ $t('workspace.localMedia.fileCount', { n: totalFileCount }) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div
             v-for="dir in directories"
             :key="dir.id"
@@ -27,28 +44,28 @@
                 <div class="dir-item-name">{{ dirDisplayName(dir) }}</div>
                 <div class="dir-item-meta">
                   <span v-if="dir.scanStatus === 'SCANNING'" class="scan-status scanning">
-                    <i class="el-icon-loading"></i> 扫描中…
+                    <i class="el-icon-loading"></i> {{ $t('workspace.localMedia.scanning') }}
                   </span>
                   <span v-else-if="dir.scanStatus === 'ERROR'" class="scan-status error">
-                    <i class="el-icon-warning-outline"></i> 扫描出错
+                    <i class="el-icon-warning-outline"></i> {{ $t('workspace.localMedia.scanError') }}
                   </span>
-                  <span v-else class="doc-count">{{ dir.fileCount }} 个文件</span>
+                  <span v-else class="doc-count">{{ $t('workspace.localMedia.fileCount', { n: dir.fileCount }) }}</span>
                 </div>
               </div>
             </div>
             <el-dropdown trigger="click" @command="cmd => handleDirCommand(cmd, dir)" @click.native.stop>
               <span class="dir-more-btn" @click.stop><i class="el-icon-more"></i></span>
               <el-dropdown-menu slot="dropdown">
-                <el-dropdown-item command="rescan" icon="el-icon-refresh">重新扫描</el-dropdown-item>
-                <el-dropdown-item command="delete" icon="el-icon-delete" class="danger-item">删除目录</el-dropdown-item>
+                <el-dropdown-item command="rescan" icon="el-icon-refresh">{{ $t('workspace.localMedia.rescan') }}</el-dropdown-item>
+                <el-dropdown-item command="delete" icon="el-icon-delete" class="danger-item">{{ $t('workspace.localMedia.deleteDir') }}</el-dropdown-item>
               </el-dropdown-menu>
             </el-dropdown>
           </div>
 
           <div v-if="!loadingDirs && directories.length === 0" class="sidebar-empty">
             <i class="el-icon-picture-outline"></i>
-            <p>暂无目录</p>
-            <p class="sidebar-empty-hint">点击上方按钮添加本地目录</p>
+            <p>{{ $t('workspace.localMedia.noDirs') }}</p>
+            <p class="sidebar-empty-hint">{{ $t('workspace.localMedia.noDirsHint') }}</p>
           </div>
         </div>
       </aside>
@@ -57,27 +74,29 @@
       <main class="workspace-main">
         <div v-if="!selectedDir" class="main-empty">
           <i class="el-icon-picture-outline main-empty-icon"></i>
-          <p class="main-empty-title">选择一个目录查看本地媒体</p>
-          <p class="main-empty-hint">在左侧添加本地目录，系统将扫描目录中的图片和音视频文件</p>
+          <p class="main-empty-title">{{ $t('workspace.localMedia.emptyTitle') }}</p>
+          <p class="main-empty-hint">{{ $t('workspace.localMedia.emptyHint') }}</p>
         </div>
 
         <template v-else>
           <!-- 目录信息行 -->
           <div class="dir-info-bar">
             <div class="dir-info-path">
-              <i class="el-icon-folder-opened"></i>
-              <span class="dir-info-path-text" :title="selectedDir.dirPath">{{ selectedDir.dirPath }}</span>
+              <i :class="isAllSelected ? 'el-icon-files' : 'el-icon-folder-opened'"></i>
+              <span v-if="isAllSelected" class="dir-info-path-text">{{ $t('workspace.localMedia.allDirsLabel') }}</span>
+              <span v-else class="dir-info-path-text" :title="selectedDir.dirPath">{{ selectedDir.dirPath }}</span>
             </div>
             <div class="dir-info-meta">
-              <span v-if="selectedDir.lastScanAt">上次扫描：{{ formatDate(selectedDir.lastScanAt) }}</span>
-              <span v-else class="text-muted">未扫描</span>
-              <span class="dir-info-count">共 {{ selectedDir.fileCount }} 个文件</span>
+              <span v-if="isAllSelected">{{ $t('workspace.localMedia.dirCount', { n: directories.length }) }}</span>
+              <span v-else-if="selectedDir.lastScanAt">{{ $t('workspace.localMedia.lastScan') }}{{ formatDate(selectedDir.lastScanAt) }}</span>
+              <span v-else class="text-muted">{{ $t('workspace.localMedia.notScanned') }}</span>
+              <span class="dir-info-count">{{ $t('workspace.localMedia.totalFiles', { n: isAllSelected ? totalFileCount : selectedDir.fileCount }) }}</span>
             </div>
           </div>
 
           <el-alert
-            v-if="selectedDir.scanStatus === 'ERROR' && selectedDir.lastScanError"
-            :title="'扫描错误：' + selectedDir.lastScanError"
+            v-if="!isAllSelected && selectedDir.scanStatus === 'ERROR' && selectedDir.lastScanError"
+            :title="$t('workspace.localMedia.scanErrorPrefix') + selectedDir.lastScanError"
             type="error"
             :closable="false"
             show-icon
@@ -88,7 +107,7 @@
           <div class="media-toolbar">
             <el-input
               v-model="keyword"
-              placeholder="搜索文件名…"
+              :placeholder="$t('workspace.localMedia.searchPlaceholder')"
               prefix-icon="el-icon-search"
               size="small"
               clearable
@@ -106,33 +125,63 @@
             </div>
           </div>
 
-          <!-- 媒体网格 + 右侧面板 -->
-          <div v-loading="loadingFiles" class="media-content-area">
-            <div class="media-grid" :class="{ 'panel-open': !!selectedFile }">
-              <div
-                v-for="file in files"
-                :key="file.id"
-                class="media-card"
-                :class="{ active: selectedFile && selectedFile.id === file.id }"
-                @click="selectFile(file)"
-              >
-                <div class="media-card-thumb" :class="mediaTypeClass(file.mediaType)">
-                  <img
-                    v-if="file.mediaType === 'IMAGE'"
-                    :src="thumbnailUrl(file)"
-                    :alt="file.fileName"
-                    loading="lazy"
-                    @error="$event.target.style.display='none'"
-                  >
-                  <i v-else-if="file.mediaType === 'VIDEO'" class="el-icon-video-camera media-type-icon"></i>
-                  <i v-else class="el-icon-headset media-type-icon"></i>
+          <!-- 日期分段瀑布流 + 右侧面板 -->
+          <div class="media-content-area">
+            <div
+              ref="mediaScroller"
+              v-loading="loadingFiles && files.length === 0"
+              class="media-timeline"
+              @scroll.passive="handleMediaScroll"
+            >
+              <section v-for="group in dateGroups" :key="group.key" class="date-section">
+                <div class="date-heading">
+                  <span>{{ group.label }}</span>
+                  <span class="date-count">{{ group.files.length }}{{ $t('workspace.localMedia.dateCountSuffix') }}</span>
                 </div>
-                <div class="media-card-name">{{ file.fileName }}</div>
-                <div class="path-overlay">{{ file.absolutePath }}</div>
+
+                <div class="media-waterfall" :class="{ 'panel-open': !!selectedFile }">
+                  <article
+                    v-for="file in group.files"
+                    :key="file.id"
+                    class="media-card"
+                    :class="{ active: selectedFile && selectedFile.id === file.id }"
+                    tabindex="0"
+                    @click="selectFile(file)"
+                    @keydown.enter="selectFile(file)"
+                  >
+                    <div
+                      class="media-card-thumb"
+                      :class="mediaTypeClass(file.mediaType)"
+                      :style="thumbnailStyle(file)"
+                    >
+                      <img
+                        v-if="file.mediaType === 'IMAGE'"
+                        :src="thumbnailUrl(file)"
+                        :alt="file.fileName"
+                        loading="lazy"
+                        @error="$event.target.style.display='none'"
+                      >
+                      <i v-else-if="file.mediaType === 'VIDEO'" class="el-icon-video-camera media-type-icon"></i>
+                      <i v-else class="el-icon-headset media-type-icon"></i>
+                    </div>
+                    <div class="media-card-name">{{ file.fileName }}</div>
+                    <div class="media-card-meta">
+                      <span>{{ (file.fileExtension || '').toUpperCase() }}</span>
+                      <span>{{ formatSize(file.fileSize) }}</span>
+                    </div>
+                    <div class="path-overlay">{{ file.absolutePath }}</div>
+                  </article>
+                </div>
+              </section>
+
+              <div v-if="!loadingFiles && dateGroups.length === 0" class="grid-empty">
+                <p>{{ !isAllSelected && selectedDir.scanStatus === 'SCANNING' ? $t('workspace.localMedia.scanningWait') : $t('workspace.localMedia.noMatchFiles') }}</p>
               </div>
 
-              <div v-if="!loadingFiles && files.length === 0" class="grid-empty">
-                <p>{{ selectedDir.scanStatus === 'SCANNING' ? '扫描中，请稍候…' : '该目录下暂无匹配的媒体文件' }}</p>
+              <div v-if="dateGroups.length" class="media-load-state">
+                <span v-if="loadingFiles"><i class="el-icon-loading"></i> {{ $t('workspace.localMedia.loadingMore') }}</span>
+                <span v-else-if="hasMoreFiles">{{ $t('workspace.localMedia.scrollToLoad') }}</span>
+                <span v-else>{{ $t('workspace.localMedia.allLoaded') }}</span>
               </div>
             </div>
 
@@ -140,7 +189,7 @@
             <transition name="panel-slide">
               <div v-if="selectedFile" class="detail-panel">
                 <div class="panel-header">
-                  <span class="panel-title">详情</span>
+                  <span class="panel-title">{{ $t('workspace.localMedia.detailTitle') }}</span>
                   <span class="panel-close" @click="selectedFile = null">✕</span>
                 </div>
 
@@ -163,14 +212,14 @@
                 <!-- 文件信息 -->
                 <div class="panel-meta">
                   <div class="panel-filename">{{ selectedFile.fileName }}</div>
-                  <div class="meta-row"><span>格式</span><span>{{ (selectedFile.fileExtension || '').toUpperCase() }}</span></div>
-                  <div class="meta-row"><span>大小</span><span>{{ formatSize(selectedFile.fileSize) }}</span></div>
+                  <div class="meta-row"><span>{{ $t('workspace.localMedia.metaFormat') }}</span><span>{{ (selectedFile.fileExtension || '').toUpperCase() }}</span></div>
+                  <div class="meta-row"><span>{{ $t('workspace.localMedia.metaSize') }}</span><span>{{ formatSize(selectedFile.fileSize) }}</span></div>
                   <div v-if="selectedFile.imageWidth" class="meta-row">
-                    <span>尺寸</span><span>{{ selectedFile.imageWidth }} × {{ selectedFile.imageHeight }}</span>
+                    <span>{{ $t('workspace.localMedia.metaDimensions') }}</span><span>{{ selectedFile.imageWidth }} × {{ selectedFile.imageHeight }}</span>
                   </div>
-                  <div class="meta-row"><span>修改时间</span><span>{{ formatDate(selectedFile.fileLastModified) }}</span></div>
+                  <div class="meta-row"><span>{{ $t('workspace.localMedia.metaModified') }}</span><span>{{ formatDate(selectedFile.fileLastModified) }}</span></div>
                   <div class="meta-row">
-                    <span>路径</span>
+                    <span>{{ $t('workspace.localMedia.metaPath') }}</span>
                     <span class="meta-path" :title="selectedFile.absolutePath">{{ selectedFile.absolutePath }}</span>
                   </div>
                 </div>
@@ -178,37 +227,27 @@
                 <!-- 操作按钮 -->
                 <div class="panel-actions">
                   <el-button size="small" type="primary" icon="el-icon-folder-opened" style="width:100%" @click="openFile(selectedFile)">
-                    用系统应用打开
+                    {{ $t('workspace.localMedia.openFile') }}
                   </el-button>
                   <el-button size="small" icon="el-icon-document-copy" style="width:100%;margin-left:0;margin-top:8px" @click="copyPath(selectedFile)">
-                    复制文件路径
+                    {{ $t('workspace.localMedia.copyPath') }}
                   </el-button>
                 </div>
               </div>
             </transition>
           </div>
 
-          <!-- 分页 -->
-          <el-pagination
-            v-if="total > pageSize"
-            layout="prev, pager, next"
-            :total="total"
-            :page-size="pageSize"
-            :current-page.sync="currentPage"
-            style="text-align:center;margin-top:16px;flex-shrink:0"
-            @current-change="loadFiles"
-          />
         </template>
       </main>
     </div>
 
     <!-- 添加目录 Dialog -->
-    <el-dialog title="添加本地媒体目录" :visible.sync="addDialogVisible" width="560px" @close="resetForm">
+    <el-dialog :title="$t('workspace.localMedia.dialogTitle')" :visible.sync="addDialogVisible" width="560px" @close="resetForm">
       <el-form ref="addForm" :model="addForm" :rules="addRules" label-width="80px">
-        <el-form-item label="目录路径" prop="dirPath">
+        <el-form-item :label="$t('workspace.localMedia.dirPath')" prop="dirPath">
           <div class="path-input-row">
-            <el-input v-model="addForm.dirPath" placeholder="例：C:\Users\...\Pictures" clearable style="flex:1" @change="closeBrowser" />
-            <el-button icon="el-icon-folder-opened" style="margin-left:8px;flex-shrink:0" @click="toggleBrowser">浏览</el-button>
+            <el-input v-model="addForm.dirPath" :placeholder="$t('workspace.localMedia.dirPathPlaceholder')" clearable style="flex:1" @change="closeBrowser" />
+            <el-button icon="el-icon-folder-opened" style="margin-left:8px;flex-shrink:0" @click="toggleBrowser">{{ $t('workspace.localMedia.browse') }}</el-button>
           </div>
         </el-form-item>
 
@@ -226,26 +265,28 @@
               <span class="browser-entry-name">{{ entry.name }}</span>
               <i class="el-icon-arrow-right browser-entry-arrow"></i>
             </div>
-            <div v-if="!browserLoading && browserEntries.length === 0" class="browser-empty">该目录下没有子目录</div>
+            <div v-if="!browserLoading && browserEntries.length === 0" class="browser-empty">{{ $t('workspace.localMedia.noSubDirs') }}</div>
           </div>
           <div v-if="browserCurrentPath" class="browser-footer">
-            <el-button type="primary" size="small" icon="el-icon-check" @click="selectBrowserPath">选择「{{ browserCurrentName }}」</el-button>
+            <el-button type="primary" size="small" icon="el-icon-check" @click="selectBrowserPath">{{ $t('workspace.localMedia.selectCurrent', { name: browserCurrentName }) }}</el-button>
           </div>
         </div>
 
-        <el-form-item label="显示名称">
-          <el-input v-model="addForm.displayName" placeholder="可选，留空则使用目录名" clearable />
+        <el-form-item :label="$t('workspace.localMedia.displayName')">
+          <el-input v-model="addForm.displayName" :placeholder="$t('workspace.localMedia.displayNamePlaceholder')" clearable />
         </el-form-item>
       </el-form>
       <div slot="footer">
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="adding" @click="submitAdd">添加并扫描</el-button>
+        <el-button @click="addDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="adding" @click="submitAdd">{{ $t('workspace.localMedia.submitAdd') }}</el-button>
       </div>
     </el-dialog>
   </div>
 </template>
 
 <script>
+const ALL_DIRECTORIES_ID = 'all'
+
 export default {
   name: 'LocalMediaPage',
   layout: 'workspace',
@@ -258,28 +299,21 @@ export default {
 
       files: [],
       total: 0,
-      currentPage: 1,
-      pageSize: 40,
+      currentPage: 0,
+      pageSize: 60,
+      hasMoreFiles: true,
       loadingFiles: false,
+      reloadFilesPending: false,
       keyword: '',
       filterType: '',
       searchTimer: null,
 
       selectedFile: null,
 
-      typeTabs: [
-        { label: '全部', value: '' },
-        { label: '图片', value: 'IMAGE' },
-        { label: '视频', value: 'VIDEO' },
-        { label: '音频', value: 'AUDIO' },
-      ],
 
       addDialogVisible: false,
       adding: false,
       addForm: { dirPath: '', displayName: '' },
-      addRules: {
-        dirPath: [{ required: true, message: '请输入目录路径', trigger: 'blur' }],
-      },
 
       browserVisible: false,
       browserLoading: false,
@@ -288,6 +322,49 @@ export default {
     }
   },
   computed: {
+    typeTabs() {
+      return [
+        { label: this.$t('workspace.localMedia.typeAll'), value: '' },
+        { label: this.$t('workspace.localMedia.typeImage'), value: 'IMAGE' },
+        { label: this.$t('workspace.localMedia.typeVideo'), value: 'VIDEO' },
+        { label: this.$t('workspace.localMedia.typeAudio'), value: 'AUDIO' },
+      ]
+    },
+    addRules() {
+      return {
+        dirPath: [{ required: true, message: this.$t('workspace.localMedia.dirPathRequired'), trigger: 'blur' }],
+      }
+    },
+    isAllSelected() {
+      return this.selectedDir && this.selectedDir.id === ALL_DIRECTORIES_ID
+    },
+    totalFileCount() {
+      return this.directories.reduce((total, dir) => total + (Number(dir.fileCount) || 0), 0)
+    },
+    dateGroups() {
+      const groups = []
+      const groupMap = new Map()
+      this.files.forEach(file => {
+        const date = file.fileLastModified ? new Date(file.fileLastModified) : null
+        const validDate = date && !Number.isNaN(date.getTime())
+        const key = validDate
+          ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+          : 'unknown'
+        if (!groupMap.has(key)) {
+          const group = {
+            key,
+            label: validDate
+              ? date.toLocaleDateString(this.$i18n.locale === 'zh-CN' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })
+              : this.$t('workspace.localMedia.unknownTime'),
+            files: [],
+          }
+          groupMap.set(key, group)
+          groups.push(group)
+        }
+        groupMap.get(key).files.push(file)
+      })
+      return groups
+    },
     breadcrumbs() {
       if (!this.browserCurrentPath) return []
       const isWindows = this.browserCurrentPath.includes('\\')
@@ -308,6 +385,10 @@ export default {
   },
   async created() {
     await this.loadDirectories()
+    this.selectAllDirectories()
+  },
+  beforeDestroy() {
+    clearTimeout(this.searchTimer)
   },
   methods: {
     async loadDirectories() {
@@ -315,7 +396,7 @@ export default {
       try {
         this.directories = await this.$localMediaService.getDirectories()
       } catch {
-        this.$message.error('加载目录列表失败')
+        this.$message.error(this.$t('workspace.localMedia.loadDirsFailed'))
       } finally {
         this.loadingDirs = false
       }
@@ -325,42 +406,95 @@ export default {
       this.selectedDir = dir
       this.keyword = ''
       this.filterType = ''
-      this.currentPage = 1
+      this.currentPage = 0
       this.files = []
       this.total = 0
+      this.hasMoreFiles = true
       this.selectedFile = null
-      this.loadFiles()
+      this.resetMediaScroll()
+      this.loadFiles({ reset: true })
     },
 
-    async loadFiles() {
+    selectAllDirectories() {
+      this.selectDir({
+        id: ALL_DIRECTORIES_ID,
+        displayName: this.$t('workspace.localMedia.allDir'),
+        fileCount: this.totalFileCount,
+      })
+    },
+
+    getFilesPage(params) {
+      if (this.isAllSelected) {
+        return this.$localMediaService.getAllFiles(params)
+      }
+      return this.$localMediaService.getFiles(this.selectedDir.id, params)
+    },
+
+    async loadFiles({ reset = true } = {}) {
       if (!this.selectedDir) return
+      if (this.loadingFiles) {
+        if (reset) this.reloadFilesPending = true
+        return
+      }
+      if (!reset && !this.hasMoreFiles) return
+      if (reset) {
+        this.currentPage = 0
+        this.files = []
+        this.total = 0
+        this.hasMoreFiles = true
+        this.selectedFile = null
+        this.resetMediaScroll()
+      }
       this.loadingFiles = true
       try {
-        const res = await this.$localMediaService.getFiles(this.selectedDir.id, {
+        const res = await this.getFilesPage({
           keyword: this.keyword || undefined,
           mediaType: this.filterType || undefined,
-          page: this.currentPage - 1,
+          page: this.currentPage,
           size: this.pageSize,
+          sortBy: 'fileLastModified',
+          direction: 'DESC',
         })
-        this.files = res.content || []
+        const incoming = res.content || []
+        this.files = reset ? incoming : [...this.files, ...incoming]
         this.total = res.totalElements || 0
+        this.hasMoreFiles = !res.last && this.files.length < this.total
+        if (this.hasMoreFiles) this.currentPage += 1
       } catch {
-        this.$message.error('加载文件列表失败')
+        this.$message.error(this.$t('workspace.localMedia.loadFilesFailed'))
       } finally {
         this.loadingFiles = false
+        if (this.reloadFilesPending) {
+          this.reloadFilesPending = false
+          this.loadFiles({ reset: true })
+        }
       }
     },
 
     onSearch() {
       clearTimeout(this.searchTimer)
-      this.currentPage = 1
-      this.searchTimer = setTimeout(() => this.loadFiles(), 300)
+      this.searchTimer = setTimeout(() => this.loadFiles({ reset: true }), 300)
     },
 
     setFilterType(val) {
       this.filterType = val
-      this.currentPage = 1
-      this.loadFiles()
+      this.loadFiles({ reset: true })
+    },
+
+    handleMediaScroll() {
+      if (this.loadingFiles || !this.hasMoreFiles) return
+      const el = this.$refs.mediaScroller
+      if (!el) return
+      const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (distanceToBottom < 360) {
+        this.loadFiles({ reset: false })
+      }
+    },
+
+    resetMediaScroll() {
+      this.$nextTick(() => {
+        if (this.$refs.mediaScroller) this.$refs.mediaScroller.scrollTop = 0
+      })
     },
 
     selectFile(file) {
@@ -384,9 +518,9 @@ export default {
     async copyPath(file) {
       try {
         await navigator.clipboard.writeText(file.absolutePath)
-        this.$message.success('路径已复制到剪贴板')
+        this.$message.success(this.$t('workspace.localMedia.copiedPath'))
       } catch {
-        this.$message.error('复制失败，请手动复制：' + file.absolutePath)
+        this.$message.error(this.$t('workspace.localMedia.copyFailed') + file.absolutePath)
       }
     },
 
@@ -415,7 +549,7 @@ export default {
         this.browserCurrentPath = res.currentPath || ''
         this.browserEntries = res.entries || []
       } catch (e) {
-        this.$message.error(e?.response?.data?.message || '无法读取目录')
+        this.$message.error(e?.response?.data?.message || this.$t('workspace.localMedia.cannotReadDir'))
       } finally {
         this.browserLoading = false
       }
@@ -439,12 +573,12 @@ export default {
         this.addDialogVisible = false
         this.selectDir(newDir)
         if (newDir.scanStatus === 'ERROR') {
-          this.$message.warning('目录已添加，但扫描遇到问题：' + newDir.lastScanError)
+          this.$message.warning(this.$t('workspace.localMedia.addWarning', { msg: newDir.lastScanError }))
         } else {
-          this.$message.success(`扫描完成，共发现 ${newDir.fileCount} 个文件`)
+          this.$message.success(this.$t('workspace.localMedia.addSuccess', { n: newDir.fileCount }))
         }
       } catch (e) {
-        this.$message.error(e?.response?.data?.message || '添加失败')
+        this.$message.error(e?.response?.data?.message || this.$t('workspace.localMedia.addFailed'))
       } finally {
         this.adding = false
       }
@@ -464,14 +598,16 @@ export default {
         if (this.selectedDir && this.selectedDir.id === dir.id) {
           this.selectedDir = updated
           this.loadFiles()
+        } else if (this.isAllSelected) {
+          this.loadFiles()
         }
         if (updated.scanStatus === 'ERROR') {
-          this.$message.warning('扫描遇到问题：' + updated.lastScanError)
+          this.$message.warning(this.$t('workspace.localMedia.rescanWarning', { msg: updated.lastScanError }))
         } else {
-          this.$message.success(`扫描完成，共 ${updated.fileCount} 个文件`)
+          this.$message.success(this.$t('workspace.localMedia.rescanSuccess', { n: updated.fileCount }))
         }
       } catch (e) {
-        this.$message.error(e?.response?.data?.message || '扫描失败')
+        this.$message.error(e?.response?.data?.message || this.$t('workspace.localMedia.rescanFailed'))
         if (idx >= 0) this.$set(this.directories[idx], 'scanStatus', 'ERROR')
       }
     },
@@ -479,23 +615,23 @@ export default {
     async doDelete(dir) {
       try {
         await this.$confirm(
-          `确认删除目录「${this.dirDisplayName(dir)}」？\n目录中的媒体文件快照记录将一并删除，不影响本地文件。`,
-          '确认删除',
-          { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+          this.$t('workspace.localMedia.deleteConfirmMsg', { name: this.dirDisplayName(dir) }),
+          this.$t('workspace.localMedia.deleteTitle'),
+          { confirmButtonText: this.$t('common.delete'), cancelButtonText: this.$t('common.cancel'), type: 'warning' }
         )
       } catch { return }
       try {
         await this.$localMediaService.deleteDirectory(dir.id)
         this.directories = this.directories.filter(d => d.id !== dir.id)
+        this.selectedFile = null
         if (this.selectedDir && this.selectedDir.id === dir.id) {
-          this.selectedDir = null
-          this.files = []
-          this.total = 0
-          this.selectedFile = null
+          this.selectAllDirectories()
+        } else if (this.isAllSelected) {
+          this.loadFiles()
         }
-        this.$message.success('已删除')
+        this.$message.success(this.$t('workspace.localMedia.deleteSuccess'))
       } catch (e) {
-        this.$message.error(e?.response?.data?.message || '删除失败')
+        this.$message.error(e?.response?.data?.message || this.$t('workspace.localMedia.deleteFailed'))
       }
     },
 
@@ -519,6 +655,12 @@ export default {
       }
     },
 
+    thumbnailStyle(file) {
+      if (file.mediaType !== 'IMAGE' || !file.imageWidth || !file.imageHeight) return {}
+      const ratio = Math.min(2, Math.max(0.65, file.imageWidth / file.imageHeight))
+      return { aspectRatio: String(ratio) }
+    },
+
     formatSize(bytes) {
       if (!bytes) return '-'
       if (bytes < 1024) return bytes + ' B'
@@ -528,7 +670,7 @@ export default {
 
     formatDate(dateStr) {
       if (!dateStr) return ''
-      return new Date(dateStr).toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+      return new Date(dateStr).toLocaleDateString(this.$i18n.locale === 'zh-CN' ? 'zh-CN' : 'en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
     },
   },
 }
@@ -583,6 +725,12 @@ export default {
     .dir-item-name { color: #667eea; font-weight: 500; }
     .dir-icon { color: #667eea; }
   }
+}
+
+.dir-item-all {
+  flex-shrink: 0;
+
+  .dir-icon { color: #667eea; }
 }
 
 .dir-item-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
@@ -646,21 +794,69 @@ export default {
 }
 
 .media-content-area {
-  flex: 1; overflow: hidden; position: relative; display: flex; gap: 12px;
+  flex: 1; min-height: 0; overflow: hidden; position: relative; display: flex; gap: 12px;
 }
 
-.media-grid {
-  flex: 1; overflow-y: auto;
-  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 8px;
-  padding: 4px 2px;
+.media-timeline {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 4px 4px 2px;
+}
+
+.date-section {
+  padding-bottom: 20px;
+}
+
+.date-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 0 9px;
+  margin-bottom: 4px;
+  background: var(--card-bg-color);
+  color: var(--text-color);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.date-count {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.media-waterfall {
+  column-width: 180px;
+  column-gap: 12px;
+
+  &.panel-open {
+    column-width: 160px;
+  }
 }
 
 .media-card {
-  width: 160px; cursor: pointer; border-radius: 8px; overflow: hidden;
-  border: 2px solid transparent; transition: border-color 0.15s, transform 0.1s;
-  background: var(--bg-secondary);
   position: relative;
-  &:hover { transform: translateY(-2px); border-color: var(--border-color); }
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 12px;
+  break-inside: avoid;
+  cursor: pointer;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  outline: none;
+  transition: border-color 0.15s, transform 0.1s, box-shadow 0.15s;
+  background: var(--bg-secondary);
+  &:hover,
+  &:focus {
+    transform: translateY(-2px);
+    border-color: var(--border-color);
+    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.1);
+  }
   &:hover .path-overlay { opacity: 1; }
   &.active { border-color: #667eea; }
 }
@@ -680,8 +876,14 @@ export default {
 }
 
 .media-card-thumb {
-  width: 160px; height: 120px; display: flex; align-items: center; justify-content: center; overflow: hidden;
-  img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--card-bg-color);
+  img { width: 100%; height: 100%; object-fit: cover; display: block; }
   &.thumb--video { background: rgba(52, 211, 153, 0.15); }
   &.thumb--audio { background: rgba(139, 92, 246, 0.15); }
 }
@@ -689,11 +891,27 @@ export default {
 .media-type-icon { font-size: 36px; &.el-icon-video-camera { color: #34d399; } &.el-icon-headset { color: #8b5cf6; } }
 
 .media-card-name {
-  padding: 6px 8px; font-size: 11px; color: var(--text-secondary);
+  padding: 7px 8px 2px; font-size: 12px; color: var(--text-secondary);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+.media-card-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 8px 7px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
 .grid-empty { width: 100%; text-align: center; padding: 60px 0; color: var(--text-muted); font-size: 14px; }
+
+.media-load-state {
+  padding: 8px 0 4px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
 
 .detail-panel {
   width: 300px; flex-shrink: 0; background: var(--card-bg-color);

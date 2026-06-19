@@ -5,13 +5,13 @@
       <aside class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
-            <el-input v-model="projectSearch" placeholder="搜索项目" prefix-icon="el-icon-search" clearable size="small" />
+            <el-input v-model="projectSearch" :placeholder="$t('workspace.projects.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
           </div>
         </div>
         <div class="sidebar-section sidebar-notes">
           <div class="sidebar-section-header">
-            <span class="section-title">我的项目</span>
-            <span class="section-subtitle">{{ filteredProjects.length }} 个</span>
+            <span class="section-title">{{ $t('workspace.projects.myProjects') }}</span>
+            <span class="section-subtitle">{{ filteredProjects.length }}{{ $t('workspace.projects.countSuffix') }}</span>
           </div>
           <div v-loading="loading" class="note-list-wrapper">
             <div v-if="filteredProjects.length > 0" class="note-list">
@@ -24,12 +24,12 @@
               >
                 <div class="note-list-title">{{ item.name }}</div>
                 <div class="note-list-meta">
-                  <span class="note-list-time">{{ item.category || '未分类' }}</span>
-                  <el-tag v-if="item.isFeatured" size="mini" type="warning" effect="plain">精选</el-tag>
+                  <span class="note-list-time">{{ item.category || $t('workspace.projects.uncategorized') }}</span>
+                  <el-tag v-if="item.isFeatured" size="mini" type="warning" effect="plain">{{ $t('workspace.projects.featured') }}</el-tag>
                 </div>
               </div>
             </div>
-            <div v-else-if="!loading" class="sidebar-empty"><p>暂无项目</p></div>
+            <div v-else-if="!loading" class="sidebar-empty"><p>{{ $t('workspace.projects.empty') }}</p></div>
           </div>
         </div>
       </aside>
@@ -43,18 +43,18 @@
             <div class="entity-detail-header">
               <h2 class="entity-detail-title">{{ selectedProject.name }}</h2>
               <div class="entity-detail-actions">
-                <el-button size="small" icon="el-icon-edit" @click="projectViewMode = 'edit'">编辑</el-button>
-                <el-button v-if="!isFullscreen" size="small" icon="el-icon-full-screen" @click="isFullscreen = true">全屏</el-button>
-                <el-button v-if="isFullscreen" size="small" type="warning" icon="el-icon-close" @click="isFullscreen = false">退出全屏</el-button>
+                <el-button size="small" icon="el-icon-edit" @click="projectViewMode = 'edit'">{{ $t('common.edit') }}</el-button>
+                <el-button v-if="!isFullscreen" size="small" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
+                <el-button v-if="isFullscreen" size="small" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
                 <button
                   v-if="!isFullscreen"
                   class="panel-toggle-btn"
-                  :title="rightPanelCollapsed ? '展开侧栏' : '收起侧栏'"
+                  :title="rightPanelCollapsed ? $t('workspace.projects.expandPanel') : $t('workspace.projects.collapsePanel')"
                   @click="rightPanelCollapsed = !rightPanelCollapsed"
                 >
                   <i :class="rightPanelCollapsed ? 'el-icon-d-arrow-left' : 'el-icon-d-arrow-right'"></i>
                 </button>
-                <el-button size="small" type="danger" plain @click="deleteProject">删除</el-button>
+                <el-button size="small" type="danger" plain @click="deleteProject">{{ $t('common.delete') }}</el-button>
               </div>
             </div>
 
@@ -62,25 +62,25 @@
             <div class="entity-detail-content">
               <!-- 简称 -->
               <div v-if="selectedProject.shortName" class="detail-field">
-                <label class="detail-label">简称</label>
+                <label class="detail-label">{{ $t('workspace.projects.shortName') }}</label>
                 <div class="detail-value">{{ selectedProject.shortName }}</div>
               </div>
 
               <!-- 副标题 -->
               <div v-if="selectedProject.subtitle" class="detail-field">
-                <label class="detail-label">副标题</label>
+                <label class="detail-label">{{ $t('workspace.projects.subtitle') }}</label>
                 <div class="detail-value">{{ selectedProject.subtitle }}</div>
               </div>
 
               <!-- 描述 -->
               <div v-if="selectedProject.description" class="detail-field">
-                <label class="detail-label">描述</label>
+                <label class="detail-label">{{ $t('workspace.projects.description') }}</label>
                 <div class="detail-value">{{ selectedProject.description }}</div>
               </div>
 
               <!-- 正文内容（富文本或 Markdown） -->
               <div v-if="selectedProject.content" class="detail-field">
-                <label class="detail-label">正文内容</label>
+                <label class="detail-label">{{ $t('workspace.projects.content') }}</label>
                 <div
                   v-if="selectedProject.contentType === 'markdown'"
                   class="markdown-content-display"
@@ -98,13 +98,13 @@
               <el-row :gutter="16" class="detail-meta-row">
                 <el-col :span="12">
                   <div class="detail-field">
-                    <label class="detail-label">分类</label>
+                    <label class="detail-label">{{ $t('workspace.projects.category') }}</label>
                     <div class="detail-value">{{ selectedProject.category || '-' }}</div>
                   </div>
                 </el-col>
                 <el-col :span="12">
                   <div class="detail-field">
-                    <label class="detail-label">图标</label>
+                    <label class="detail-label">{{ $t('workspace.projects.icon') }}</label>
                     <div class="detail-value">
                       <i v-if="selectedProject.icon" :class="selectedProject.icon"></i>
                       <span v-else>-</span>
@@ -117,7 +117,7 @@
               <el-row :gutter="16" class="detail-meta-row">
                 <el-col :span="12">
                   <div class="detail-field">
-                    <label class="detail-label">项目链接</label>
+                    <label class="detail-label">{{ $t('workspace.projects.projectUrl') }}</label>
                     <div class="detail-value">
                       <a v-if="selectedProject.projectUrl" :href="selectedProject.projectUrl" target="_blank" rel="noopener">{{ selectedProject.projectUrl }}</a>
                       <span v-else>-</span>
@@ -137,15 +137,15 @@
 
               <!-- 封面图片 -->
               <div v-if="selectedProject.imageUrl" class="detail-field">
-                <label class="detail-label">封面图片</label>
+                <label class="detail-label">{{ $t('workspace.projects.coverImage') }}</label>
                 <div class="detail-value">
-                  <img :src="selectedProject.imageUrl" alt="封面" style="max-width: 400px; border-radius: 8px;" />
+                  <img :src="selectedProject.imageUrl" alt="cover" style="max-width: 400px; border-radius: 8px;" />
                 </div>
               </div>
 
               <!-- 技术栈 -->
               <div v-if="displayTechnologies.length" class="detail-field">
-                <label class="detail-label">技术栈</label>
+                <label class="detail-label">{{ $t('workspace.projects.technologies') }}</label>
                 <div class="detail-value">
                   <el-tag v-for="(tech, idx) in displayTechnologies" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
                 </div>
@@ -155,23 +155,23 @@
               <el-row :gutter="16" class="detail-meta-row">
                 <el-col :span="8">
                   <div class="detail-field">
-                    <label class="detail-label">排序</label>
+                    <label class="detail-label">{{ $t('workspace.projects.displayOrder') }}</label>
                     <div class="detail-value">{{ selectedProject.displayOrder || 0 }}</div>
                   </div>
                 </el-col>
                 <el-col :span="8">
                   <div class="detail-field">
-                    <label class="detail-label">公开</label>
+                    <label class="detail-label">{{ $t('workspace.projects.publicField') }}</label>
                     <div class="detail-value">
-                      <el-tag :type="selectedProject.isPublic ? 'success' : 'info'" size="small">{{ selectedProject.isPublic ? '是' : '否' }}</el-tag>
+                      <el-tag :type="selectedProject.isPublic ? 'success' : 'info'" size="small">{{ selectedProject.isPublic ? $t('workspace.projects.yes') : $t('workspace.projects.no') }}</el-tag>
                     </div>
                   </div>
                 </el-col>
                 <el-col :span="8">
                   <div class="detail-field">
-                    <label class="detail-label">精选</label>
+                    <label class="detail-label">{{ $t('workspace.projects.isFeatured') }}</label>
                     <div class="detail-value">
-                      <el-tag :type="selectedProject.isFeatured ? 'warning' : 'info'" size="small">{{ selectedProject.isFeatured ? '是' : '否' }}</el-tag>
+                      <el-tag :type="selectedProject.isFeatured ? 'warning' : 'info'" size="small">{{ selectedProject.isFeatured ? $t('workspace.projects.yes') : $t('workspace.projects.no') }}</el-tag>
                     </div>
                   </div>
                 </el-col>
@@ -182,81 +182,81 @@
           <!-- 编辑模式 -->
           <div v-else-if="projectViewMode === 'edit'" class="entity-form-wrapper">
             <div class="entity-form-header">
-              <h2 class="entity-form-title">编辑项目</h2>
+              <h2 class="entity-form-title">{{ $t('workspace.projects.editTitle') }}</h2>
               <div class="entity-form-actions">
-                <el-button size="small" @click="cancelProjectEdit">取消</el-button>
-                <el-button type="primary" size="small" :loading="projectSaving" @click="saveProject">保存</el-button>
+                <el-button size="small" @click="cancelProjectEdit">{{ $t('common.cancel') }}</el-button>
+                <el-button type="primary" size="small" :loading="projectSaving" @click="saveProject">{{ $t('common.save') }}</el-button>
               </div>
             </div>
             <el-form :model="projectForm" label-position="top" class="entity-form">
               <el-row :gutter="16">
                 <el-col :span="16">
-                  <el-form-item label="名称">
-                    <el-input v-model="projectForm.name" placeholder="项目名称" />
+                  <el-form-item :label="$t('workspace.notes.title')">
+                    <el-input v-model="projectForm.name" :placeholder="$t('workspace.projects.namePlaceholder')" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="8">
-                  <el-form-item label="简称">
-                    <el-input v-model="projectForm.shortName" placeholder="如: WN" maxlength="20" show-word-limit />
+                  <el-form-item :label="$t('workspace.projects.shortName')">
+                    <el-input v-model="projectForm.shortName" :placeholder="$t('workspace.projects.shortNamePlaceholder')" maxlength="20" show-word-limit />
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item label="副标题">
-                <el-input v-model="projectForm.subtitle" placeholder="简短副标题" />
+              <el-form-item :label="$t('workspace.projects.subtitle')">
+                <el-input v-model="projectForm.subtitle" :placeholder="$t('workspace.projects.subtitlePlaceholder')" />
               </el-form-item>
-              <el-form-item label="描述">
-                <el-input v-model="projectForm.description" type="textarea" :rows="3" placeholder="项目描述" />
+              <el-form-item :label="$t('workspace.projects.description')">
+                <el-input v-model="projectForm.description" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionPlaceholder')" />
               </el-form-item>
-              <el-form-item label="正文内容">
+              <el-form-item :label="$t('workspace.projects.content')">
                 <div id="projectRichTextEditor" class="project-rich-text-editor"></div>
               </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="12">
-                  <el-form-item label="分类">
-                    <el-input v-model="projectForm.category" placeholder="如: Web, Mobile, Tool" />
+                  <el-form-item :label="$t('workspace.projects.category')">
+                    <el-input v-model="projectForm.category" :placeholder="$t('workspace.projects.categoryPlaceholder')" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                  <el-form-item label="图标">
-                    <el-input v-model="projectForm.icon" placeholder="图标名称或URL" />
+                  <el-form-item :label="$t('workspace.projects.icon')">
+                    <el-input v-model="projectForm.icon" :placeholder="$t('workspace.projects.iconPlaceholder')" />
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item label="封面图片URL">
+              <el-form-item :label="$t('workspace.projects.coverImageLabel')">
                 <el-input v-model="projectForm.imageUrl" placeholder="https://..." />
               </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="12">
-                  <el-form-item label="项目链接">
+                  <el-form-item :label="$t('workspace.projects.projectUrl')">
                     <el-input v-model="projectForm.projectUrl" placeholder="https://..." />
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                  <el-form-item label="GitHub 链接">
+                  <el-form-item :label="$t('workspace.projects.githubLink')">
                     <el-input v-model="projectForm.githubUrl" placeholder="https://github.com/..." />
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item label="技术栈">
+              <el-form-item :label="$t('workspace.projects.technologies')">
                 <div class="dynamic-tags">
                   <el-tag v-for="(tech, idx) in projectForm.technologies" :key="idx" closable size="small" @close="projectForm.technologies.splice(idx, 1)">{{ tech }}</el-tag>
                   <el-input v-if="projectTagInputVisible" ref="projectTagInput" v-model="projectTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectTag" @blur="addProjectTag" />
-                  <el-button v-else size="small" class="tag-add-btn" @click="showProjectTagInput">+ 添加</el-button>
+                  <el-button v-else size="small" class="tag-add-btn" @click="showProjectTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
                 </div>
               </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="8">
-                  <el-form-item label="排序">
+                  <el-form-item :label="$t('workspace.projects.displayOrder')">
                     <el-input-number v-model="projectForm.displayOrder" :min="0" size="small" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="8">
-                  <el-form-item label="公开">
+                  <el-form-item :label="$t('workspace.projects.publicField')">
                     <el-switch v-model="projectForm.isPublic" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="8">
-                  <el-form-item label="精选">
+                  <el-form-item :label="$t('workspace.projects.isFeatured')">
                     <el-switch v-model="projectForm.isFeatured" />
                   </el-form-item>
                 </el-col>
@@ -266,7 +266,7 @@
         </div>
         <div v-else class="note-main-empty">
           <i class="el-icon-folder-opened empty-icon"></i>
-          <p class="empty-text">选择一个项目查看详情</p>
+          <p class="empty-text">{{ $t('workspace.projects.selectEmpty') }}</p>
         </div>
       </main>
 
@@ -274,12 +274,12 @@
       <aside v-show="!rightPanelCollapsed" class="workspace-right">
         <div class="right-panel" v-if="selectedProject">
           <div class="right-section">
-            <h3 class="right-title">项目信息</h3>
+            <h3 class="right-title">{{ $t('workspace.projects.rightPanelTitle') }}</h3>
             <div class="right-meta-list">
-              <div class="right-meta-item"><span class="meta-label">创建时间</span><span class="meta-value">{{ formatDate(selectedProject.createdAt) }}</span></div>
-              <div class="right-meta-item"><span class="meta-label">修改时间</span><span class="meta-value">{{ formatDate(selectedProject.modifiedAt) }}</span></div>
-              <div class="right-meta-item" v-if="selectedProject.category"><span class="meta-label">分类</span><span class="meta-value">{{ selectedProject.category }}</span></div>
-              <div class="right-meta-item"><span class="meta-label">状态</span><span class="meta-value">{{ selectedProject.isPublic ? '公开' : '私有' }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.projects.createdAt') }}</span><span class="meta-value">{{ formatDate(selectedProject.createdAt) }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.projects.modifiedAt') }}</span><span class="meta-value">{{ formatDate(selectedProject.modifiedAt) }}</span></div>
+              <div class="right-meta-item" v-if="selectedProject.category"><span class="meta-label">{{ $t('workspace.projects.category') }}</span><span class="meta-value">{{ selectedProject.category }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('common.view') }}</span><span class="meta-value">{{ selectedProject.isPublic ? $t('workspace.projects.statusPublic') : $t('workspace.projects.statusPrivate') }}</span></div>
             </div>
           </div>
         </div>
@@ -384,7 +384,7 @@ export default {
           this.selectProject(this.projects[0])
         }
       } catch (error) {
-        this.$message.error('加载项目失败')
+        this.$message.error(this.$t('workspace.projects.loadFailed'))
         this.projects = []
       } finally {
         this.loading = false
@@ -428,14 +428,14 @@ export default {
     },
     async createProject() {
       try {
-        const data = { name: '新项目', description: '项目描述', isPublic: true }
+        const data = { name: this.$t('workspace.projects.newProjectName'), description: this.$t('workspace.projects.newProjectDesc'), isPublic: true }
         const result = await this.$projectService.createProject(data)
         await this.loadProjects()
         const created = this.projects.find(p => p.id === result.id) || this.projects[0]
         if (created) this.selectProject(created)
-        this.$message.success('项目已创建')
+        this.$message.success(this.$t('workspace.projects.createSuccess'))
       } catch (error) {
-        this.$message.error('创建项目失败')
+        this.$message.error(this.$t('workspace.projects.createFailed'))
       }
     },
     async saveProject() {
@@ -457,7 +457,7 @@ export default {
         }
 
         await this.$projectService.updateProject(this.selectedProject.id, submitData)
-        this.$message.success('项目已保存')
+        this.$message.success(this.$t('workspace.projects.saveSuccess'))
 
         // 更新本地列表
         const idx = this.projects.findIndex(p => p.id === this.selectedProject.id)
@@ -479,25 +479,25 @@ export default {
           this.projectEditor = null
         }
       } catch (error) {
-        this.$message.error('保存项目失败')
+        this.$message.error(this.$t('workspace.projects.saveFailed'))
       } finally {
         this.projectSaving = false
       }
     },
     deleteProject() {
       if (!this.selectedProject) return
-      this.$confirm(`确定要删除项目 "${this.selectedProject.name}" 吗？`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+      this.$confirm(this.$t('workspace.projects.deleteConfirm', { name: this.selectedProject.name }), this.$t('workspace.projects.confirmTitle'), {
+        confirmButtonText: this.$t('common.confirm'),
+        cancelButtonText: this.$t('common.cancel'),
         type: 'warning'
       }).then(async () => {
         try {
           await this.$projectService.deleteProject(this.selectedProject.id)
-          this.$message.success('删除成功')
+          this.$message.success(this.$t('workspace.projects.deleteSuccess'))
           this.selectedProject = null
           await this.loadProjects()
         } catch (error) {
-          this.$message.error('删除失败')
+          this.$message.error(this.$t('workspace.projects.deleteFailed'))
         }
       }).catch(() => {})
     },
@@ -542,7 +542,7 @@ export default {
           import('wangeditor').then((WangEditor) => {
             const E = WangEditor.default || WangEditor
             this.projectEditor = new E('#projectRichTextEditor')
-            this.projectEditor.config.placeholder = '请输入项目正文内容'
+            this.projectEditor.config.placeholder = this.$t('workspace.projects.editorPlaceholder')
             this.projectEditor.config.zIndex = 1000
             this.projectEditor.config.height = 500
             this.projectEditor.config.onchange = (html) => {
