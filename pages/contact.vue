@@ -50,76 +50,6 @@
       </div>
     </section>
 
-    <!-- Contact Methods Section -->
-    <section class="contact-methods-section">
-      <div class="contact-methods-container">
-
-        <!-- Chinese: WeChat only -->
-        <div v-if="$i18n.locale === 'zh-CN'" class="wechat-contact">
-          <div class="contact-method-card wechat-card">
-            <div class="method-icon wechat-icon">
-              <i class="el-icon-chat-dot-round"></i>
-            </div>
-            <h3 class="method-title">{{ $t('contactPage.methods.wechat') }}</h3>
-            <p class="method-note">{{ $t('contactPage.methods.wechatScan') }}</p>
-            <div class="qr-code-box">
-              <template v-if="ownerProfile && ownerProfile.wechatQrUrl">
-                <img
-                  :src="resolveUrl(ownerProfile.wechatQrUrl)"
-                  alt="WeChat QR"
-                  class="qr-image"
-                  @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex'"
-                />
-                <div class="qr-placeholder" style="display:none">
-                  <i class="el-icon-picture-outline"></i>
-                  <span>微信二维码</span>
-                </div>
-              </template>
-              <div v-else class="qr-placeholder" style="display:flex">
-                <i class="el-icon-picture-outline"></i>
-                <span>微信二维码</span>
-              </div>
-            </div>
-            <p class="wechat-note">{{ $t('contactPage.methods.wechatNote') }}</p>
-          </div>
-        </div>
-
-        <!-- English: Email, Twitter, LinkedIn -->
-        <div v-else class="contact-methods-grid">
-          <!-- Email -->
-          <div class="contact-method-card">
-            <div class="method-icon email-icon">
-              <i class="el-icon-message"></i>
-            </div>
-            <h3 class="method-title">{{ $t('contactPage.methods.email') }}</h3>
-            <p class="method-handle">{{ $t('contactPage.methods.emailAddress') }}</p>
-            <p class="method-note">{{ $t('contactPage.methods.emailNote') }}</p>
-          </div>
-
-          <!-- Twitter / X -->
-          <div class="contact-method-card">
-            <div class="method-icon twitter-icon">
-              <i class="el-icon-share"></i>
-            </div>
-            <h3 class="method-title">{{ $t('contactPage.methods.twitter') }}</h3>
-            <p class="method-handle">{{ $t('contactPage.methods.twitterHandle') }}</p>
-            <p class="method-note">{{ $t('contactPage.methods.twitterNote') }}</p>
-          </div>
-
-          <!-- LinkedIn -->
-          <div class="contact-method-card">
-            <div class="method-icon linkedin-icon">
-              <i class="el-icon-link"></i>
-            </div>
-            <h3 class="method-title">{{ $t('contactPage.methods.linkedin') }}</h3>
-            <p class="method-handle">{{ $t('contactPage.methods.linkedinHandle') }}</p>
-            <p class="method-note">{{ $t('contactPage.methods.linkedinNote') }}</p>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
     <!-- Collaboration Request Form Section -->
     <section class="form-section">
       <div class="form-container">
@@ -214,6 +144,76 @@
       </div>
     </section>
 
+    <!-- Contact Methods Section -->
+    <section class="contact-methods-section">
+      <div class="contact-methods-container">
+
+        <!-- Chinese: WeChat only -->
+        <div v-if="$i18n.locale === 'zh-CN'" class="wechat-contact">
+          <div class="contact-method-card wechat-card">
+            <div class="method-icon wechat-icon">
+              <i class="el-icon-chat-dot-round"></i>
+            </div>
+            <h3 class="method-title">{{ $t('contactPage.methods.wechat') }}</h3>
+            <p class="method-note">{{ $t('contactPage.methods.wechatScan') }}</p>
+            <div class="qr-code-box">
+              <template v-if="ownerProfile && ownerProfile.wechatQrUrl">
+                <img
+                  :src="resolveUrl(ownerProfile.wechatQrUrl)"
+                  alt="WeChat QR"
+                  class="qr-image"
+                  @error="$event.target.style.display='none'; $event.target.nextElementSibling.style.display='flex'"
+                />
+                <div class="qr-placeholder" style="display:none">
+                  <i class="el-icon-picture-outline"></i>
+                  <span>微信二维码</span>
+                </div>
+              </template>
+              <div v-else class="qr-placeholder" style="display:flex">
+                <i class="el-icon-picture-outline"></i>
+                <span>微信二维码</span>
+              </div>
+            </div>
+            <p class="wechat-note">{{ $t('contactPage.methods.wechatNote') }}</p>
+          </div>
+        </div>
+
+        <!-- English: Email, Twitter, LinkedIn -->
+        <div v-else class="contact-methods-grid">
+          <!-- Email -->
+          <div class="contact-method-card">
+            <div class="method-icon email-icon">
+              <i class="el-icon-message"></i>
+            </div>
+            <h3 class="method-title">{{ $t('contactPage.methods.email') }}</h3>
+            <p class="method-handle">{{ $t('contactPage.methods.emailAddress') }}</p>
+            <p class="method-note">{{ $t('contactPage.methods.emailNote') }}</p>
+          </div>
+
+          <!-- Twitter / X -->
+          <div class="contact-method-card">
+            <div class="method-icon twitter-icon">
+              <i class="el-icon-share"></i>
+            </div>
+            <h3 class="method-title">{{ $t('contactPage.methods.twitter') }}</h3>
+            <p class="method-handle">{{ $t('contactPage.methods.twitterHandle') }}</p>
+            <p class="method-note">{{ $t('contactPage.methods.twitterNote') }}</p>
+          </div>
+
+          <!-- LinkedIn -->
+          <div class="contact-method-card">
+            <div class="method-icon linkedin-icon">
+              <i class="el-icon-link"></i>
+            </div>
+            <h3 class="method-title">{{ $t('contactPage.methods.linkedin') }}</h3>
+            <p class="method-handle">{{ $t('contactPage.methods.linkedinHandle') }}</p>
+            <p class="method-note">{{ $t('contactPage.methods.linkedinNote') }}</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
     <!-- Booking Modal: English only -->
     <div
       v-if="isBookingModalVisible && $i18n.locale !== 'zh-CN'"
@@ -249,15 +249,19 @@
           <p>{{ $t('contactPage.footer.copyright') }}</p>
         </div>
         <div class="footer-right">
-          <a href="#" class="footer-link">
-            <i class="el-icon-s-promotion"></i>
-          </a>
-          <a href="#" class="footer-link">
-            <i class="el-icon-link"></i>
-          </a>
-          <a href="#" class="footer-link">
-            <i class="el-icon-chat-dot-round"></i>
-          </a>
+          <template v-if="$i18n.locale === 'zh-CN'">
+            <a href="/contact" class="footer-link" title="微信">
+              <i class="el-icon-chat-dot-round"></i>
+            </a>
+          </template>
+          <template v-else>
+            <a v-if="ownerProfile && ownerProfile.twitter" :href="formatUrl(ownerProfile.twitter)" target="_blank" rel="noopener" class="footer-link" title="Twitter">
+              <i class="el-icon-s-promotion"></i>
+            </a>
+            <a v-if="ownerProfile && ownerProfile.linkedin" :href="formatUrl(ownerProfile.linkedin)" target="_blank" rel="noopener" class="footer-link" title="LinkedIn">
+              <i class="el-icon-link"></i>
+            </a>
+          </template>
         </div>
       </div>
     </footer>
@@ -315,6 +319,10 @@ export default {
     }
   },
   methods: {
+    formatUrl(url) {
+      if (!url) return '#'
+      return url.startsWith('http') ? url : 'https://' + url
+    },
     resolveUrl(path) {
       if (!path) return ''
       if (/^https?:\/\//.test(path)) return path
