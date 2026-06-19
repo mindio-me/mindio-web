@@ -3,8 +3,8 @@ kind: Template
 metadata:
   name: MindIO
 spec:
-  description: "AI-powered personal workbench — capture, think, and publish. Self-hostable notes, media, and social publishing."
-  icon: "https://raw.githubusercontent.com/wufasong/mindio-web/main/static/favicon.png"
+  description: "MindIO is a personal workspace for turning input into output. Self-hostable notes, local resources, AI analysis, and publishing."
+  icon: "https://raw.githubusercontent.com/mindio-me/mindio-web/main/static/favicon.png"
   tags:
     - productivity
     - notes
@@ -69,7 +69,7 @@ spec:
             ARG SERVER_VERSION=1.0.0
             RUN apk add --no-cache wget && \
                 wget -O mindio-server.jar \
-                "https://github.com/wufasong/mindio-web/releases/download/v${SERVER_VERSION}/mindio-server-${SERVER_VERSION}.jar"
+                "https://github.com/mindio-me/mindio-web/releases/download/v${SERVER_VERSION}/mindio-server-${SERVER_VERSION}.jar"
             EXPOSE 8080
             ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
             CMD ["sh", "-c", "java $JAVA_OPTS -jar mindio-server.jar --spring.profiles.active=prod"]
