@@ -145,7 +145,7 @@
     <footer class="page-footer">
       <div class="footer-container">
         <div class="footer-left">
-          <p>© 2024 DeveloperName. All rights reserved.</p>
+          <p>© 2024 MindIO. All rights reserved.</p>
         </div>
         <div class="footer-right">
           <a href="#" class="footer-link">LinkedIn</a>
@@ -255,7 +255,7 @@ export default {
     const name = this.project?.name || 'Project'
     const desc =
       this.project?.description ||
-      'Project case study built with WorkNotes and related technologies.'
+      'Project case study built with MindIO and related technologies.'
     return {
       title: `${name} - Projects`,
       meta: [
@@ -839,4 +839,3 @@ export default {
   }
 }
 </style>
-

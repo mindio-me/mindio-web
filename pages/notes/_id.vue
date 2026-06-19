@@ -267,7 +267,7 @@ export default {
   auth: false,
   head() {
     return {
-      title: this.note ? `${this.note.title} - WorkNotes` : '笔记详情 - WorkNotes'
+      title: this.note ? `${this.note.title} - MindIO` : 'Note Details - MindIO'
     }
   },
   data() {
@@ -340,7 +340,7 @@ export default {
         
         // 设置页面标题
         if (process.client) {
-          document.title = `${note.title} - WorkNotes`
+          document.title = `${note.title} - MindIO`
         }
       } catch (error) {
         console.error('加载笔记失败:', error)

@@ -28,6 +28,13 @@ class LocalDocService extends ApiService {
     if (fileType) params.append('fileType', fileType)
     return this.get(`/v1/local-docs/directories/${dirId}/documents?${params}`)
   }
+
+  getAllDocuments({ keyword, fileType, page = 0, size = 20, sortBy = 'fileName', direction = 'ASC' } = {}) {
+    const params = new URLSearchParams({ page, size, sortBy, direction })
+    if (keyword) params.append('keyword', keyword)
+    if (fileType) params.append('fileType', fileType)
+    return this.get(`/v1/local-docs/documents?${params}`)
+  }
 }
 
 export default LocalDocService

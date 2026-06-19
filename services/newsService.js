@@ -5,6 +5,10 @@ class NewsService extends ApiService {
     return this.get('/v1/news', { params: date ? { date } : {} })
   }
 
+  getNewsHistory(page = 0, size = 5) {
+    return this.get('/v1/news/history', { params: { page, size } })
+  }
+
   getSources() {
     return this.get('/v1/news/sources')
   }

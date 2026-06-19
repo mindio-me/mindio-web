@@ -5,7 +5,7 @@
       <div class="topbar-left">
         <div class="topbar-logo" @click="$router.push('/')">
           <i class="el-icon-notebook-2"></i>
-          <span class="topbar-logo-text">Notecast</span>
+          <span class="topbar-logo-text">MindIO</span>
         </div>
         <el-button type="text" class="topbar-home-link" @click="$router.push('/')">
           <i class="el-icon-s-home"></i> Homepage

@@ -13,8 +13,9 @@
       :key="month.key"
       :data-month="month.key"
       class="calendar-month"
+      :class="{ 'is-selected-month': month.key === selectedMonth }"
     >
-      <div class="month-header month-header--clickable" @click="$emit('month-header-click', `${month.year}-${String(month.month).padStart(2, '0')}`)">
+      <div class="month-header month-header--clickable" @click="handleMonthClick(month.key)">
         {{ month.year }}年{{ month.month }}月
       </div>
       <div class="month-weekdays">
@@ -55,6 +56,10 @@ export default {
       default: () => ({})
     },
     selectedDate: {
+      type: String,
+      default: null
+    },
+    selectedMonth: {
       type: String,
       default: null
     },
@@ -148,6 +153,9 @@ export default {
     }
   },
   methods: {
+    handleMonthClick(monthKey) {
+      this.$emit('month-header-click', monthKey === this.selectedMonth ? null : monthKey)
+    },
     loadMoreMonths() {
       // 记录当前最早月份的 key，加载后用于恢复滚动位置
       const firstMonthKey = this.months[0] ? this.months[0].key : null
@@ -305,6 +313,23 @@ export default {
 }
 .month-header--clickable:hover {
   color: var(--el-color-primary, #6c63ff);
+}
+
+.calendar-month.is-selected-month {
+  .month-header {
+    color: #667eea;
+  }
+
+  .month-header::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: #667eea;
+    vertical-align: 2px;
+  }
 }
 
 .month-weekdays {

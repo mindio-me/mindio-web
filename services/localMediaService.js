@@ -29,6 +29,13 @@ class LocalMediaService extends ApiService {
     return this.get(`/v1/local-media/directories/${dirId}/files?${params}`)
   }
 
+  getAllFiles({ keyword, mediaType, page = 0, size = 40, sortBy = 'fileName', direction = 'ASC' } = {}) {
+    const params = new URLSearchParams({ page, size, sortBy, direction })
+    if (keyword) params.append('keyword', keyword)
+    if (mediaType) params.append('mediaType', mediaType)
+    return this.get(`/v1/local-media/files?${params}`)
+  }
+
   thumbnailUrl(fileId, token) {
     const base = this.$axios.defaults.baseURL || ''
     return `${base}/v1/local-media/thumbnails/${fileId}?token=${encodeURIComponent(token)}`

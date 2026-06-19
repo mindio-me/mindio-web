@@ -1,14 +1,14 @@
 export default {
   // Global page headers
   head: {
-    title: '个人笔记系统',
+    title: 'MindIO',
     htmlAttrs: {
       lang: 'zh-CN'
     },
     meta: [
       { charset: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { hid: 'description', name: 'description', content: '个人工作笔记管理系统' }
+      { hid: 'description', name: 'description', content: 'MindIO is a personal workspace for turning input into output.' }
     ],
     link: [
       { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' }

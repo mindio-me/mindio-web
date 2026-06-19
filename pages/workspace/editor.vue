@@ -939,7 +939,7 @@ export default {
 
   head() {
     return {
-      title: this.docTitle || 'New Document - WorkNotes'
+      title: this.docTitle || 'New Document - MindIO'
     }
   },
 

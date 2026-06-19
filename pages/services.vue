@@ -321,12 +321,19 @@
           <p>{{ $t('servicesPage.footer.copyright') }}</p>
         </div>
         <div class="footer-right">
-          <a href="#" class="footer-link">
-            <i class="el-icon-s-promotion"></i>
-          </a>
-          <a href="#" class="footer-link">
-            <i class="el-icon-link"></i>
-          </a>
+          <template v-if="$i18n.locale === 'zh-CN'">
+            <a href="/contact" class="footer-link" :title="ownerProfile && ownerProfile.wechat ? ownerProfile.wechat : '微信'">
+              <i class="el-icon-chat-dot-round"></i>
+            </a>
+          </template>
+          <template v-else>
+            <a v-if="ownerProfile && ownerProfile.twitter" :href="formatUrl(ownerProfile.twitter)" target="_blank" rel="noopener" class="footer-link" title="Twitter">
+              <i class="el-icon-s-promotion"></i>
+            </a>
+            <a v-if="ownerProfile && ownerProfile.linkedin" :href="formatUrl(ownerProfile.linkedin)" target="_blank" rel="noopener" class="footer-link" title="LinkedIn">
+              <i class="el-icon-link"></i>
+            </a>
+          </template>
         </div>
       </div>
     </footer>
@@ -344,7 +351,8 @@ export default {
       isMobileMenuOpen: false,
       services: [],
       loading: false,
-      activeFaq: null
+      activeFaq: null,
+      ownerProfile: null
     };
   },
 
@@ -365,9 +373,16 @@ export default {
       this.isDarkTheme = root.classList.contains('theme-dark');
     }
     await this.loadServices();
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {}
   },
 
   methods: {
+    formatUrl(url) {
+      if (!url) return '#'
+      return url.startsWith('http') ? url : 'https://' + url
+    },
     toggleLang() {
       const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'
       this.$i18n.setLocale(next)

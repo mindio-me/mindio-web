@@ -1,6 +1,6 @@
 <template>
-  <!-- WorkNotes Homepage -->
-  <div class="worknotes-app">
+  <!-- MindIO public notes page -->
+  <div class="mindio-app">
     <!-- Header -->
     <header class="worknotes-header">
       <div class="header-content">
@@ -52,9 +52,11 @@
           <NotesCalendar
             :notes-by-date="notesByDate"
             :selected-date="selectedDateStr"
+            :selected-month="selectedMonthStr"
             :current-date="currentDateStr"
             storage-key="notes-calendar-scroll"
             @date-selected="handleDateSelected"
+            @month-header-click="handleMonthSelected"
           />
         </div>
       </aside>
@@ -148,24 +150,26 @@
                 ? $t('notesPage.empty.noSearch', { keyword: searchKeyword.trim() })
                 : selectedDateStr
                 ? $t('notesPage.empty.noDate', { date: selectedDateStr })
+                : selectedMonthStr
+                ? $t('notesPage.empty.noMonth', { month: selectedMonthStr })
                 : selectedTag
                 ? $t('notesPage.empty.noTag')
                 : $t('notesPage.empty.noNotes') }}
             </p>
-            <div v-if="selectedDateStr" class="empty-actions" style="margin-bottom: 16px;">
-              <button class="clear-filter-btn" @click="clearDateFilter" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;">
+            <div v-if="selectedDateStr || selectedMonthStr" class="empty-actions" style="margin-bottom: 16px;">
+              <button class="clear-filter-btn" @click="clearTimeFilter" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: var(--card-bg-color); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-secondary); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;">
                 <i class="el-icon-close"></i>
-                <span>{{ $t('notesPage.empty.clearDate') }}</span>
+                <span>{{ $t('notesPage.empty.clearTime') }}</span>
               </button>
             </div>
-            <button v-if="!selectedDateStr" class="new-note-btn" @click="createNewNote">
+            <button v-if="!selectedDateStr && !selectedMonthStr" class="new-note-btn" @click="createNewNote">
               <i class="el-icon-plus"></i>
               <span>{{ $t('notesPage.empty.createNote') }}</span>
             </button>
           </div>
 
           <!-- Pagination -->
-          <div v-if="!loading && !error && totalElements > 0" class="pagination">
+          <div v-if="!loading && !error && totalElements > 0 && !selectedDateStr && !selectedMonthStr" class="pagination">
             <button
               class="page-btn"
               :disabled="currentPage === 0 || loading"
@@ -225,24 +229,26 @@
         <NotesCalendar
           :notes-by-date="notesByDate"
           :selected-date="selectedDateStr"
+          :selected-month="selectedMonthStr"
           :current-date="currentDateStr"
           storage-key="notes-calendar-mobile"
           @date-selected="handleDateSelected"
+          @month-header-click="handleMonthSelected"
         />
       </div>
-      <div v-if="selectedDateStr" class="mobile-sheet-result">
-        📝 {{ selectedDateStr }} · 共 {{ filteredNotes.length }} 篇笔记
+      <div v-if="selectedDateStr || selectedMonthStr" class="mobile-sheet-result">
+        📝 {{ selectedDateStr || selectedMonthStr }} · 共 {{ filteredNotes.length }} 篇笔记
       </div>
     </div>
 
     <!-- 移动端：悬浮按钮 -->
     <button
       class="mobile-fab"
-      @click="selectedDateStr ? clearDateFilter() : openSheet()"
+      @click="selectedDateStr || selectedMonthStr ? clearTimeFilter() : openSheet()"
     >
-      <template v-if="selectedDateStr">
+      <template v-if="selectedDateStr || selectedMonthStr">
         <span class="mobile-fab-x">✕</span>
-        <span class="mobile-fab-date">{{ selectedDateStr }}</span>
+        <span class="mobile-fab-date">{{ selectedDateStr || selectedMonthStr }}</span>
       </template>
       <template v-else>📅</template>
     </button>
@@ -266,8 +272,12 @@ export default {
       // Current date
       currentDate: new Date(),
       selectedDateStr: null, // 选中的日期 'YYYY-MM-DD'
+      selectedMonthStr: null, // 选中的月份 'YYYY-MM'
       isSheetOpen: false,
       touchStartY: 0,
+      isRestoringListState: false,
+      listStateStorageKey: 'worknotes:notes:list-state',
+      listScrollSaveTimer: null,
 
       // Loading and error states
       loading: false,
@@ -301,7 +311,25 @@ export default {
     },
 
     filteredNotes() {
-      let filtered = this.notes
+      let filtered = (this.selectedDateStr || this.selectedMonthStr)
+        ? this.allNotesForCalendar
+        : this.notes
+
+      if (this.searchKeyword && this.searchKeyword.trim()) {
+        const keyword = this.searchKeyword.trim().toLowerCase()
+        filtered = filtered.filter(note => {
+          const title = (note.title || '').toLowerCase()
+          const summary = (note.summary || '').toLowerCase()
+          const content = (note.content || '').toLowerCase()
+          return title.includes(keyword) || summary.includes(keyword) || content.includes(keyword)
+        })
+      }
+
+      if (this.selectedTag) {
+        filtered = filtered.filter(note => {
+          return note.tags && note.tags.some(tag => tag.id === this.selectedTag)
+        })
+      }
 
       // 按日期筛选
       if (this.selectedDateStr) {
@@ -309,6 +337,12 @@ export default {
           const noteDate = new Date(note.modifiedAt || note.createdAt)
           const noteDateStr = noteDate.toISOString().split('T')[0]
           return noteDateStr === this.selectedDateStr
+        })
+      } else if (this.selectedMonthStr) {
+        filtered = filtered.filter(note => {
+          const noteDate = new Date(note.modifiedAt || note.createdAt)
+          const noteMonthStr = noteDate.toISOString().slice(0, 7)
+          return noteMonthStr === this.selectedMonthStr
         })
       }
 
@@ -329,20 +363,39 @@ export default {
     if (process.client) {
       const root = document.documentElement;
       this.isDarkTheme = root.classList.contains('theme-dark');
+      this.restoreListState()
     }
     await this.loadTags()
     await this.loadNotesDates() // 先加载所有笔记的日期数据
     await this.loadNotes()
+    this.$nextTick(() => {
+      this.setupListScrollPersistence()
+      this.restoreListScrollPosition()
+    })
+  },
+
+  beforeDestroy() {
+    this.saveListState()
+    this.removeListScrollPersistence()
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer)
+    }
+    if (this.listScrollSaveTimer) {
+      clearTimeout(this.listScrollSaveTimer)
+    }
   },
 
   watch: {
     $route() { this.isMobileMenuOpen = false },
     selectedTag() {
+      if (this.isRestoringListState) return
       // 标签改变时重置到第一页并重新加载
       this.currentPage = 0
+      this.saveListState()
       this.loadNotes()
     },
     searchKeyword(newVal, oldVal) {
+      if (this.isRestoringListState) return
       // 搜索关键词改变时，使用 500ms 防抖
       if (this.searchDebounceTimer) {
         clearTimeout(this.searchDebounceTimer)
@@ -351,6 +404,7 @@ export default {
       // 如果搜索框被清空，立即加载（不需要防抖）
       if (!newVal || !newVal.trim()) {
         this.currentPage = 0
+        this.saveListState()
         this.loadNotes()
         return
       }
@@ -358,12 +412,83 @@ export default {
       // 否则使用防抖
       this.searchDebounceTimer = setTimeout(() => {
         this.currentPage = 0
+        this.saveListState()
         this.loadNotes()
       }, 500)
     }
   },
 
   methods: {
+    getNotesContentElement() {
+      if (!process.client) return null
+      return document.querySelector('.notes-content')
+    },
+    getListStatePayload() {
+      const notesContent = this.getNotesContentElement()
+      return {
+        searchKeyword: this.searchKeyword,
+        selectedTag: this.selectedTag,
+        selectedDateStr: this.selectedDateStr,
+        selectedMonthStr: this.selectedMonthStr,
+        currentPage: this.currentPage,
+        scrollTop: notesContent ? notesContent.scrollTop : 0,
+        savedAt: Date.now()
+      }
+    },
+    saveListState() {
+      if (!process.client) return
+      try {
+        sessionStorage.setItem(this.listStateStorageKey, JSON.stringify(this.getListStatePayload()))
+      } catch (e) {
+        console.warn('保存笔记列表状态失败:', e)
+      }
+    },
+    restoreListState() {
+      if (!process.client) return
+      try {
+        const raw = sessionStorage.getItem(this.listStateStorageKey)
+        if (!raw) return
+        const state = JSON.parse(raw)
+        this.isRestoringListState = true
+        this.searchKeyword = state.searchKeyword || ''
+        this.selectedTag = state.selectedTag ?? null
+        this.selectedDateStr = state.selectedDateStr || null
+        this.selectedMonthStr = state.selectedMonthStr || null
+        this.currentPage = Number.isInteger(state.currentPage) && state.currentPage >= 0 ? state.currentPage : 0
+        this._pendingListScrollTop = Number.isFinite(state.scrollTop) ? state.scrollTop : 0
+      } catch (e) {
+        console.warn('恢复笔记列表状态失败:', e)
+      } finally {
+        this.$nextTick(() => {
+          this.isRestoringListState = false
+        })
+      }
+    },
+    restoreListScrollPosition() {
+      if (!process.client || this._pendingListScrollTop == null) return
+      const notesContent = this.getNotesContentElement()
+      if (!notesContent) return
+      notesContent.scrollTop = this._pendingListScrollTop
+      this._pendingListScrollTop = null
+    },
+    setupListScrollPersistence() {
+      const notesContent = this.getNotesContentElement()
+      if (!notesContent || this._notesListScrollHandler) return
+      this._notesListScrollHandler = () => {
+        if (this.listScrollSaveTimer) clearTimeout(this.listScrollSaveTimer)
+        this.listScrollSaveTimer = setTimeout(() => {
+          this.saveListState()
+        }, 150)
+      }
+      notesContent.addEventListener('scroll', this._notesListScrollHandler)
+    },
+    removeListScrollPersistence() {
+      const notesContent = this.getNotesContentElement()
+      if (notesContent && this._notesListScrollHandler) {
+        notesContent.removeEventListener('scroll', this._notesListScrollHandler)
+      }
+      this._notesListScrollHandler = null
+    },
     toggleLang() {
       const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'
       this.$i18n.setLocale(next)
@@ -670,11 +795,30 @@ export default {
      */
     handleDateSelected(dateStr) {
       this.selectedDateStr = dateStr
+      this.selectedMonthStr = null
       // 重置到第一页
       this.currentPage = 0
+      this.saveListState()
       // 重新加载笔记（会应用日期筛选）
       this.loadNotes()
       // 滚动到笔记列表顶部
+      this.$nextTick(() => {
+        const notesContent = document.querySelector('.notes-content')
+        if (notesContent) {
+          notesContent.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+      })
+    },
+
+    /**
+     * 处理月份选择（来自 NotesCalendar 组件）
+     */
+    handleMonthSelected(monthStr) {
+      this.selectedMonthStr = monthStr
+      this.selectedDateStr = null
+      this.currentPage = 0
+      this.saveListState()
+      this.loadNotes()
       this.$nextTick(() => {
         const notesContent = document.querySelector('.notes-content')
         if (notesContent) {
@@ -688,8 +832,14 @@ export default {
      */
     clearDateFilter() {
       this.selectedDateStr = null
+      this.selectedMonthStr = null
       this.currentPage = 0
+      this.saveListState()
       this.loadNotes()
+    },
+
+    clearTimeFilter() {
+      this.clearDateFilter()
     },
 
     openSheet() {
@@ -725,6 +875,7 @@ export default {
       console.log('openNote', note)
       // Navigate to note detail page
       if (note && note.id) {
+        this.saveListState()
         console.log('openNote router', this.$router)
         this.$router.push(`/notes/${note.id}`)
       } else {
@@ -747,6 +898,7 @@ export default {
     previousPage() {
       if (this.currentPage > 0) {
         this.currentPage--
+        this.saveListState()
         this.loadNotes()
       }
     },
@@ -757,6 +909,7 @@ export default {
     nextPage() {
       if (this.currentPage < this.totalPages - 1) {
         this.currentPage++
+        this.saveListState()
         this.loadNotes()
       }
     }
@@ -764,7 +917,7 @@ export default {
 
   head() {
     return {
-      title: 'WorkNotes - Personal Work Management',
+      title: 'MindIO - Personal Workspace',
     };
   },
 
@@ -776,7 +929,7 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.worknotes-app {
+.mindio-app {
   min-height: 100vh;
   background: var(--bg-secondary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -929,22 +1082,30 @@ export default {
 
 // Main Content
 .worknotes-main {
-  display: flex;
-  height: calc(100vh - 64px);
-  overflow: hidden; // 防止整体滚动
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+  width: min(1240px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+  min-height: calc(100vh - 64px);
 }
 
 // Calendar Sidebar
 .calendar-sidebar {
-  width: 280px;
-  flex-shrink: 0;
   background: var(--card-bg-color);
-  border-right: 1px solid var(--border-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  height: calc(100vh - 64px);
+  height: calc(100vh - 128px);
+  min-height: 520px;
+  position: sticky;
+  top: 96px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .calendar-container {
@@ -958,20 +1119,11 @@ export default {
 
 // Notes Content
 .notes-content {
-  flex: 1;
   min-width: 0;
-  background: var(--bg-secondary);
-  display: flex;
-  justify-content: center;
-  overflow-y: auto;
-  overflow-x: hidden;
-  height: 100%; // 确保有固定高度
 }
 
 .notes-content-inner {
   width: 100%;
-  max-width: 1400px;
-  padding: 32px 40px;
 }
 
 .search-section {
@@ -1196,23 +1348,23 @@ export default {
   }
 
   .worknotes-main {
-    flex-direction: column;
-    height: auto; // 小屏幕上允许自适应高度
+    grid-template-columns: 1fr;
+    gap: 20px;
+    width: min(100% - 32px, 760px);
+    padding: 24px 0 40px;
     min-height: calc(100vh - 64px);
   }
 
   .calendar-sidebar {
     width: 100%;
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
     padding: 16px;
     height: auto;
+    min-height: 0;
     max-height: 400px;
-    flex-shrink: 0; // 防止被压缩
+    position: static;
   }
 
   .notes-content {
-    height: auto; // 小屏幕上允许自适应高度
     min-height: 0;
   }
 
@@ -1221,7 +1373,7 @@ export default {
   }
 
   .notes-content-inner {
-    padding: 24px;
+    padding: 0;
   }
 
   .notes-grid {
@@ -1482,7 +1634,7 @@ export default {
   }
 
   .notes-content-inner {
-    padding: 16px;
+    padding: 0;
   }
 
   .notes-grid {
@@ -1602,7 +1754,7 @@ export default {
   }
 
   .notes-content-inner {
-    padding: 12px;
+    padding: 0;
   }
 
   .note-card {

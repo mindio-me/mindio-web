@@ -22,7 +22,7 @@
               <el-form-item label="网站名称">
                 <el-input
                   v-model="siteForm.siteName"
-                  placeholder="例如：WorkNotes"
+                  placeholder="例如：MindIO"
                   maxlength="100"
                 />
               </el-form-item>
