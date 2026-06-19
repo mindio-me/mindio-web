@@ -1,14 +1,14 @@
 <template>
   <el-dialog
     :visible.sync="visible"
-    title="创建新笔记"
+    :title="$t('workspace.createNote.title')"
     width="600px"
     :close-on-click-modal="false"
     @close="handleClose"
   >
     <div class="create-note-dialog">
-      <p class="dialog-subtitle">选择一种方式开始您的笔记</p>
-      
+      <p class="dialog-subtitle">{{ $t('workspace.createNote.subtitle') }}</p>
+
       <div class="option-cards">
         <!-- 空白笔记 -->
         <div class="option-card" @click="handleSelect('blank')">
@@ -16,8 +16,8 @@
             <i class="el-icon-document"></i>
           </div>
           <div class="option-content">
-            <h3 class="option-title">空白笔记</h3>
-            <p class="option-desc">从零开始创建一篇新的笔记</p>
+            <h3 class="option-title">{{ $t('workspace.createNote.blank') }}</h3>
+            <p class="option-desc">{{ $t('workspace.createNote.blankDesc') }}</p>
           </div>
         </div>
 
@@ -27,8 +27,8 @@
             <i class="el-icon-cloudy"></i>
           </div>
           <div class="option-content">
-            <h3 class="option-title">导入飞书文档</h3>
-            <p class="option-desc">从您的飞书云空间选择文档进行导入</p>
+            <h3 class="option-title">{{ $t('workspace.createNote.feishu') }}</h3>
+            <p class="option-desc">{{ $t('workspace.createNote.feishuDesc') }}</p>
           </div>
         </div>
 
@@ -38,8 +38,8 @@
             <i class="el-icon-document-add"></i>
           </div>
           <div class="option-content">
-            <h3 class="option-title">导入Markdown文件</h3>
-            <p class="option-desc">上传本地Markdown文件并转换为笔记</p>
+            <h3 class="option-title">{{ $t('workspace.createNote.markdown') }}</h3>
+            <p class="option-desc">{{ $t('workspace.createNote.markdownDesc') }}</p>
           </div>
         </div>
       </div>
@@ -97,20 +97,20 @@ export default {
 
       // 验证文件类型
       if (!file.name.match(/\.(md|markdown)$/i)) {
-        this.$message.error('请选择 Markdown 文件（.md 或 .markdown）')
+        this.$message.error(this.$t('workspace.createNote.invalidMarkdown'))
         return
       }
 
       try {
         // 读取文件内容
         const content = await this.readFileAsText(file)
-        const title = file.name.replace(/\.(md|markdown)$/i, '') || '导入的笔记'
+        const title = file.name.replace(/\.(md|markdown)$/i, '') || this.$t('workspace.createNote.defaultTitle')
 
         // 触发导入事件
         this.$emit('select-markdown', { title, content, file })
         this.handleClose()
       } catch (error) {
-        this.$message.error('读取文件失败：' + error.message)
+        this.$message.error(this.$t('workspace.createNote.readError') + error.message)
       } finally {
         // 清空文件输入，以便下次可以选择同一个文件
         event.target.value = ''
@@ -120,7 +120,7 @@ export default {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = (e) => resolve(e.target.result)
-        reader.onerror = (e) => reject(new Error('文件读取失败'))
+        reader.onerror = (e) => reject(new Error(this.$t('workspace.createNote.readError')))
         reader.readAsText(file, 'UTF-8')
       })
     },

@@ -9,7 +9,7 @@
     "localMedia": "本地媒体",
     "news": "资讯",
     "tags": "标签",
-    "cooperation": "合作请求"
+    "cooperation": "开发需求"
   },
   "actions": {
     "newNote": "新建笔记",
@@ -123,6 +123,19 @@
       "outline": "大纲",
       "recentNotes": "最近笔记"
     },
+    "createNote": {
+      "title": "创建新笔记",
+      "subtitle": "选择一种方式开始您的笔记",
+      "blank": "空白笔记",
+      "blankDesc": "从零开始创建一篇新的笔记",
+      "feishu": "导入飞书文档",
+      "feishuDesc": "从您的飞书云空间选择文档进行导入",
+      "markdown": "导入 Markdown 文件",
+      "markdownDesc": "上传本地 Markdown 文件并转换为笔记",
+      "invalidMarkdown": "请选择 Markdown 文件（.md 或 .markdown）",
+      "defaultTitle": "导入的笔记",
+      "readError": "读取文件失败："
+    },
     "resources": {
       "title": "资源",
       "addFile": "添加文件",
@@ -209,7 +222,7 @@
       "wechatNote": "添加时请注明来意"
     },
     "form": {
-      "title": "合作请求",
+      "title": "开发需求",
       "name": "你的姓名",
       "email": "邮箱",
       "orgOptional": "组织 (可选)",

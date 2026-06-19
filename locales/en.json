@@ -123,6 +123,19 @@
       "outline": "Outline",
       "recentNotes": "Recent Notes"
     },
+    "createNote": {
+      "title": "Create Note",
+      "subtitle": "Choose a way to start your note",
+      "blank": "Blank Note",
+      "blankDesc": "Start fresh with a new empty note",
+      "feishu": "Import from Feishu",
+      "feishuDesc": "Select a document from your Feishu cloud drive to import",
+      "markdown": "Import Markdown File",
+      "markdownDesc": "Upload a local Markdown file and convert it to a note",
+      "invalidMarkdown": "Please select a Markdown file (.md or .markdown)",
+      "defaultTitle": "Imported Note",
+      "readError": "Failed to read file: "
+    },
     "resources": {
       "title": "Resources",
       "addFile": "Add File",
