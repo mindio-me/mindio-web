@@ -43,7 +43,7 @@
               <div class="filter-header">
                 <span class="filter-title filter-toggle" @click="toggleSidebarSection('tags')">
                   <i class="el-icon-arrow-right filter-arrow" :class="{ 'filter-arrow--collapsed': tagsCollapsed }"></i>
-                  标签
+                  {{ $t('workspace.notes.tags') }}
                 </span>
                 <el-button type="text" size="mini" @click="selectedTags = []; handleTagFilter()">清除</el-button>
               </div>
@@ -63,7 +63,7 @@
               <div class="filter-header">
                 <span class="filter-title filter-toggle" @click="toggleSidebarSection('projects')">
                   <i class="el-icon-arrow-right filter-arrow" :class="{ 'filter-arrow--collapsed': projectsCollapsed }"></i>
-                  项目
+                  {{ $t('workspace.notes.projects') }}
                 </span>
                 <el-button type="text" size="mini" @click="selectedProjects = []; handleProjectFilter()">清除</el-button>
               </div>
@@ -85,7 +85,7 @@
           </div>
           <div v-if="viewMode === 'list'" class="sidebar-section sidebar-notes">
             <div class="sidebar-section-header">
-              <span class="section-title">所有笔记</span>
+              <span class="section-title">{{ $t('workspace.notes.allNotes') }}</span>
               <span class="section-subtitle">{{ total }} 条</span>
             </div>
             <div v-loading="loading" class="note-list-wrapper">
@@ -193,7 +193,7 @@
         <!-- 笔记编辑 -->
           <div v-if="activeNote && !showMonthCalendar" key="note-editor" class="note-main">
             <div v-if="calendarFromMonth" class="calendar-breadcrumb" @click="returnToCalendar()">
-              ← {{ formatCalendarMonthTitle(calendarFromMonth) }} のカレンダーへ戻る
+              ← 返回 {{ formatCalendarMonthTitle(calendarFromMonth) }} 
             </div>
             <div class="note-main-header">
               <div class="note-main-title-wrapper" :class="{ 'note-main-title-wrapper--editorjs': isEditorjsNote }">
@@ -213,9 +213,9 @@
                   >打开源文档</a>
                 </div>
                 <div class="note-main-meta">
-                  <span>最后更新：{{ formatTime(activeNote.modifiedAt || activeNote.createdAt) }}</span>
-                  <span v-if="activeNote.isPublic"> · 已公开</span>
-                  <span v-else> · 未公开</span>
+                  <span>{{ $t('workspace.notes.lastUpdated') }}：{{ formatTime(activeNote.modifiedAt || activeNote.createdAt) }}</span>
+                  <span v-if="activeNote.isPublic"> · {{ $t('workspace.notes.public') }}</span>
+                  <span v-else> · {{ $t('workspace.notes.private') }}</span>
                   <span v-if="contentTypeLabel"> · {{ contentTypeLabel }}</span>
                   <!-- 临时调试：显示 contentType 值 -->
                   <!-- <span v-if="activeNote.contentType"> · [调试: {{ activeNote.contentType }}, label: {{ contentTypeLabel }}]</span> -->
@@ -241,7 +241,7 @@
                 <el-select
                   v-if="isEditorjsNote"
                   v-model="activeNote.projectId"
-                  placeholder="选择项目（可选）"
+                  :placeholder="$t('workspace.notes.selectProject')"
                   clearable
                   size="mini"
                   style="width: 160px; margin-right: 8px;"
@@ -271,13 +271,13 @@
                   {{ activeNote.projectName }}
                 </el-tag>
                 <el-button size="mini" icon="el-icon-paperclip" @click="goToClips">
-                  参考素材<span v-if="clipCount > 0"> ({{ clipCount }})</span>
+                  {{ $t('workspace.notes.references') }}<span v-if="clipCount > 0"> ({{ clipCount }})</span>
                 </el-button>
                 <el-button v-if="!isEditorjsNote" size="mini" @click="openInEditor">
                   <i class="el-icon-edit"></i> 在编辑器中打开
                 </el-button>
-                <el-button v-if="!isFullscreen" size="mini" icon="el-icon-full-screen" @click="isFullscreen = true">全屏</el-button>
-                <el-button v-if="isFullscreen" size="mini" type="warning" icon="el-icon-close" @click="isFullscreen = false">退出全屏</el-button>
+                <el-button v-if="!isFullscreen" size="mini" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
+                <el-button v-if="isFullscreen" size="mini" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
                 <button
                   v-if="!isFullscreen"
                   class="panel-toggle-btn"
@@ -291,7 +291,7 @@
                 <el-dropdown-menu slot="dropdown">
                     <el-dropdown-item command="toggle-public">
                       <i :class="activeNote.isPublic ? 'el-icon-lock' : 'el-icon-unlock'"></i>
-                      {{ activeNote.isPublic ? '关闭' : '公开' }}
+                      {{ activeNote.isPublic ? $t('workspace.notes.makePrivate') : $t('workspace.notes.makePublic') }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="isEditorjsNote" command="translate-english">
                       <i class="el-icon-s-opportunity" style="margin-right:4px;"></i>
@@ -419,7 +419,7 @@
         <!-- 笔记右侧 -->
         <div class="right-panel" v-if="activeNote">
           <div class="right-section">
-            <h3 class="right-title">大纲</h3>
+            <h3 class="right-title">{{ $t('workspace.notes.outline') }}</h3>
             <ul v-if="outline.length" class="outline-list">
               <li v-for="(item, index) in outline" :key="index" class="outline-item" :style="{ paddingLeft: (item.indent || 0) + 'px' }">
                 <span class="outline-text">{{ item.text }}</span>
@@ -428,7 +428,7 @@
             <p v-else class="right-empty-text">暂无可用大纲</p>
           </div>
           <div class="right-section">
-            <h3 class="right-title">最近笔记</h3>
+            <h3 class="right-title">{{ $t('workspace.notes.recentNotes') }}</h3>
             <ul class="recent-list">
               <li v-for="note in recentNotes" :key="note.id" class="recent-item" @click="selectNote(note)">
                 <div class="recent-title">{{ note.title || '未命名笔记' }}</div>
@@ -575,7 +575,7 @@ export default {
       outline: [],
       editor: null,
       imageResizer: null,
-      saveStatus: { icon: 'el-icon-check', text: '已保存' },
+      saveStatus: { icon: 'el-icon-check', text: '' },
       saveTimeout: null,
       isSaving: false,
       hasUnsavedChanges: false,
@@ -1288,11 +1288,11 @@ export default {
     },
     updateSaveStatus(status) {
       const map = {
-        saving: { icon: 'el-icon-loading', text: '保存中...' },
-        saved: { icon: 'el-icon-check', text: '已保存' },
-        error: { icon: 'el-icon-warning', text: '保存失败' }
+        saving: { icon: 'el-icon-loading', text: this.$t('workspace.notes.saving') },
+        saved: { icon: 'el-icon-check', text: this.$t('workspace.notes.saved') },
+        error: { icon: 'el-icon-warning', text: this.$t('workspace.notes.saveFailed') }
       }
-      this.saveStatus = map[status] || { icon: 'el-icon-edit', text: '未保存' }
+      this.saveStatus = map[status] || { icon: 'el-icon-edit', text: this.$t('workspace.notes.saving') }
     },
     debouncedSave() {
       clearTimeout(this.saveTimeout)
@@ -1816,11 +1816,11 @@ export default {
         const hours = Math.floor(diff / (1000 * 60 * 60))
         if (hours === 0) {
           const minutes = Math.floor(diff / (1000 * 60))
-          return minutes === 0 ? '刚刚' : `${minutes}分钟前`
+          return minutes === 0 ? this.$t('notesPage.time.justNow') : this.$t('notesPage.time.minutesAgo', { n: minutes })
         }
-        return `${hours}小时前`
+        return this.$t('notesPage.time.hoursAgo', { n: hours })
       } else if (days < 7) {
-        return `${days}天前`
+        return this.$t('notesPage.time.daysAgo', { n: days })
       }
       return date.toLocaleDateString()
     },
@@ -2964,7 +2964,7 @@ export default {
 }
 .cal-note-chip {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.3;
   padding: 2px 6px;
   border-radius: 3px;

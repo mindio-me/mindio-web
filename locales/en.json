@@ -104,7 +104,24 @@
       "new": "New Note",
       "title": "Title",
       "translate": "Translate to English",
-      "delete": "Delete Note"
+      "delete": "Delete Note",
+      "tags": "Tags",
+      "projects": "Projects",
+      "allNotes": "All Notes",
+      "lastUpdated": "Last updated",
+      "public": "Public",
+      "private": "Private",
+      "makePublic": "Make public",
+      "makePrivate": "Make private",
+      "selectProject": "Select project (optional)",
+      "references": "References",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit Fullscreen",
+      "saving": "Saving...",
+      "saved": "Saved",
+      "saveFailed": "Save failed",
+      "outline": "Outline",
+      "recentNotes": "Recent Notes"
     },
     "resources": {
       "title": "Resources",
@@ -338,6 +355,9 @@
     },
     "footer": { "copyright": "© 2024 UnibyteGlobal. All rights reserved." }
   },
+  "footer": {
+    "copyright": "© 2026 MindIO - Powered by Nuxt.js & Spring Boot"
+  },
   "notesPage": {
     "search": { "placeholder": "Search notes by keyword..." },
     "filter": { "all": "All" },
@@ -351,9 +371,11 @@
     "empty": {
       "noSearch": "No notes containing \"{keyword}\"",
       "noDate": "No notes for {date}",
+      "noMonth": "No notes for {month}",
       "noTag": "No notes under this tag",
       "noNotes": "No notes yet",
       "clearDate": "Clear date filter",
+      "clearTime": "Clear time filter",
       "createNote": "Create New Note"
     },
     "pagination": {

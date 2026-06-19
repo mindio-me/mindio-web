@@ -104,7 +104,24 @@
       "new": "新建笔记",
       "title": "标题",
       "translate": "翻译为英文",
-      "delete": "删除笔记"
+      "delete": "删除笔记",
+      "tags": "标签",
+      "projects": "项目",
+      "allNotes": "所有笔记",
+      "lastUpdated": "最后更新",
+      "public": "已公开",
+      "private": "未公开",
+      "makePublic": "公开",
+      "makePrivate": "关闭",
+      "selectProject": "选择项目（可选）",
+      "references": "参考素材",
+      "fullscreen": "全屏",
+      "exitFullscreen": "退出全屏",
+      "saving": "保存中...",
+      "saved": "已保存",
+      "saveFailed": "保存失败",
+      "outline": "大纲",
+      "recentNotes": "最近笔记"
     },
     "resources": {
       "title": "资源",
@@ -325,6 +342,9 @@
     },
     "footer": { "copyright": "© 2024 UnibyteGlobal. 保留所有权利。" }
   },
+  "footer": {
+    "copyright": "© 2026 MindIO - 由 Nuxt.js & Spring Boot 驱动"
+  },
   "notesPage": {
     "search": { "placeholder": "按关键词搜索笔记..." },
     "filter": { "all": "全部" },
@@ -338,9 +358,11 @@
     "empty": {
       "noSearch": "未找到包含\"{keyword}\"的笔记",
       "noDate": "未找到 {date} 的笔记",
+      "noMonth": "未找到 {month} 的笔记",
       "noTag": "该标签下暂无笔记",
       "noNotes": "暂无笔记",
       "clearDate": "清除日期筛选",
+      "clearTime": "清除时间筛选",
       "createNote": "创建新笔记"
     },
     "pagination": {
