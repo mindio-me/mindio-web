@@ -204,8 +204,15 @@
           <p>{{ $t('projectsPage.footer.copyright') }}</p>
         </div>
         <div class="footer-right">
-          <a href="#" class="footer-link">LinkedIn</a>
-          <a href="#" class="footer-link">GitHub</a>
+          <template v-if="$i18n.locale === 'zh-CN'">
+            <a href="/contact" class="footer-link" :title="ownerProfile && ownerProfile.wechat ? ownerProfile.wechat : '微信'">
+              <i class="el-icon-chat-dot-round"></i> 微信
+            </a>
+          </template>
+          <template v-else>
+            <a v-if="ownerProfile && ownerProfile.linkedin" :href="formatUrl(ownerProfile.linkedin)" target="_blank" rel="noopener" class="footer-link">LinkedIn</a>
+            <a href="https://github.com/mindio-me/mindio-web" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+          </template>
         </div>
       </div>
     </footer>
@@ -233,7 +240,8 @@ export default {
       loading: false,
       projects: [],
       keyword: '',
-      activeCategory: 'all'
+      activeCategory: 'all',
+      ownerProfile: null
     }
   },
 
@@ -287,14 +295,21 @@ export default {
     $route() { this.isMobileMenuOpen = false }
   },
 
-  mounted() {
+  async mounted() {
     if (process.client) {
       const root = document.documentElement
       this.isDarkTheme = root.classList.contains('theme-dark')
     }
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {}
   },
 
   methods: {
+    formatUrl(url) {
+      if (!url) return '#'
+      return url.startsWith('http') ? url : 'https://' + url
+    },
     toggleLang() {
       const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'
       this.$i18n.setLocale(next)
@@ -340,7 +355,7 @@ export default {
         {
           hid: 'description',
           name: 'description',
-          content: 'Case studies and selected client projects built with WorkNotes backend and related technologies.'
+          content: 'Case studies and selected projects managed with MindIO and related technologies.'
         }
       ]
     }

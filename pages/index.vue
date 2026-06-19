@@ -171,9 +171,16 @@
           <p>{{ $t('home.footer.copyright') }}</p>
         </div>
         <div class="footer-right">
-          <a href="#" class="footer-link">LinkedIn</a>
-          <a href="#" class="footer-link">GitHub</a>
-          <a href="#" class="footer-link">Twitter</a>
+          <template v-if="$i18n.locale === 'zh-CN'">
+            <a href="/contact" class="footer-link" :title="ownerProfile && ownerProfile.wechat ? ownerProfile.wechat : '微信'">
+              <i class="el-icon-chat-dot-round"></i> 微信
+            </a>
+          </template>
+          <template v-else>
+            <a v-if="ownerProfile && ownerProfile.linkedin" :href="formatUrl(ownerProfile.linkedin)" target="_blank" rel="noopener" class="footer-link">LinkedIn</a>
+            <a href="https://github.com/mindio-me/mindio-web" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+            <a v-if="ownerProfile && ownerProfile.twitter" :href="formatUrl(ownerProfile.twitter)" target="_blank" rel="noopener" class="footer-link">Twitter</a>
+          </template>
         </div>
       </div>
     </footer>
@@ -188,7 +195,8 @@ export default {
   data() {
     return {
       isDarkTheme: false,
-      isMobileMenuOpen: false
+      isMobileMenuOpen: false,
+      ownerProfile: null
     };
   },
 
@@ -265,13 +273,20 @@ export default {
     $route() { this.isMobileMenuOpen = false }
   },
 
-  mounted() {
+  async mounted() {
     if (process.client) {
       this.isDarkTheme = document.documentElement.classList.contains('theme-dark');
     }
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {}
   },
 
   methods: {
+    formatUrl(url) {
+      if (!url) return '#'
+      return url.startsWith('http') ? url : 'https://' + url
+    },
     toggleLang() {
       console.log('网站 toggleLang', this.$i18n.locale)
       const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'

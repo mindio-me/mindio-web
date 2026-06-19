@@ -5,7 +5,7 @@
       <div class="header-content">
         <div class="logo">
           <i class="el-icon-notebook-2"></i>
-          <span>Notecast</span>
+          <span>MindIO</span>
         </div>
         <el-menu
           mode="horizontal"
@@ -63,7 +63,20 @@
     <!-- 底部 -->
     <el-footer class="app-footer">
       <div class="footer-content">
-        © 2024 Notecast - Powered by Nuxt.js & Spring Boot
+        <span class="footer-copyright">{{ $t('footer.copyright') }}</span>
+        <div class="footer-social">
+          <template v-if="$i18n.locale === 'zh-CN'">
+            <a href="/contact" class="footer-social-link" :title="ownerProfile && ownerProfile.wechat ? ownerProfile.wechat : '微信'">
+              <i class="el-icon-chat-dot-round"></i>
+              <span>微信</span>
+            </a>
+          </template>
+          <template v-else>
+            <a v-if="ownerProfile && ownerProfile.linkedin" :href="formatUrl(ownerProfile.linkedin)" target="_blank" rel="noopener" class="footer-social-link">LinkedIn</a>
+            <a href="https://github.com/mindio-me/mindio-web" target="_blank" rel="noopener" class="footer-social-link">GitHub</a>
+            <a v-if="ownerProfile && ownerProfile.twitter" :href="formatUrl(ownerProfile.twitter)" target="_blank" rel="noopener" class="footer-social-link">Twitter</a>
+          </template>
+        </div>
       </div>
     </el-footer>
   </div>
@@ -72,6 +85,11 @@
 <script>
 export default {
   name: 'DefaultLayout',
+  data() {
+    return {
+      ownerProfile: null
+    }
+  },
   computed: {
     userName() {
       return this.$auth.user?.username || 'User'
@@ -80,7 +98,18 @@ export default {
       return this.$route.path
     }
   },
+  async mounted() {
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {
+      // 公开接口，忽略失败
+    }
+  },
   methods: {
+    formatUrl(url) {
+      if (!url) return '#'
+      return url.startsWith('http') ? url : 'https://' + url
+    },
     toggleLang() {
       const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'
       this.$i18n.setLocale(next)
@@ -201,7 +230,6 @@ export default {
 .app-footer {
   background: var(--header-bg);
   border-top: 1px solid var(--border-color);
-  text-align: center;
   color: var(--text-muted);
   height: 60px;
   line-height: 60px;
@@ -209,6 +237,39 @@ export default {
   .footer-content {
     max-width: 1200px;
     margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+  }
+
+  .footer-copyright {
+    font-size: 13px;
+  }
+
+  .footer-social {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .footer-social-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s;
+
+    i {
+      font-size: 15px;
+    }
+
+    &:hover {
+      color: #409eff;
+    }
   }
 }
 
