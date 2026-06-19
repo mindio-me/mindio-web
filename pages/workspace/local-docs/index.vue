@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="local-docs-page">
     <div class="workspace-layout" :class="{ 'directory-grid-layout': dirViewMode === 'grid' }">
       <!-- ========== 左侧栏 ========== -->
@@ -311,22 +311,22 @@
     >
       <el-form ref="addForm" :model="addForm" :rules="addRules" label-width="80px">
         <!-- 路径输入行 -->
-        <el-form-item :label=”$t('workspace.localDocs.dirPath')” prop=”dirPath”>
-          <div class=”path-input-row”>
+        <el-form-item :label="$t('workspace.localDocs.dirPath')" prop="dirPath">
+          <div class="path-input-row">
             <el-input
-              v-model=”addForm.dirPath”
-              :placeholder=”$t('workspace.localDocs.dirPathPlaceholder')”
+              v-model="addForm.dirPath"
+              :placeholder="$t('workspace.localDocs.dirPathPlaceholder')"
               clearable
-              style=”flex:1”
-              @change=”closeBrowser”
+              style="flex:1"
+              @change="closeBrowser"
             />
             <el-button
-              icon=”el-icon-folder-opened”
-              style=”margin-left:8px;flex-shrink:0”
-              @click=”chooseDirectory”
+              icon="el-icon-folder-opened"
+              style="margin-left:8px;flex-shrink:0"
+              @click="chooseDirectory"
             >{{ $t('workspace.localDocs.browse') }}</el-button>
           </div>
-          <div v-if=”hasNativeDirectoryPicker” class=”form-hint”>
+          <div v-if="hasNativeDirectoryPicker" class="form-hint">
             {{ $t('workspace.localDocs.nativePickerHint') }}
           </div>
         </el-form-item>
