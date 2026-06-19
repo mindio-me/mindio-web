@@ -6,7 +6,7 @@
       <div class="clips-toolbar">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索标题、摘要…"
+          :placeholder="$t('workspace.clips.searchPlaceholder')"
           prefix-icon="el-icon-search"
           size="small"
           clearable
@@ -14,10 +14,10 @@
           @input="onSearch"
         />
         <el-radio-group v-model="filterType" size="small" style="margin-left:16px" @change="onSearch">
-          <el-radio-button label="">全部</el-radio-button>
-          <el-radio-button label="WEBPAGE">网页</el-radio-button>
-          <el-radio-button label="WECHAT_ARTICLE">公众号</el-radio-button>
-          <el-radio-button label="AI_CHAT">AI 对话</el-radio-button>
+          <el-radio-button label="">{{ $t('workspace.clips.filterAll') }}</el-radio-button>
+          <el-radio-button label="WEBPAGE">{{ $t('workspace.clips.filterWebpage') }}</el-radio-button>
+          <el-radio-button label="WECHAT_ARTICLE">{{ $t('workspace.clips.filterWechat') }}</el-radio-button>
+          <el-radio-button label="AI_CHAT">{{ $t('workspace.clips.filterAiChat') }}</el-radio-button>
         </el-radio-group>
       </div>
 
@@ -47,7 +47,7 @@
 
         <div v-if="!loading && clips.length === 0" class="clips-empty">
           <i class="el-icon-document-copy" style="font-size:48px;color:#c0c4cc"></i>
-          <p>还没有素材，点击「新增素材」开始导入</p>
+          <p>{{ $t('workspace.clips.empty') }}</p>
         </div>
       </div>
 
@@ -82,7 +82,7 @@
               plain
               icon="el-icon-delete"
               @click="deleteClip(selectedClip)"
-            >删除</el-button>
+            >{{ $t('common.delete') }}</el-button>
             <el-button size="mini" icon="el-icon-close" @click="drawerVisible = false" />
           </div>
         </div>
@@ -104,15 +104,15 @@
         <!-- 已关联的笔记 -->
         <div class="drawer-section">
           <div class="drawer-section-title">
-            关联到笔记
+            {{ $t('workspace.clips.linkedNotes') }}
             <el-button
               type="text"
               size="mini"
               icon="el-icon-plus"
               @click="showLinkNote = true"
-            >添加关联</el-button>
+            >{{ $t('workspace.clips.addLink') }}</el-button>
           </div>
-          <div v-if="linkedNotes.length === 0" class="drawer-empty">暂未关联任何笔记</div>
+          <div v-if="linkedNotes.length === 0" class="drawer-empty">{{ $t('workspace.clips.noLinkedNotes') }}</div>
           <div v-for="ref in linkedNotes" :key="ref.refId" class="linked-note-item">
             <span class="linked-note-title" @click="goToNote(ref.noteId)">
               <i class="el-icon-document"></i> Note #{{ ref.noteId }}
@@ -123,7 +123,7 @@
               size="mini"
               style="color:#f56c6c"
               @click="unlinkNote(ref)"
-            >解除</el-button>
+            >{{ $t('workspace.clips.unlink') }}</el-button>
           </div>
 
           <!-- 关联到笔记输入 -->
@@ -131,13 +131,13 @@
             <el-input
               v-model="linkNoteId"
               size="small"
-              placeholder="输入笔记 ID"
+              :placeholder="$t('workspace.clips.noteIdPlaceholder')"
               style="width:120px"
             />
             <el-input
               v-model="linkUserNote"
               size="small"
-              placeholder="批注（可选）"
+              :placeholder="$t('workspace.clips.annotationPlaceholder')"
               style="width:180px;margin-left:8px"
             />
             <el-button
@@ -146,8 +146,8 @@
               style="margin-left:8px"
               :loading="linking"
               @click="linkNote"
-            >确认</el-button>
-            <el-button size="small" @click="showLinkNote = false">取消</el-button>
+            >{{ $t('common.confirm') }}</el-button>
+            <el-button size="small" @click="showLinkNote = false">{{ $t('common.cancel') }}</el-button>
           </div>
         </div>
 
@@ -155,7 +155,7 @@
 
         <!-- 完整内容 -->
         <div class="drawer-section">
-          <div class="drawer-section-title">内容</div>
+          <div class="drawer-section-title">{{ $t('workspace.clips.content') }}</div>
           <div
             class="clip-content"
             :class="{ 'ai-chat-content': selectedClip.sourceType === 'AI_CHAT' }"
@@ -228,7 +228,7 @@ export default {
         this.clips = res.content || []
         this.total = res.totalElements || 0
       } catch (e) {
-        this.$message.error('加载失败')
+        this.$message.error(this.$t('workspace.clips.loadFailed'))
       } finally {
         this.loading = false
       }
@@ -264,18 +264,18 @@ export default {
       }
     },
     async deleteClip(clip) {
-      await this.$confirm('确认删除这条素材？已有关联将一并删除。', '提示', {
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
+      await this.$confirm(this.$t('workspace.clips.deleteConfirm'), this.$t('workspace.clips.deleteConfirmTitle'), {
+        confirmButtonText: this.$t('common.delete'),
+        cancelButtonText: this.$t('common.cancel'),
         type: 'warning',
       })
       try {
         await this.$clipService.deleteClip(clip.id)
-        this.$message.success('已删除')
+        this.$message.success(this.$t('workspace.clips.deleteSuccess'))
         this.drawerVisible = false
         this.loadClips()
       } catch (e) {
-        this.$message.error('删除失败')
+        this.$message.error(this.$t('workspace.clips.deleteFailed'))
       }
     },
     async linkNote() {
@@ -291,9 +291,9 @@ export default {
         this.linkNoteId = ''
         this.linkUserNote = ''
         this.showLinkNote = false
-        this.$message.success('已关联')
+        this.$message.success(this.$t('workspace.clips.linkSuccess'))
       } catch (e) {
-        this.$message.error(e?.response?.data?.message || '关联失败')
+        this.$message.error(e?.response?.data?.message || this.$t('workspace.clips.linkFailed'))
       } finally {
         this.linking = false
       }
@@ -302,16 +302,21 @@ export default {
       try {
         await this.$clipService.unlinkClipFromNote(ref.noteId, this.selectedClip.id)
         this.linkedNotes = this.linkedNotes.filter(r => r.refId !== ref.refId)
-        this.$message.success('已解除关联')
+        this.$message.success(this.$t('workspace.clips.unlinkSuccess'))
       } catch (e) {
-        this.$message.error('操作失败')
+        this.$message.error(this.$t('workspace.clips.unlinkFailed'))
       }
     },
     goToNote(noteId) {
       this.$router.push(`/workspace/notes/${noteId}`)
     },
     sourceLabel(type) {
-      return { WEBPAGE: '网页', WECHAT_ARTICLE: '公众号', AI_CHAT: 'AI 对话' }[type] || type
+      const map = {
+        WEBPAGE: this.$t('workspace.clips.sourceWebpage'),
+        WECHAT_ARTICLE: this.$t('workspace.clips.sourceWechat'),
+        AI_CHAT: this.$t('workspace.clips.sourceAiChat')
+      }
+      return map[type] || type
     },
     sourceClass(type) {
       return { WEBPAGE: 'badge-web', WECHAT_ARTICLE: 'badge-wechat', AI_CHAT: 'badge-ai' }[type] || ''

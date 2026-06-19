@@ -5,12 +5,12 @@
       <aside class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
-            <el-input v-model="resourceSearch" placeholder="搜索资源" prefix-icon="el-icon-search" clearable size="small" />
+            <el-input v-model="resourceSearch" :placeholder="$t('workspace.resources.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
           </div>
         </div>
         <div class="sidebar-section sidebar-categories">
           <div class="sidebar-section-header">
-            <span class="section-title">资源类别</span>
+            <span class="section-title">{{ $t('workspace.resources.categoryLabel') }}</span>
           </div>
           <div class="category-filter-list">
             <button
@@ -30,8 +30,8 @@
         <div v-loading="loading" class="resources-content">
           <div v-if="filteredResources.length === 0 && !loading" class="empty-state">
             <i class="el-icon-search empty-icon"></i>
-            <p class="empty-text">没有找到匹配的资源</p>
-            <button v-if="resourceSearch || selectedCategory !== 'all'" @click="clearFilters" class="clear-filters-btn">清除筛选</button>
+            <p class="empty-text">{{ $t('workspace.resources.noMatch') }}</p>
+            <button v-if="resourceSearch || selectedCategory !== 'all'" @click="clearFilters" class="clear-filters-btn">{{ $t('workspace.resources.clearFilters') }}</button>
           </div>
           <div v-else class="resources-grid">
             <a
@@ -58,36 +58,36 @@
       <aside class="workspace-right">
         <div class="right-panel">
           <div class="right-section">
-            <h3 class="right-title">统计信息</h3>
+            <h3 class="right-title">{{ $t('workspace.resources.statsTitle') }}</h3>
             <div class="right-meta-list">
               <div class="right-meta-item">
-                <span class="meta-label">总资源数</span>
+                <span class="meta-label">{{ $t('workspace.resources.totalCount') }}</span>
                 <span class="meta-value">{{ resources.length }}</span>
               </div>
               <div class="right-meta-item">
-                <span class="meta-label">当前显示</span>
+                <span class="meta-label">{{ $t('workspace.resources.currentCount') }}</span>
                 <span class="meta-value">{{ filteredResources.length }}</span>
               </div>
               <div class="right-meta-item" v-if="selectedCategory !== 'all'">
-                <span class="meta-label">当前类别</span>
+                <span class="meta-label">{{ $t('workspace.resources.currentCategory') }}</span>
                 <span class="meta-value">{{ getCategoryLabel(selectedCategory) }}</span>
               </div>
             </div>
           </div>
           <div class="right-section" v-if="selectedResource">
-            <h3 class="right-title">资源信息</h3>
+            <h3 class="right-title">{{ $t('workspace.resources.infoTitle') }}</h3>
             <div class="right-meta-list">
-              <div class="right-meta-item"><span class="meta-label">创建时间</span><span class="meta-value">{{ formatDate(selectedResource.createdAt) }}</span></div>
-              <div class="right-meta-item"><span class="meta-label">修改时间</span><span class="meta-value">{{ formatDate(selectedResource.modifiedAt) }}</span></div>
-              <div class="right-meta-item" v-if="selectedResource.category"><span class="meta-label">分类</span><span class="meta-value">{{ selectedResource.category }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.resources.createdAt') }}</span><span class="meta-value">{{ formatDate(selectedResource.createdAt) }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.resources.modifiedAt') }}</span><span class="meta-value">{{ formatDate(selectedResource.modifiedAt) }}</span></div>
+              <div class="right-meta-item" v-if="selectedResource.category"><span class="meta-label">{{ $t('workspace.resources.category') }}</span><span class="meta-value">{{ selectedResource.category }}</span></div>
               <div class="right-meta-item" v-if="selectedResource.url">
-                <span class="meta-label">链接</span>
-                <a :href="normalizeUrl(selectedResource.url)" target="_blank" class="meta-link">访问</a>
+                <span class="meta-label">{{ $t('workspace.resources.linkLabel') }}</span>
+                <a :href="normalizeUrl(selectedResource.url)" target="_blank" class="meta-link">{{ $t('workspace.resources.visit') }}</a>
               </div>
             </div>
             <div class="right-section-actions">
-              <el-button size="small" icon="el-icon-edit" @click="openEditDialog">编辑</el-button>
-              <el-button size="small" type="danger" plain icon="el-icon-delete" @click="deleteResource">删除</el-button>
+              <el-button size="small" icon="el-icon-edit" @click="openEditDialog">{{ $t('common.edit') }}</el-button>
+              <el-button size="small" type="danger" plain icon="el-icon-delete" @click="deleteResource">{{ $t('common.delete') }}</el-button>
             </div>
           </div>
         </div>
@@ -100,31 +100,31 @@
         :style="{ left: contextMenuX + 'px', top: contextMenuY + 'px' }"
       >
         <div class="context-menu-item" @click="openEditDialog">
-          <i class="el-icon-edit"></i> 编辑
+          <i class="el-icon-edit"></i> {{ $t('common.edit') }}
         </div>
         <div class="context-menu-item context-menu-item--danger" @click="deleteResource">
-          <i class="el-icon-delete"></i> 删除
+          <i class="el-icon-delete"></i> {{ $t('common.delete') }}
         </div>
         <div class="context-menu-divider"></div>
         <div class="context-menu-item" @click="openInNewTab">
-          <i class="el-icon-link"></i> 在新窗口打开
+          <i class="el-icon-link"></i> {{ $t('workspace.resources.openNewTab') }}
         </div>
       </div>
 
       <!-- ========== 新建/编辑对话框 ========== -->
-      <el-dialog :title="dialogMode === 'create' ? '新建资源' : '编辑资源'" :visible.sync="editDialogVisible" width="500px" append-to-body>
+      <el-dialog :title="dialogMode === 'create' ? $t('workspace.resources.dialogCreate') : $t('workspace.resources.dialogEdit')" :visible.sync="editDialogVisible" width="500px" append-to-body>
         <el-form :model="editForm" label-width="80px">
-          <el-form-item label="名称">
-            <el-input v-model="editForm.name" placeholder="请输入资源名称" />
+          <el-form-item :label="$t('workspace.resources.fieldName')">
+            <el-input v-model="editForm.name" :placeholder="$t('workspace.resources.namePlaceholder')" />
           </el-form-item>
-          <el-form-item label="链接">
-            <el-input v-model="editForm.url" placeholder="请输入资源链接" />
+          <el-form-item :label="$t('workspace.resources.fieldUrl')">
+            <el-input v-model="editForm.url" :placeholder="$t('workspace.resources.urlPlaceholder')" />
           </el-form-item>
-          <el-form-item label="描述">
-            <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="请输入资源描述" />
+          <el-form-item :label="$t('workspace.resources.fieldDescription')">
+            <el-input v-model="editForm.description" type="textarea" :rows="3" :placeholder="$t('workspace.resources.descPlaceholder')" />
           </el-form-item>
-          <el-form-item label="分类" required>
-            <el-input v-model="editForm.category" placeholder="请输入资源分类（必填）" />
+          <el-form-item :label="$t('workspace.resources.fieldCategory')" required>
+            <el-input v-model="editForm.category" :placeholder="$t('workspace.resources.categoryPlaceholder')" />
             <div v-if="existingCategories.length" class="category-quick-select">
               <span
                 v-for="cat in existingCategories"
@@ -134,16 +134,16 @@
               >{{ cat }}</span>
             </div>
           </el-form-item>
-          <el-form-item label="图标">
-            <el-input v-model="editForm.icon" placeholder="请输入图标类名，如 el-icon-link" />
+          <el-form-item :label="$t('workspace.resources.fieldIcon')">
+            <el-input v-model="editForm.icon" :placeholder="$t('workspace.resources.iconPlaceholder')" />
           </el-form-item>
-          <el-form-item label="标签">
-            <el-input v-model="editForm.tags" placeholder="请输入标签，多个用逗号分隔" />
+          <el-form-item :label="$t('workspace.resources.fieldTags')">
+            <el-input v-model="editForm.tags" :placeholder="$t('workspace.resources.tagsPlaceholder')" />
           </el-form-item>
         </el-form>
         <div slot="footer" class="dialog-footer">
-          <el-button @click="editDialogVisible = false">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="saveResource">保存</el-button>
+          <el-button @click="editDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="saving" @click="saveResource">{{ $t('common.save') }}</el-button>
         </div>
       </el-dialog>
     </div>
@@ -194,7 +194,7 @@ export default {
       })
       
       const categoryList = [
-        { value: 'all', label: '全部' }
+        { value: 'all', label: this.$t('workspace.resources.categoryAll') }
       ]
       
       Array.from(categories).sort().forEach(cat => {
@@ -250,7 +250,7 @@ export default {
       try {
         this.resources = await this.$resourceService.getAllResources()
       } catch (error) {
-        this.$message.error('加载资源失败')
+        this.$message.error(this.$t('workspace.resources.loadFailed'))
         this.resources = []
       } finally {
         this.loading = false
@@ -309,17 +309,17 @@ export default {
       try {
         if (this.dialogMode === 'create') {
           await this.$resourceService.createResource(payload)
-          this.$message.success('创建成功')
+          this.$message.success(this.$t('workspace.resources.createSuccess'))
         } else {
           if (!this.editForm.id) return
           await this.$resourceService.updateResource(this.editForm.id, payload)
-          this.$message.success('保存成功')
+          this.$message.success(this.$t('workspace.resources.saveSuccess'))
         }
         this.editDialogVisible = false
         this.selectedResource = null
         await this.loadResources()
       } catch (error) {
-        this.$message.error(this.dialogMode === 'create' ? '创建失败' : '保存失败')
+        this.$message.error(this.dialogMode === 'create' ? this.$t('workspace.resources.createFailed') : this.$t('workspace.resources.saveFailed'))
       } finally {
         this.saving = false
       }
@@ -327,18 +327,18 @@ export default {
     deleteResource() {
       if (!this.selectedResource) return
       this.hideContextMenu()
-      this.$confirm(`确定要删除资源 "${this.selectedResource.name}" 吗？`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+      this.$confirm(this.$t('workspace.resources.deleteConfirm', { name: this.selectedResource.name }), this.$t('workspace.resources.confirmTitle'), {
+        confirmButtonText: this.$t('common.confirm'),
+        cancelButtonText: this.$t('common.cancel'),
         type: 'warning'
       }).then(async () => {
         try {
           await this.$resourceService.deleteResource(this.selectedResource.id)
-          this.$message.success('删除成功')
+          this.$message.success(this.$t('workspace.resources.deleteSuccess'))
           this.selectedResource = null
           await this.loadResources()
         } catch (error) {
-          this.$message.error('删除失败')
+          this.$message.error(this.$t('workspace.resources.deleteFailed'))
         }
       }).catch(() => {})
     },

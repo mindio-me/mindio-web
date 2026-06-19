@@ -4,28 +4,28 @@
       <div>
         <h2 class="page-title">Collaboration Requests</h2>
         <p class="page-subtitle">
-          查看从 Contact 页面提交的合作请求，并添加仅内部可见的回访备注。
+          {{ $t('workspace.collabRequests.subtitle') }}
         </p>
       </div>
       <div class="page-actions">
         <el-select
           v-model="filters.status"
           size="small"
-          placeholder="全部状态"
+          :placeholder="$t('workspace.collabRequests.statusPlaceholder')"
           clearable
           class="filter-select"
           @change="handleFilterChange"
         >
-          <el-option label="全部状态" :value="null" />
-          <el-option label="待处理" value="pending" />
-          <el-option label="已查看" value="reviewed" />
-          <el-option label="已回复" value="replied" />
-          <el-option label="已关闭" value="closed" />
+          <el-option :label="$t('workspace.collabRequests.statusAll')" :value="null" />
+          <el-option :label="$t('workspace.collabRequests.statusPending')" value="pending" />
+          <el-option :label="$t('workspace.collabRequests.statusReviewed')" value="reviewed" />
+          <el-option :label="$t('workspace.collabRequests.statusReplied')" value="replied" />
+          <el-option :label="$t('workspace.collabRequests.statusClosed')" value="closed" />
         </el-select>
         <el-input
           v-model="filters.keyword"
           size="small"
-          placeholder="搜索姓名 / 邮箱 / 组织"
+          :placeholder="$t('workspace.collabRequests.searchPlaceholder')"
           clearable
           class="filter-input"
           @keyup.enter.native="handleFilterChange"
@@ -47,16 +47,16 @@
           @row-click="handleRowClick"
           :row-class-name="getRowClassName"
         >
-          <el-table-column prop="createdAt" label="提交时间" width="170">
+          <el-table-column prop="createdAt" :label="$t('workspace.collabRequests.colSubmittedAt')" width="170">
             <template slot-scope="scope">
               {{ formatDateTime(scope.row.createdAt) }}
             </template>
           </el-table-column>
-          <el-table-column prop="name" label="姓名" width="140" />
-          <el-table-column prop="email" label="邮箱" width="200" show-overflow-tooltip />
-          <el-table-column prop="organization" label="组织" width="180" show-overflow-tooltip />
-          <el-table-column prop="projectSummary" label="项目摘要" show-overflow-tooltip />
-          <el-table-column prop="status" label="状态" width="110">
+          <el-table-column prop="name" :label="$t('workspace.collabRequests.colName')" width="140" />
+          <el-table-column prop="email" :label="$t('workspace.collabRequests.colEmail')" width="200" show-overflow-tooltip />
+          <el-table-column prop="organization" :label="$t('workspace.collabRequests.colOrg')" width="180" show-overflow-tooltip />
+          <el-table-column prop="projectSummary" :label="$t('workspace.collabRequests.colSummary')" show-overflow-tooltip />
+          <el-table-column prop="status" :label="$t('workspace.collabRequests.colStatus')" width="110">
             <template slot-scope="scope">
               <el-tag :type="getStatusTagType(scope.row.status)" size="small">
                 {{ getStatusLabel(scope.row.status) }}
@@ -92,35 +92,35 @@
               style="width: 160px;"
               @change="handleStatusChange"
             >
-              <el-option label="待处理" value="pending" />
-              <el-option label="已查看" value="reviewed" />
-              <el-option label="已回复" value="replied" />
-              <el-option label="已关闭" value="closed" />
+              <el-option :label="$t('workspace.collabRequests.statusPending')" value="pending" />
+              <el-option :label="$t('workspace.collabRequests.statusReviewed')" value="reviewed" />
+              <el-option :label="$t('workspace.collabRequests.statusReplied')" value="replied" />
+              <el-option :label="$t('workspace.collabRequests.statusClosed')" value="closed" />
             </el-select>
           </div>
         </div>
 
         <el-tabs v-model="activeTab" class="detail-tabs">
-          <el-tab-pane label="请求详情" name="detail">
+          <el-tab-pane :label="$t('workspace.collabRequests.tabDetail')" name="detail">
             <div class="detail-section">
-              <h4>项目摘要</h4>
+              <h4>{{ $t('workspace.collabRequests.sectionSummary') }}</h4>
               <p class="project-summary">
                 {{ detail.projectSummary }}
               </p>
             </div>
             <div class="detail-section">
-              <h4>基础信息</h4>
+              <h4>{{ $t('workspace.collabRequests.sectionBasic') }}</h4>
               <ul class="info-list">
                 <li>
-                  <span class="label">提交时间</span>
+                  <span class="label">{{ $t('workspace.collabRequests.labelSubmittedAt') }}</span>
                   <span class="value">{{ formatDateTime(detail.createdAt) }}</span>
                 </li>
                 <li>
-                  <span class="label">最近更新</span>
+                  <span class="label">{{ $t('workspace.collabRequests.labelUpdatedAt') }}</span>
                   <span class="value">{{ formatDateTime(detail.updatedAt) }}</span>
                 </li>
                 <li>
-                  <span class="label">当前状态</span>
+                  <span class="label">{{ $t('workspace.collabRequests.labelStatus') }}</span>
                   <span class="value">
                     <el-tag :type="getStatusTagType(detail.status)" size="mini">
                       {{ getStatusLabel(detail.status) }}
@@ -128,7 +128,7 @@
                   </span>
                 </li>
                 <li v-if="detail.attachmentUrl">
-                  <span class="label">附件</span>
+                  <span class="label">{{ $t('workspace.collabRequests.labelAttachment') }}</span>
                   <span class="value">
                     <a
                       :href="detail.attachmentUrl"
@@ -136,17 +136,17 @@
                       rel="noopener"
                       class="attachment-link"
                     >
-                      {{ detail.attachmentName || '查看附件' }}
+                      {{ detail.attachmentName || $t('workspace.collabRequests.viewAttachment') }}
                     </a>
                   </span>
                 </li>
               </ul>
             </div>
           </el-tab-pane>
-          <el-tab-pane label="内部备注" name="notes">
+          <el-tab-pane :label="$t('workspace.collabRequests.tabNotes')" name="notes">
             <div class="notes-wrapper">
               <p class="notes-tip">
-                这些备注仅对登录的管理员可见，不会对外展示。
+                {{ $t('workspace.collabRequests.notesTip') }}
               </p>
               <div class="notes-list" v-if="detail.notes && detail.notes.length">
                 <div
@@ -164,7 +164,7 @@
                 </div>
               </div>
               <div v-else class="notes-empty">
-                暂无内部备注。
+                {{ $t('workspace.collabRequests.notesEmpty') }}
               </div>
 
               <div class="note-editor">
@@ -172,10 +172,10 @@
                   v-model="newNoteContent"
                   type="textarea"
                   :rows="3"
-                  placeholder="添加一条新的内部备注，用于记录回访情况、下一步计划等..."
+                  :placeholder="$t('workspace.collabRequests.notesPlaceholder')"
                 />
                 <div class="note-editor-actions">
-                  <span class="hint">备注仅内部可见</span>
+                  <span class="hint">{{ $t('workspace.collabRequests.notesHint') }}</span>
                   <el-button
                     type="primary"
                     size="small"
@@ -183,7 +183,7 @@
                     :disabled="!newNoteContent.trim()"
                     @click="handleAddNote"
                   >
-                    添加备注
+                    {{ $t('workspace.collabRequests.addNote') }}
                   </el-button>
                 </div>
               </div>
@@ -193,7 +193,7 @@
       </div>
 
       <div v-else class="detail-empty">
-        <p>请选择左侧列表中的一条合作请求查看详情。</p>
+        <p>{{ $t('workspace.collabRequests.detailEmpty') }}</p>
       </div>
     </div>
   </div>
@@ -245,7 +245,7 @@ export default {
         }
       } catch (error) {
         console.error('加载 Collaboration Requests 失败', error)
-        const msg = error.response?.data?.message || error.message || '加载失败，请稍后重试'
+        const msg = error.response?.data?.message || error.message || this.$t('workspace.collabRequests.loadFailed')
         this.$message.error(msg)
       } finally {
         this.loading = false
@@ -269,7 +269,7 @@ export default {
         this.detail = detail
       } catch (error) {
         console.error('加载详情失败', error)
-        const msg = error.response?.data?.message || error.message || '加载详情失败'
+        const msg = error.response?.data?.message || error.message || this.$t('workspace.collabRequests.loadDetailFailed')
         this.$message.error(msg)
       }
     },
@@ -287,10 +287,10 @@ export default {
             updatedAt: updated.updatedAt
           })
         }
-        this.$message.success('状态已更新')
+        this.$message.success(this.$t('workspace.collabRequests.statusUpdateSuccess'))
       } catch (error) {
         console.error('更新状态失败', error)
-        const msg = error.response?.data?.message || error.message || '更新状态失败'
+        const msg = error.response?.data?.message || error.message || this.$t('workspace.collabRequests.statusUpdateFailed')
         this.$message.error(msg)
       }
     },
@@ -307,10 +307,10 @@ export default {
         }
         this.detail.notes.unshift(note)
         this.newNoteContent = ''
-        this.$message.success('备注已添加')
+        this.$message.success(this.$t('workspace.collabRequests.noteAddSuccess'))
       } catch (error) {
         console.error('添加备注失败', error)
-        const msg = error.response?.data?.message || error.message || '添加备注失败'
+        const msg = error.response?.data?.message || error.message || this.$t('workspace.collabRequests.noteAddFailed')
         this.$message.error(msg)
       } finally {
         this.submittingNote = false
@@ -325,15 +325,15 @@ export default {
     getStatusLabel(status) {
       switch (status) {
         case 'pending':
-          return '待处理'
+          return this.$t('workspace.collabRequests.statusPending')
         case 'reviewed':
-          return '已查看'
+          return this.$t('workspace.collabRequests.statusReviewed')
         case 'replied':
-          return '已回复'
+          return this.$t('workspace.collabRequests.statusReplied')
         case 'closed':
-          return '已关闭'
+          return this.$t('workspace.collabRequests.statusClosed')
         default:
-          return status || '未知'
+          return status || this.$t('workspace.collabRequests.statusUnknown')
       }
     },
     getStatusTagType(status) {

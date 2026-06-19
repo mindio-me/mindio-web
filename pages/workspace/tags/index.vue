@@ -5,13 +5,13 @@
       <aside class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
-            <el-input v-model="tagSearch" placeholder="搜索标签" prefix-icon="el-icon-search" clearable size="small" />
+            <el-input v-model="tagSearch" :placeholder="$t('workspace.tags.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
           </div>
         </div>
         <div class="sidebar-section sidebar-notes">
           <div class="sidebar-section-header">
-            <span class="section-title">所有标签</span>
-            <span class="section-subtitle">{{ filteredTagList.length }} 个</span>
+            <span class="section-title">{{ $t('workspace.tags.allTags') }}</span>
+            <span class="section-subtitle">{{ filteredTagList.length }}{{ $t('workspace.tags.countSuffix') }}</span>
           </div>
           <div v-loading="loading" class="note-list-wrapper">
             <div v-if="filteredTagList.length > 0" class="note-list">
@@ -27,7 +27,7 @@
                 </div>
               </div>
             </div>
-            <div v-else-if="!loading" class="sidebar-empty"><p>暂无标签</p></div>
+            <div v-else-if="!loading" class="sidebar-empty"><p>{{ $t('workspace.tags.empty') }}</p></div>
           </div>
         </div>
       </aside>
@@ -36,21 +36,21 @@
       <main class="workspace-main">
         <div v-if="selectedTag" class="entity-form-wrapper">
           <div class="entity-form-header">
-            <h2 class="entity-form-title">编辑标签</h2>
+            <h2 class="entity-form-title">{{ $t('workspace.tags.editTitle') }}</h2>
             <div class="entity-form-actions">
-              <el-button type="primary" size="small" :loading="tagSaving" @click="saveTag">保存</el-button>
-              <el-button type="danger" size="small" plain @click="deleteTag">删除</el-button>
+              <el-button type="primary" size="small" :loading="tagSaving" @click="saveTag">{{ $t('common.save') }}</el-button>
+              <el-button type="danger" size="small" plain @click="deleteTag">{{ $t('common.delete') }}</el-button>
             </div>
           </div>
           <el-form :model="tagForm" label-position="top" class="entity-form">
-            <el-form-item label="标签名称">
-              <el-input v-model="tagForm.name" placeholder="请输入标签名称" maxlength="50" show-word-limit />
+            <el-form-item :label="$t('workspace.tags.fieldName')">
+              <el-input v-model="tagForm.name" :placeholder="$t('workspace.tags.namePlaceholder')" maxlength="50" show-word-limit />
             </el-form-item>
           </el-form>
         </div>
         <div v-else class="note-main-empty">
           <i class="el-icon-collection-tag empty-icon"></i>
-          <p class="empty-text">选择左侧一个标签进行编辑</p>
+          <p class="empty-text">{{ $t('workspace.tags.selectEmpty') }}</p>
         </div>
       </main>
 
@@ -58,9 +58,9 @@
       <aside class="workspace-right">
         <div class="right-panel" v-if="selectedTag">
           <div class="right-section">
-            <h3 class="right-title">标签信息</h3>
+            <h3 class="right-title">{{ $t('workspace.tags.rightPanelTitle') }}</h3>
             <div class="right-meta-list">
-              <div class="right-meta-item"><span class="meta-label">标签名</span><span class="meta-value">{{ selectedTag.name }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.tags.metaName') }}</span><span class="meta-value">{{ selectedTag.name }}</span></div>
               <div class="right-meta-item"><span class="meta-label">ID</span><span class="meta-value">{{ selectedTag.id }}</span></div>
             </div>
           </div>
@@ -70,18 +70,18 @@
 
     <!-- 标签创建对话框 -->
     <el-dialog
-      :title="tagDialogMode === 'create' ? '新建标签' : '编辑标签'"
+      :title="tagDialogMode === 'create' ? $t('workspace.tags.dialogCreate') : $t('workspace.tags.dialogEdit')"
       :visible.sync="tagDialogVisible"
       width="400px"
     >
       <el-form :model="tagDialogForm">
-        <el-form-item label="标签名称">
-          <el-input v-model="tagDialogForm.name" placeholder="请输入标签名称" maxlength="50" show-word-limit />
+        <el-form-item :label="$t('workspace.tags.fieldName')">
+          <el-input v-model="tagDialogForm.name" :placeholder="$t('workspace.tags.namePlaceholder')" maxlength="50" show-word-limit />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="tagDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="tagSaving" @click="saveTagFromDialog">确定</el-button>
+        <el-button @click="tagDialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="tagSaving" @click="saveTagFromDialog">{{ $t('common.confirm') }}</el-button>
       </span>
     </el-dialog>
   </div>
@@ -127,7 +127,7 @@ export default {
         const { data } = await this.$axios.get('/v1/tags')
         this.tagList = data || []
       } catch (error) {
-        this.$message.error('加载标签失败')
+        this.$message.error(this.$t('workspace.tags.loadFailed'))
         this.tagList = []
       } finally {
         this.loading = false
@@ -150,12 +150,12 @@ export default {
       this.tagSaving = true
       try {
         await this.$axios.put(`/v1/tags/${this.selectedTag.id}`, this.tagForm)
-        this.$message.success('标签已更新')
+        this.$message.success(this.$t('workspace.tags.updateSuccess'))
         this.selectedTag.name = this.tagForm.name
         const idx = this.tagList.findIndex(t => t.id === this.selectedTag.id)
         if (idx >= 0) this.tagList[idx].name = this.tagForm.name
       } catch (error) {
-        this.$message.error('保存标签失败')
+        this.$message.error(this.$t('workspace.tags.updateFailed'))
       } finally {
         this.tagSaving = false
       }
@@ -165,30 +165,30 @@ export default {
       this.tagSaving = true
       try {
         await this.$axios.post('/v1/tags', this.tagDialogForm)
-        this.$message.success('标签已创建')
+        this.$message.success(this.$t('workspace.tags.createSuccess'))
         this.tagDialogVisible = false
         await this.loadTagList()
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '创建标签失败')
+        this.$message.error(error.response?.data?.message || this.$t('workspace.tags.createFailed'))
       } finally {
         this.tagSaving = false
       }
     },
     deleteTag() {
       if (!this.selectedTag) return
-      this.$confirm(`确定要删除标签 "${this.selectedTag.name}" 吗？`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+      this.$confirm(this.$t('workspace.tags.deleteConfirm', { name: this.selectedTag.name }), this.$t('workspace.tags.confirmTitle'), {
+        confirmButtonText: this.$t('common.confirm'),
+        cancelButtonText: this.$t('common.cancel'),
         type: 'warning'
       }).then(async () => {
         try {
           await this.$axios.delete(`/v1/tags/${this.selectedTag.id}`)
-          this.$message.success('删除成功')
+          this.$message.success(this.$t('workspace.tags.deleteSuccess'))
           this.selectedTag = null
           this.tagForm = { name: '' }
           await this.loadTagList()
         } catch (error) {
-          this.$message.error('删除失败')
+          this.$message.error(this.$t('workspace.tags.deleteFailed'))
         }
       }).catch(() => {})
     }

@@ -5,13 +5,13 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
       <aside class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
-            <el-input v-model="serviceSearch" placeholder="搜索服务" prefix-icon="el-icon-search" clearable size="small" />
+            <el-input v-model="serviceSearch" :placeholder="$t('workspace.services.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
           </div>
         </div>
         <div class="sidebar-section sidebar-notes">
           <div class="sidebar-section-header">
-            <span class="section-title">我的服务</span>
-            <span class="section-subtitle">{{ filteredServices.length }} 个</span>
+            <span class="section-title">{{ $t('workspace.services.myServices') }}</span>
+            <span class="section-subtitle">{{ filteredServices.length }}{{ $t('workspace.services.countSuffix') }}</span>
           </div>
           <div v-loading="loading" class="note-list-wrapper">
             <div v-if="filteredServices.length > 0" class="note-list">
@@ -24,12 +24,12 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
               >
                 <div class="note-list-title">{{ item.name }}</div>
                 <div class="note-list-meta">
-                  <span class="note-list-time">{{ item.category || '未分类' }}</span>
-                  <el-tag v-if="item.isActive" size="mini" type="success" effect="plain">启用</el-tag>
+                  <span class="note-list-time">{{ item.category || $t('workspace.services.uncategorized') }}</span>
+                  <el-tag v-if="item.isActive" size="mini" type="success" effect="plain">{{ $t('workspace.services.enabled') }}</el-tag>
                 </div>
               </div>
             </div>
-            <div v-else-if="!loading" class="sidebar-empty"><p>暂无服务</p></div>
+            <div v-else-if="!loading" class="sidebar-empty"><p>{{ $t('workspace.services.empty') }}</p></div>
           </div>
         </div>
       </aside>
@@ -43,8 +43,8 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
             <div class="entity-detail-header">
               <h2 class="entity-detail-title">{{ selectedService.name }}</h2>
               <div class="entity-detail-actions">
-                <el-button size="small" icon="el-icon-edit" @click="serviceViewMode = 'edit'">编辑</el-button>
-                <el-button size="small" type="danger" plain @click="deleteService">删除</el-button>
+                <el-button size="small" icon="el-icon-edit" @click="serviceViewMode = 'edit'">{{ $t('common.edit') }}</el-button>
+                <el-button size="small" type="danger" plain @click="deleteService">{{ $t('common.delete') }}</el-button>
               </div>
             </div>
 
@@ -52,13 +52,13 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
             <div class="entity-detail-content">
               <!-- 描述 -->
               <div v-if="selectedService.description" class="detail-field">
-                <label class="detail-label">描述</label>
+                <label class="detail-label">{{ $t('workspace.services.description') }}</label>
                 <div class="detail-value">{{ selectedService.description }}</div>
               </div>
 
               <!-- 详细描述 -->
               <div v-if="selectedService.detailedDescription" class="detail-field">
-                <label class="detail-label">详细描述</label>
+                <label class="detail-label">{{ $t('workspace.services.detailedDescription') }}</label>
                 <div class="detail-value" style="white-space: pre-wrap;">{{ selectedService.detailedDescription }}</div>
               </div>
 
@@ -66,13 +66,13 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
               <el-row :gutter="16" class="detail-meta-row">
                 <el-col :span="12">
                   <div class="detail-field">
-                    <label class="detail-label">分类</label>
+                    <label class="detail-label">{{ $t('workspace.services.category') }}</label>
                     <div class="detail-value">{{ selectedService.category || '-' }}</div>
                   </div>
                 </el-col>
                 <el-col :span="12">
                   <div class="detail-field">
-                    <label class="detail-label">图标</label>
+                    <label class="detail-label">{{ $t('workspace.services.icon') }}</label>
                     <div class="detail-value">
                       <i v-if="selectedService.icon" :class="selectedService.icon"></i>
                       <span v-else>-</span>
@@ -83,13 +83,13 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
 
               <!-- 定价 -->
               <div v-if="selectedService.pricing" class="detail-field">
-                <label class="detail-label">定价</label>
+                <label class="detail-label">{{ $t('workspace.services.pricing') }}</label>
                 <div class="detail-value">{{ selectedService.pricing }}</div>
               </div>
 
               <!-- 功能特性 -->
               <div v-if="displayFeatures.length" class="detail-field">
-                <label class="detail-label">功能特性</label>
+                <label class="detail-label">{{ $t('workspace.services.features') }}</label>
                 <div class="detail-value">
                   <el-tag
                     v-for="(feat, idx) in displayFeatures"
@@ -104,23 +104,23 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
               <el-row :gutter="16" class="detail-meta-row">
                 <el-col :span="8">
                   <div class="detail-field">
-                    <label class="detail-label">排序</label>
+                    <label class="detail-label">{{ $t('workspace.services.displayOrder') }}</label>
                     <div class="detail-value">{{ selectedService.displayOrder || 0 }}</div>
                   </div>
                 </el-col>
                 <el-col :span="8">
                   <div class="detail-field">
-                    <label class="detail-label">启用</label>
+                    <label class="detail-label">{{ $t('workspace.services.isActive') }}</label>
                     <div class="detail-value">
-                      <el-tag :type="selectedService.isActive ? 'success' : 'info'" size="small">{{ selectedService.isActive ? '是' : '否' }}</el-tag>
+                      <el-tag :type="selectedService.isActive ? 'success' : 'info'" size="small">{{ selectedService.isActive ? $t('workspace.services.yes') : $t('workspace.services.no') }}</el-tag>
                     </div>
                   </div>
                 </el-col>
                 <el-col :span="8">
                   <div class="detail-field">
-                    <label class="detail-label">精选</label>
+                    <label class="detail-label">{{ $t('workspace.services.isFeatured') }}</label>
                     <div class="detail-value">
-                      <el-tag :type="selectedService.isFeatured ? 'warning' : 'info'" size="small">{{ selectedService.isFeatured ? '是' : '否' }}</el-tag>
+                      <el-tag :type="selectedService.isFeatured ? 'warning' : 'info'" size="small">{{ selectedService.isFeatured ? $t('workspace.services.yes') : $t('workspace.services.no') }}</el-tag>
                     </div>
                   </div>
                 </el-col>
@@ -131,38 +131,38 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
           <!-- 编辑模式 -->
           <div v-else-if="serviceViewMode === 'edit'" class="entity-form-wrapper">
             <div class="entity-form-header">
-              <h2 class="entity-form-title">编辑服务</h2>
+              <h2 class="entity-form-title">{{ $t('workspace.services.editTitle') }}</h2>
               <div class="entity-form-actions">
-                <el-button size="small" @click="cancelServiceEdit">取消</el-button>
-                <el-button type="primary" size="small" :loading="serviceSaving" @click="saveService">保存</el-button>
+                <el-button size="small" @click="cancelServiceEdit">{{ $t('common.cancel') }}</el-button>
+                <el-button type="primary" size="small" :loading="serviceSaving" @click="saveService">{{ $t('common.save') }}</el-button>
               </div>
             </div>
             <el-form :model="serviceForm" label-position="top" class="entity-form">
-              <el-form-item label="名称">
-                <el-input v-model="serviceForm.name" placeholder="服务名称" />
+              <el-form-item :label="$t('workspace.notes.title')">
+                <el-input v-model="serviceForm.name" :placeholder="$t('workspace.services.namePlaceholder')" />
               </el-form-item>
-              <el-form-item label="描述">
-                <el-input v-model="serviceForm.description" type="textarea" :rows="2" placeholder="简短描述" />
+              <el-form-item :label="$t('workspace.services.description')">
+                <el-input v-model="serviceForm.description" type="textarea" :rows="2" :placeholder="$t('workspace.services.descPlaceholder')" />
               </el-form-item>
-              <el-form-item label="详细描述">
-                <el-input v-model="serviceForm.detailedDescription" type="textarea" :rows="4" placeholder="详细介绍" />
+              <el-form-item :label="$t('workspace.services.detailedDescription')">
+                <el-input v-model="serviceForm.detailedDescription" type="textarea" :rows="4" :placeholder="$t('workspace.services.detailPlaceholder')" />
               </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="12">
-                  <el-form-item label="分类">
-                    <el-input v-model="serviceForm.category" placeholder="如: Development, Design" />
+                  <el-form-item :label="$t('workspace.services.category')">
+                    <el-input v-model="serviceForm.category" placeholder="e.g.: Development, Design" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                  <el-form-item label="图标">
-                    <el-input v-model="serviceForm.icon" placeholder="图标名称或URL" />
+                  <el-form-item :label="$t('workspace.services.icon')">
+                    <el-input v-model="serviceForm.icon" :placeholder="$t('workspace.services.iconPlaceholder')" />
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item label="定价">
-                <el-input v-model="serviceForm.pricing" placeholder="如: 免费, ¥99/月" />
+              <el-form-item :label="$t('workspace.services.pricing')">
+                <el-input v-model="serviceForm.pricing" :placeholder="$t('workspace.services.pricingPlaceholder')" />
               </el-form-item>
-              <el-form-item label="功能特性">
+              <el-form-item :label="$t('workspace.services.features')">
                 <div class="dynamic-tags">
                   <el-tag
                     v-for="(feat, idx) in serviceForm.features"
@@ -180,22 +180,22 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
                     @keyup.enter.native="addServiceTag"
                     @blur="addServiceTag"
                   />
-                  <el-button v-else size="small" class="tag-add-btn" @click="showServiceTagInput">+ 添加</el-button>
+                  <el-button v-else size="small" class="tag-add-btn" @click="showServiceTagInput">{{ $t('workspace.services.addTag') }}</el-button>
                 </div>
               </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="8">
-                  <el-form-item label="排序">
+                  <el-form-item :label="$t('workspace.services.displayOrder')">
                     <el-input-number v-model="serviceForm.displayOrder" :min="0" size="small" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="8">
-                  <el-form-item label="启用">
+                  <el-form-item :label="$t('workspace.services.isActive')">
                     <el-switch v-model="serviceForm.isActive" />
                   </el-form-item>
                 </el-col>
                 <el-col :span="8">
-                  <el-form-item label="精选">
+                  <el-form-item :label="$t('workspace.services.isFeatured')">
                     <el-switch v-model="serviceForm.isFeatured" />
                   </el-form-item>
                 </el-col>
@@ -205,7 +205,7 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
         </div>
         <div v-else class="note-main-empty">
           <i class="el-icon-service empty-icon"></i>
-          <p class="empty-text">选择一个服务查看详情</p>
+          <p class="empty-text">{{ $t('workspace.services.selectEmpty') }}</p>
         </div>
       </main>
 
@@ -213,12 +213,12 @@ ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss<template>
       <aside class="workspace-right">
         <div class="right-panel" v-if="selectedService">
           <div class="right-section">
-            <h3 class="right-title">服务信息</h3>
+            <h3 class="right-title">{{ $t('workspace.services.rightPanelTitle') }}</h3>
             <div class="right-meta-list">
-              <div class="right-meta-item"><span class="meta-label">创建时间</span><span class="meta-value">{{ formatDate(selectedService.createdAt) }}</span></div>
-              <div class="right-meta-item"><span class="meta-label">修改时间</span><span class="meta-value">{{ formatDate(selectedService.modifiedAt) }}</span></div>
-              <div class="right-meta-item" v-if="selectedService.category"><span class="meta-label">分类</span><span class="meta-value">{{ selectedService.category }}</span></div>
-              <div class="right-meta-item"><span class="meta-label">状态</span><span class="meta-value">{{ selectedService.isActive ? '启用' : '停用' }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.services.createdAt') }}</span><span class="meta-value">{{ formatDate(selectedService.createdAt) }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.services.modifiedAt') }}</span><span class="meta-value">{{ formatDate(selectedService.modifiedAt) }}</span></div>
+              <div class="right-meta-item" v-if="selectedService.category"><span class="meta-label">{{ $t('workspace.services.category') }}</span><span class="meta-value">{{ selectedService.category }}</span></div>
+              <div class="right-meta-item"><span class="meta-label">{{ $t('workspace.services.status') }}</span><span class="meta-value">{{ selectedService.isActive ? $t('workspace.services.statusActive') : $t('workspace.services.statusInactive') }}</span></div>
             </div>
           </div>
         </div>
@@ -287,7 +287,7 @@ export default {
           this.selectService(this.services[0])
         }
       } catch (error) {
-        this.$message.error('加载服务失败')
+        this.$message.error(this.$t('workspace.services.loadFailed'))
         this.services = []
       } finally {
         this.loading = false
@@ -318,14 +318,14 @@ export default {
     },
     async createService() {
       try {
-        const data = { name: '新服务', description: '服务描述', isActive: true }
+        const data = { name: this.$t('workspace.services.newServiceName'), description: this.$t('workspace.services.newServiceDesc'), isActive: true }
         const result = await this.$serviceService.createService(data)
         await this.loadServices()
         const created = this.services.find(s => s.id === result.id) || this.services[0]
         if (created) this.selectService(created)
-        this.$message.success('服务已创建')
+        this.$message.success(this.$t('workspace.services.createSuccess'))
       } catch (error) {
-        this.$message.error('创建服务失败')
+        this.$message.error(this.$t('workspace.services.createFailed'))
       }
     },
     async saveService() {
@@ -341,7 +341,7 @@ export default {
         }
 
         await this.$serviceService.updateService(this.selectedService.id, submitData)
-        this.$message.success('服务已保存')
+        this.$message.success(this.$t('workspace.services.saveSuccess'))
         const idx = this.services.findIndex(s => s.id === this.selectedService.id)
         if (idx >= 0) Object.assign(this.services[idx], submitData)
         this.selectedService = { ...this.selectedService, ...submitData }
@@ -349,25 +349,25 @@ export default {
         // 切换回详情模式
         this.serviceViewMode = 'detail'
       } catch (error) {
-        this.$message.error('保存服务失败')
+        this.$message.error(this.$t('workspace.services.saveFailed'))
       } finally {
         this.serviceSaving = false
       }
     },
     deleteService() {
       if (!this.selectedService) return
-      this.$confirm(`确定要删除服务 "${this.selectedService.name}" 吗？`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+      this.$confirm(this.$t('workspace.services.deleteConfirm', { name: this.selectedService.name }), this.$t('workspace.services.confirmTitle'), {
+        confirmButtonText: this.$t('common.confirm'),
+        cancelButtonText: this.$t('common.cancel'),
         type: 'warning'
       }).then(async () => {
         try {
           await this.$serviceService.deleteService(this.selectedService.id)
-          this.$message.success('删除成功')
+          this.$message.success(this.$t('workspace.services.deleteSuccess'))
           this.selectedService = null
           await this.loadServices()
         } catch (error) {
-          this.$message.error('删除失败')
+          this.$message.error(this.$t('workspace.services.deleteFailed'))
         }
       }).catch(() => {})
     },
