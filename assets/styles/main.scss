@@ -1,0 +1,564 @@
+// Editor.js 样式（用于笔记编辑器）
+@use './editorjs.scss';
+// WangEditor 内容样式（用于富文本浏览模式）
+@use './wangeditor-content.scss';
+
+// 全局样式 & 主题配置
+
+:root {
+  // Light 主题（默认）
+  --bg-color: #ffffff;
+  --bg-secondary: #f5f7fa;
+  --bg-tertiary: #f8f9fa;
+  --text-color: #1a202c;
+  --text-secondary: #4a5568;
+  --text-muted: #718096;
+  --text-placeholder: #a0aec0;
+  --card-bg-color: #ffffff;
+  --border-color: #e2e8f0;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --header-bg: #ffffff;
+  --input-bg: #ffffff;
+  --input-border: #e2e8f0;
+  --tag-bg: #f1f5f9;
+  --tag-color: #475569;
+  --icon-bg: #eff6ff;
+  --hero-gradient: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+  --cta-gradient: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%);
+}
+
+// Dark 主题：通过在 html/body 上挂 theme-dark 类来启用
+.theme-dark {
+  // 中性灰色阶，参考 VS Code Dark 主题（编辑器背景 #1e1e1e），去掉之前 Slate 色系偏蓝的色调
+  --bg-color: #181818;
+  --bg-secondary: #1e1e1e;
+  --bg-tertiary: #252526;
+  --text-color: #d4d4d4;
+  --text-secondary: #b3b3b3;
+  --text-muted: #8a8a8a;
+  --text-placeholder: #6b6b6b;
+  --card-bg-color: #1e1e1e;
+  --border-color: #3c3c3c;
+  --shadow-color: rgba(0, 0, 0, 0.4);
+  --header-bg: #181818;
+  --input-bg: #2d2d2d;
+  --input-border: #3c3c3c;
+  --tag-bg: #333333;
+  --tag-color: #cccccc;
+  --icon-bg: #1e3a5f;
+  --hero-gradient: linear-gradient(135deg, #1e1e1e 0%, #181818 100%);
+  --cta-gradient: linear-gradient(135deg, #1e293b 0%, #172554 100%);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  // scrollbar-gutter: stable; // 预留滚动条空间，防止出现/消失时引发水平抖动
+}
+
+// 深色模式下确保 html/body 背景色一致，防止页面切换时闪白
+html.theme-dark,
+html.theme-dark body,
+html.theme-dark #__nuxt,
+html.theme-dark #__layout {
+  background-color: var(--bg-secondary);
+}
+
+// 深色模式下 Element UI 组件适配
+.theme-dark {
+  // loading 遮罩
+  .el-loading-mask {
+    background-color: rgba(30, 30, 30, 0.9);
+  }
+
+  // 对话框
+  .el-dialog {
+    background: var(--card-bg-color);
+
+    .el-dialog__header {
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .el-dialog__title {
+      color: var(--text-color);
+    }
+
+    .el-dialog__body {
+      color: var(--text-color);
+    }
+  }
+
+  // 下拉菜单
+  .el-dropdown-menu {
+    background: var(--card-bg-color);
+    border-color: var(--border-color);
+
+    .el-dropdown-menu__item {
+      color: var(--text-color);
+
+      &:hover {
+        background: var(--bg-secondary);
+        color: var(--text-color);
+      }
+    }
+
+    .el-dropdown-menu__item--divided::before {
+      background: var(--border-color);
+    }
+  }
+
+  // 消息确认框
+  .el-message-box {
+    background: var(--card-bg-color);
+    border-color: var(--border-color);
+
+    .el-message-box__title {
+      color: var(--text-color);
+    }
+
+    .el-message-box__content {
+      color: var(--text-secondary);
+    }
+  }
+
+  // 消息提示框
+  .el-message {
+    background: var(--card-bg-color);
+    border-color: var(--border-color);
+    color: var(--text-color);
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+
+    .el-message__content {
+      color: var(--text-color);
+    }
+
+    .el-message__icon {
+      color: var(--text-color);
+    }
+  }
+
+  // ===============================================
+  // el-tag 主题适配
+  // ===============================================
+
+  // success 类型 - 深色模式下调整绿色系
+  .el-tag--success {
+    background-color: rgba(103, 194, 58, 0.15);
+    border-color: rgba(103, 194, 58, 0.3);
+    color: #95d475;
+
+    &.is-plain {
+      background-color: transparent;
+      border-color: rgba(103, 194, 58, 0.4);
+      color: #95d475;
+    }
+  }
+
+  // warning 类型 - 深色模式下调整橙色系
+  .el-tag--warning {
+    background-color: rgba(230, 162, 60, 0.15);
+    border-color: rgba(230, 162, 60, 0.3);
+    color: #f3d19e;
+
+    &.is-plain {
+      background-color: transparent;
+      border-color: rgba(230, 162, 60, 0.4);
+      color: #f3d19e;
+    }
+  }
+
+  // danger 类型 - 深色模式下调整红色系
+  .el-tag--danger {
+    background-color: rgba(245, 108, 108, 0.15);
+    border-color: rgba(245, 108, 108, 0.3);
+    color: #f89898;
+
+    &.is-plain {
+      background-color: transparent;
+      border-color: rgba(245, 108, 108, 0.4);
+      color: #f89898;
+    }
+  }
+
+  // primary 类型 - 深色模式下调整蓝色系
+  .el-tag--primary {
+    background-color: rgba(64, 158, 255, 0.15);
+    border-color: rgba(64, 158, 255, 0.3);
+    color: #8cc8ff;
+
+    &.is-plain {
+      background-color: transparent;
+      border-color: rgba(64, 158, 255, 0.4);
+      color: #8cc8ff;
+    }
+  }
+
+  // 关闭按钮在深色模式下的适配
+  .el-tag__close {
+    &:hover {
+      background-color: var(--text-color);
+      color: var(--card-bg-color);
+    }
+  }
+}
+
+// ===============================================
+// el-tag 基础样式 - 适用于所有主题
+// ===============================================
+.el-tag {
+  // 修复字体等宽问题：完全继承全局字体样式
+  font-family: inherit !important;
+  font-variant-numeric: normal !important;
+  font-feature-settings: normal !important;
+
+  // 重置所有间距相关属性，消除字符稀疏问题
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+
+  // 修复垂直对齐问题
+  vertical-align: middle;
+  line-height: 1.5;
+
+  // 使用主题变量替代硬编码颜色（无 type 的普通标签）
+  &:not(.el-tag--success):not(.el-tag--warning):not(.el-tag--danger):not(.el-tag--info):not(.el-tag--primary) {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+  }
+
+  // primary 类型标签使用蓝色系
+  &.el-tag--primary {
+    background-color: rgba(64, 158, 255, 0.1);
+    border-color: rgba(64, 158, 255, 0.3);
+    color: #409eff;
+
+    &.is-plain {
+      background-color: transparent;
+      border-color: rgba(64, 158, 255, 0.5);
+      color: #409eff;
+    }
+  }
+
+  // info 类型标签使用与普通标签相似的颜色（更柔和）
+  &.el-tag--info {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+
+    &.is-plain {
+      background-color: transparent;
+      border-color: var(--border-color);
+      color: var(--text-secondary);
+    }
+  }
+
+  // 关闭按钮颜色适配
+  .el-tag__close {
+    color: var(--text-secondary);
+
+    &:hover {
+      background-color: var(--text-secondary);
+      color: var(--card-bg-color);
+    }
+  }
+}
+
+// 容器样式
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+// 卡片样式
+.card {
+  background: var(--card-bg-color);
+  border-radius: 4px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.12);
+}
+
+// 页面标题
+.page-title {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 20px;
+}
+
+// 工具栏
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+// 响应式
+@media screen and (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+// 编辑器样式
+.editor-container {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-height: 400px;
+}
+
+// 笔记列表项
+.note-item {
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.15);
+  }
+}
+
+// 标签样式
+.tag-item {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+// Mermaid 图表块
+.mermaid-block {
+  text-align: center;
+  margin: 1em 0;
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  overflow-x: auto;
+
+  svg {
+    height: auto;
+    overflow: visible !important;
+  }
+
+  // 边标签（箭头上的文字）增加背景内边距，防止连线穿过文字
+  .edgeLabel {
+    // background-color: #fafafa;
+    background-color: transparent !important;
+    // padding: 4px 8px;
+    line-height: inherit;
+
+    rect {
+      opacity: 1 !important;
+      fill: #fafafa !important;
+    }
+  }
+
+  &.mermaid-error {
+    border-color: #F56C6C;
+    background: #FEF0F0;
+  }
+}
+
+.theme-dark .mermaid-block {
+  background: #1a1a2e;
+  border-color: #404040;
+
+  .edgeLabel {
+    background-color: #1a1a2e;
+
+    rect {
+      fill: #1a1a2e !important;
+    }
+  }
+
+  &.mermaid-error {
+    background: #2d1b1b;
+    border-color: #8b3a3a;
+  }
+}
+
+// 空状态
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+
+  .empty-icon {
+    font-size: 64px;
+    margin-bottom: 20px;
+  }
+
+  .empty-text {
+    font-size: 16px;
+  }
+}
+
+// Element UI Message 组件样式修复
+// 修复顶部显示时第一行和边缘被遮挡的问题
+.el-message {
+  min-width: 380px;
+  padding: 15px 19px 15px 20px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  position: fixed;
+  left: 50%;
+  top: 20px;
+  transform: translateX(-50%);
+  background-color: #fff;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  transition: opacity 0.3s, transform 0.4s, top 0.4s;
+  display: flex;
+  align-items: center;
+  z-index: 3000;
+  // 确保左右边缘有足够空间，不会被遮挡
+  max-width: calc(100vw - 40px);
+  margin: 0 20px;
+
+  .el-message__content {
+    padding: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    // 确保第一行文字完整显示
+    word-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .el-message__icon {
+    margin-right: 8px;
+  }
+
+  // 确保图标和文字对齐
+  .el-message__icon + .el-message__content {
+    padding-left: 0;
+  }
+
+  // 不同类型的颜色
+  &.el-message--success {
+    background-color: #f0f9ff;
+    border-color: #67c23a;
+    color: #67c23a;
+
+    .el-message__icon {
+      color: #67c23a;
+    }
+  }
+
+  &.el-message--warning {
+    background-color: #fdf6ec;
+    border-color: #e6a23c;
+    color: #e6a23c;
+
+    .el-message__icon {
+      color: #e6a23c;
+    }
+  }
+
+  &.el-message--info {
+    background-color: #f4f4f5;
+    border-color: #909399;
+    color: #909399;
+
+    .el-message__icon {
+      color: #909399;
+    }
+  }
+
+  &.el-message--error {
+    background-color: #fef0f0;
+    border-color: #f56c6c;
+    color: #f56c6c;
+
+    .el-message__icon {
+      color: #f56c6c;
+    }
+  }
+}
+
+// 深色模式下的 message 样式
+.theme-dark {
+  .el-message {
+    background-color: var(--card-bg-color);
+    border-color: var(--border-color);
+    color: var(--text-color);
+    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.3);
+
+    .el-message__content {
+      color: var(--text-color);
+    }
+
+    &.el-message--success {
+      background-color: rgba(103, 194, 58, 0.15);
+      border-color: rgba(103, 194, 58, 0.3);
+      color: #95d475;
+
+      .el-message__icon {
+        color: #95d475;
+      }
+    }
+
+    &.el-message--warning {
+      background-color: rgba(230, 162, 60, 0.15);
+      border-color: rgba(230, 162, 60, 0.3);
+      color: #f3d19e;
+
+      .el-message__icon {
+        color: #f3d19e;
+      }
+    }
+
+    &.el-message--info {
+      background-color: var(--bg-secondary);
+      border-color: var(--border-color);
+      color: var(--text-secondary);
+
+      .el-message__icon {
+        color: var(--text-secondary);
+      }
+    }
+
+    &.el-message--error {
+      background-color: rgba(245, 108, 108, 0.15);
+      border-color: rgba(245, 108, 108, 0.3);
+      color: #f89898;
+
+      .el-message__icon {
+        color: #f89898;
+      }
+    }
+  }
+}
+
+// 响应式：小屏幕时调整 message 宽度和位置
+@media screen and (max-width: 768px) {
+  .el-message {
+    min-width: auto;
+    width: calc(100vw - 40px);
+    max-width: calc(100vw - 40px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 16px 12px 17px;
+
+    .el-message__content {
+      font-size: 13px;
+    }
+  }
+}

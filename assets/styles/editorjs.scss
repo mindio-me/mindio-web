@@ -1,0 +1,467 @@
+/* Editor.js styles for workspace (global, namespaced) */
+.editorjs-workspace-container {
+  .codex-editor { font-size: 16px; line-height: 1.8; }
+  .ce-block__content { max-width: 100%; padding: 0 0 0 60px; }
+  .ce-toolbar__content { max-width: 100%; margin-left: 0; }
+  .ce-toolbar { left: 0 !important; }
+  .ce-toolbar__actions { left: 0; position: absolute; display: flex; flex-direction: row; }
+  .ce-toolbox { left: 60px !important; }
+  .ce-paragraph { color: var(--text-color, #333); line-height: 1.8; }
+  .ce-header { color: var(--text-color, #333); font-weight: 600; padding: 0.6em 0 0.3em; }
+
+  .cdx-quote {
+    border-left: 4px solid #667eea;
+    padding: 12px 20px;
+    background: var(--bg-secondary, #f8f9fa);
+    border-radius: 4px;
+    .cdx-quote__text { color: var(--text-secondary, #555); font-style: italic; min-height: 1.5em; }
+    .cdx-quote__caption { color: var(--text-muted, #999); font-size: 0.85em; }
+  }
+
+  .cdx-block.ce-code { border-radius: 8px; }
+  .ce-code__textarea {
+    background: #1e1e1e !important; color: #d4d4d4 !important;
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace !important;
+    font-size: 14px !important; line-height: 1.6 !important;
+    border-radius: 8px !important; border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    padding: 16px 20px !important; min-height: 60px;
+  }
+  .ce-code__textarea::selection {
+    background: #bcd7ff !important;
+    color: #0f172a !important;
+  }
+
+  .ce-delimiter {
+    line-height: 1; text-align: center; color: var(--border-color, #e8e8e8);
+    &::before { content: ''; display: block; border-top: 2px solid var(--border-color, #e8e8e8); margin: 24px 0; }
+  }
+
+  .tc-table {
+    border-collapse: collapse; width: 100%;
+    .tc-row { border-bottom: 1px solid var(--border-color, #e8e8e8); }
+    .tc-cell { border: 1px solid var(--border-color, #e8e8e8); padding: 8px 12px; color: var(--text-color, #333); }
+    .tc-row--heading .tc-cell { background: var(--bg-secondary, #f5f5f5); font-weight: 600; }
+  }
+
+  /**
+   * Fix: the row toolbox (Delete row / Add row above/below) is positioned at left:-30px
+   * relative to the table. With ce-block__content padding-left: 60px, the table already
+   * has ample space on the left for the row toolbox to appear without clipping.
+   */
+
+  /**
+   * Fix: @editorjs/table column toolbox popover being covered by the sticky heading row.
+   * Root cause: .tc-toolbox has z-index:1, but .tc-table--heading .tc-row:first-child has
+   * position:sticky + z-index:2, so the heading row's stacking context wins.
+   * Setting z-index on .tc-popover alone doesn't help because it's inside .tc-toolbox's
+   * stacking context. The fix is to raise .tc-toolbox--column above the heading row.
+   */
+  .tc-toolbox--column {
+    z-index: 3 !important;
+  }
+
+  .image-tool {
+    position: relative;
+    .image-tool__image {
+      border-radius: 8px; margin: 0 auto 10px; position: relative;
+      img { max-width: 100%; width: 100%; display: block; }
+
+      .image-resize-handle {
+        position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 10;
+        &::after {
+          content: ''; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+          width: 4px; height: 36px; border-radius: 2px; background: rgba(102, 126, 234, 0.6);
+          opacity: 0; transition: opacity 0.2s;
+        }
+      }
+      &:hover .image-resize-handle::after, .image-resize-handle.resizing::after { opacity: 1; }
+    }
+    .image-tool__caption {
+      color: var(--text-muted, #999); font-size: 0.85em; text-align: center; border: none;
+      &[data-placeholder]:empty::before { text-align: center; width: 100%; display: block; }
+    }
+    &--withBorder .image-tool__image { border: 2px solid var(--border-color, #e8e8e8); }
+    &--withBackground .image-tool__image { background: var(--bg-secondary, #f5f5f5); padding: 16px; }
+
+    .image-resize-tooltip {
+      position: absolute; top: -30px; right: 0; background: rgba(0, 0, 0, 0.75); color: #fff;
+      padding: 3px 10px; border-radius: 4px; font-size: 12px; white-space: nowrap; pointer-events: none;
+    }
+  }
+
+  .cdx-list {
+    color: var(--text-color, #333); padding-left: 24px;
+    .cdx-list__item {
+      padding: 4px 0; line-height: 1.6;
+      // Fix: @editorjs/list v2 grid auto-placement sometimes puts ::before on wrong row; pin it explicitly.
+      &::before { grid-area: checkbox; }
+    }
+  }
+
+  .inline-code {
+    background: var(--bg-secondary, #f5f5f5); color: #e83e8c;
+    padding: 2px 6px; border-radius: 4px;
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace; font-size: 0.9em;
+  }
+
+  .cdx-marker { background: rgba(245, 235, 111, 0.4); padding: 2px 0; }
+
+  .ce-toolbar__plus, .ce-toolbar__settings-btn {
+    color: var(--text-muted, #999); background: var(--card-bg-color, #fff);
+    border: 1px solid var(--border-color, #e8e8e8);
+    &:hover { background: var(--bg-secondary, #f5f5f5); }
+  }
+
+  .ce-toolbox {
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #e8e8e8);
+    box-shadow: 0 4px 16px var(--shadow-color, rgba(0, 0, 0, 0.12)); border-radius: 8px;
+    .ce-toolbox__button {
+      color: var(--text-color, #333);
+      &:hover { background: var(--bg-secondary, #f5f5f5); }
+    }
+  }
+
+  .ce-inline-toolbar {
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #e8e8e8);
+    box-shadow: 0 4px 16px var(--shadow-color, rgba(0, 0, 0, 0.12));
+    .ce-inline-tool { color: var(--text-color, #333); &:hover { background: var(--bg-secondary, #f5f5f5); } }
+    .ce-inline-toolbar__dropdown { border-right: 1px solid var(--border-color, #e8e8e8); }
+  }
+
+  .ce-settings {
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #e8e8e8);
+    box-shadow: 0 4px 16px var(--shadow-color, rgba(0, 0, 0, 0.12));
+    .cdx-settings-button { color: var(--text-color, #333); &:hover { background: var(--bg-secondary, #f5f5f5); } }
+  }
+
+  .ce-conversion-toolbar {
+    background: var(--card-bg-color, #fff); border: 1px solid var(--border-color, #e8e8e8);
+    .ce-conversion-tool { color: var(--text-color, #333); &:hover { background: var(--bg-secondary, #f5f5f5); } }
+  }
+}
+
+/* Dark mode overrides */
+.theme-dark .editorjs-workspace-container {
+  .cdx-marker { background: rgba(245, 235, 111, 0.25); }
+  .inline-code { color: #f472b6; background: var(--bg-tertiary, #1a2332); }
+
+  /* 修复深色模式下表格颜色
+   * 插件将 --color-background 硬编码为 #f9f9fb（亮色），
+   * 在 .tc-wrap 上覆盖该变量，同时让表头与表体有细微区别。
+   *   表体单元格：--card-bg-color（深色卡片背景，如 #1e293b）
+   *   表头行：    --bg-tertiary（稍深，如 #1a2332），用 font-weight 区分已够显眼
+   */
+  .tc-wrap {
+    --color-background: var(--bg-tertiary, #1a2332);
+    --color-border: var(--border-color, #334155);
+    --color-text-secondary: var(--text-muted, #64748b);
+  }
+  .tc-cell {
+    background: var(--card-bg-color, #1e293b);
+    color: var(--text-color, #e5e7eb);
+    border-color: var(--border-color, #334155);
+  }
+  /* 表头行背景略深于表体，与 light mode 中表头为灰色的逻辑对应 */
+  .tc-table--heading .tc-row:first-child .tc-cell,
+  .tc-row--heading .tc-cell {
+    background: var(--bg-tertiary, #1a2332);
+    color: var(--text-color, #e5e7eb);
+    border-color: var(--border-color, #334155);
+  }
+
+  /* 修复深色模式下文本选中背景为白色导致看不见文字的问题 */
+  /* 单行文本选中（浏览器原生 ::selection） */
+  ::selection { background: rgba(102, 126, 234, 0.4) !important; color: #e5e7eb !important; }
+  *::selection { background: rgba(102, 126, 234, 0.4) !important; color: #e5e7eb !important; }
+
+  /* 多块选中（EditorJS 通过 .ce-block--selected 类实现） */
+  .ce-block--selected .ce-block__content {
+    background: rgba(102, 126, 234, 0.25) !important;
+  }
+
+  /* 修复深色模式下选中文本时弹出的上下文菜单（加粗/斜体/转换类型等）部分菜单项看不清
+   * 根因：EditorJS 2.31 的内联工具栏和转换菜单底层都基于共享的 Popover 组件，
+   * 该组件在 .ce-popover / .ce-inline-toolbar 上把 --color-text-primary / --color-background
+   * 等 CSS 变量硬编码为 black / white，不受本文件其它地方 var(--text-color) 等主题变量影响，
+   * 导致深色背景下图标文字仍是黑色、几乎不可见（B 加粗等激活态用固定的蓝色高亮，所以是唯一清晰可见的项）。
+   */
+  .ce-inline-toolbar,
+  .ce-popover {
+    --color-background: var(--card-bg-color, #1e293b);
+    --color-text-primary: var(--text-color, #e5e7eb);
+    --color-text-secondary: var(--text-muted, #94a3b8);
+    --color-border: var(--border-color, #334155);
+    --color-border-icon: var(--border-color, #334155);
+    --color-background-item-hover: var(--bg-tertiary, #1a2332);
+    --color-background-item-focus: rgba(102, 126, 234, 0.18);
+    --color-shadow-item-focus: rgba(102, 126, 234, 0.15);
+    --color-shadow: rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Element UI loading mask - 针对笔记列表区域 */
+.theme-dark .note-list-wrapper {
+  .el-loading-mask {
+    background-color: rgba(30, 30, 30, 0.95);
+  }
+  .el-loading-spinner .path {
+    stroke: #667eea;
+  }
+  .el-loading-spinner .el-loading-text {
+    color: var(--text-secondary);
+  }
+}
+
+/* Light mode loading mask - 使用与卡片背景一致的颜色 */
+.note-list-wrapper .el-loading-mask {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+/* =============================================
+   Markdown Block 样式
+   ============================================= */
+.cdx-markdown-block {
+  border-radius: 8px;
+  background: var(--bg-secondary, #f8f9fa);
+  border: 1px solid var(--border-color, #e8e8e8);
+  overflow: hidden;
+
+  /* 工具栏 */
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 8px 12px;
+    background: var(--bg-tertiary, #f0f0f0);
+    border-bottom: 1px solid var(--border-color, #e8e8e8);
+  }
+
+  /* 模式切换按钮组 */
+  &__mode-group {
+    display: flex;
+    gap: 2px;
+    background: var(--card-bg-color, #fff);
+    border-radius: 6px;
+    padding: 2px;
+    border: 1px solid var(--border-color, #e8e8e8);
+  }
+
+  &__mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-muted, #999);
+    cursor: pointer;
+    transition: all 0.2s;
+
+    .mode-icon { font-size: 14px; }
+    .mode-label {
+      display: none;
+      @media (min-width: 768px) { display: inline; }
+    }
+
+    &:hover {
+      color: var(--text-color, #333);
+      background: var(--bg-secondary, #f5f5f5);
+    }
+
+    &--active {
+      background: #667eea;
+      color: #fff;
+      &:hover { background: #5a6fd6; color: #fff; }
+    }
+  }
+
+  /* 内容区域 */
+  &__content {
+    display: flex;
+    min-height: 120px;
+
+    /* 编辑模式 */
+    &--edit {
+      .cdx-markdown-block__preview-pane { display: none; }
+      .cdx-markdown-block__editor-pane { flex: 1; }
+    }
+
+    /* 预览模式 */
+    &--preview {
+      .cdx-markdown-block__editor-pane { display: none; }
+      .cdx-markdown-block__preview-pane { flex: 1; }
+    }
+
+    /* 分栏模式 */
+    &--split {
+      .cdx-markdown-block__editor-pane,
+      .cdx-markdown-block__preview-pane { flex: 1; min-width: 0; }
+      .cdx-markdown-block__editor-pane { border-right: 1px solid var(--border-color, #e8e8e8); }
+
+      @media (max-width: 768px) {
+        flex-direction: column;
+        .cdx-markdown-block__editor-pane { border-right: none; border-bottom: 1px solid var(--border-color, #e8e8e8); }
+      }
+    }
+  }
+
+  /* 编辑区 */
+  &__editor-pane { display: flex; flex-direction: column; }
+
+  &__textarea {
+    width: 100%;
+    min-height: 120px;
+    height: auto;
+    padding: 16px 20px;
+    border: none;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-color, #333);
+    background: var(--card-bg-color, #fff);
+
+    &::placeholder { color: var(--text-placeholder, #ccc); }
+  }
+
+  /* 预览区 */
+  &__preview-pane { display: flex; flex-direction: column; }
+
+  &__preview {
+    flex: 1;
+    padding: 16px 20px;
+    overflow-y: auto;
+    color: var(--text-color, #333);
+    background: var(--card-bg-color, #fff);
+
+    /* Markdown 渲染样式 */
+    h1, h2, h3, h4, h5, h6 {
+      margin: 1em 0 0.5em;
+      font-weight: 600;
+      line-height: 1.4;
+      color: var(--text-color, #333);
+    }
+    h1 { font-size: 1.8em; }
+    h2 { font-size: 1.5em; }
+    h3 { font-size: 1.25em; }
+    h4 { font-size: 1.1em; }
+
+    p { margin: 0.8em 0; line-height: 1.8; }
+
+    ul, ol { padding-left: 24px; margin: 0.8em 0; }
+    li { margin: 0.3em 0; line-height: 1.6; }
+
+    blockquote {
+      border-left: 4px solid #667eea;
+      padding: 12px 20px;
+      margin: 1em 0;
+      background: var(--bg-secondary, #f8f9fa);
+      border-radius: 0 4px 4px 0;
+      color: var(--text-secondary, #555);
+    }
+
+    code.md-inline-code {
+      background: var(--bg-secondary, #f5f5f5);
+      color: #e83e8c;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+      font-size: 0.9em;
+    }
+
+    pre.md-code-block {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 16px 20px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      overflow-x: auto;
+      margin: 1em 0;
+
+      code {
+        background: none;
+        color: inherit;
+        padding: 0;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+    }
+
+    a { color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+
+    img.md-image {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+      margin: 1em 0;
+    }
+
+    hr.md-hr {
+      border: none;
+      border-top: 2px solid var(--border-color, #e8e8e8);
+      margin: 1.5em 0;
+    }
+
+    table.md-table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1em 0;
+      font-size: 0.9em;
+      th, td {
+        border: 1px solid var(--border-color, #dcdfe6);
+        padding: 8px 12px;
+        text-align: left;
+        vertical-align: top;
+      }
+      thead th {
+        background: var(--bg-secondary, #f5f7fa);
+        font-weight: 600;
+        color: var(--text-primary, #303133);
+      }
+      tbody tr:nth-child(even) { background: var(--bg-secondary, #fafafa); }
+    }
+
+    /* Mermaid 图表块 */
+    .mermaid-block {
+      text-align: center;
+      margin: 1em 0;
+      padding: 16px;
+      background: #fafafa;
+      border-radius: 8px;
+      border: 1px solid #ebeef5;
+      svg { max-width: 100%; height: auto; }
+    }
+  }
+
+  &__empty { color: var(--text-muted, #999); font-style: italic; }
+
+  /* 只读模式 */
+  &--readonly {
+    border: none;
+    background: transparent;
+    .cdx-markdown-block__preview { padding: 0; background: transparent; }
+  }
+}
+
+/* 深色模式 Markdown Block */
+.theme-dark .cdx-markdown-block {
+  &__textarea {
+    background: var(--input-bg, #1e293b);
+    color: var(--text-color, #e5e7eb);
+  }
+
+  &__preview {
+    background: var(--card-bg-color, #1e293b);
+    code.md-inline-code { color: #f472b6; background: var(--bg-tertiary, #1a2332); }
+    .mermaid-block { background: #1a1a2e; border-color: #404040; }
+    table.md-table {
+      th, td { border-color: var(--border-color, #404040); }
+      thead th { background: var(--bg-tertiary, #1a2332); color: var(--text-primary, #e5e7eb); }
+      tbody tr:nth-child(even) { background: var(--bg-tertiary, #1a2332); }
+    }
+  }
+}

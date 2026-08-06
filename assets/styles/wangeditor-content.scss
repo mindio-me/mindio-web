@@ -1,0 +1,114 @@
+/* 复现 WangEditor .w-e-text 内的内容样式，用于 v-html 浏览模式 */
+/* 提取自 wangeditor 4.7.x dist/wangEditor.js */
+.wangeditor-content {
+  padding: 0 10px;
+  color: var(--text-color, #333);
+
+  p, h1, h2, h3, h4, h5, table, pre {
+    margin: 10px 0;
+    line-height: 1.5;
+  }
+  h1 { font-size: 32px; }
+  h2 { font-size: 24px; }
+  h3 { font-size: 18.72px; }
+  h4 { font-size: 16px; }
+  h5 { font-size: 13.28px; }
+  p { font-size: 16px; }
+
+  ul, ol { margin: 10px 0 10px 20px; }
+
+  blockquote {
+    display: block;
+    border-left: 8px solid #d0e5f2;
+    padding: 5px 10px;
+    margin: 10px 0;
+    line-height: 1.4;
+    font-size: 100%;
+    background-color: #f1f1f1;
+  }
+
+  code {
+    display: inline-block;
+    background-color: #f1f1f1;
+    border-radius: 3px;
+    padding: 3px 5px;
+    margin: 0 3px;
+  }
+  pre code { display: block; }
+
+  table {
+    border-top: 1px solid #ccc;
+    border-left: 1px solid #ccc;
+  }
+  table td, table th {
+    border-bottom: 1px solid #ccc;
+    border-right: 1px solid #ccc;
+    padding: 3px 5px;
+    min-height: 30px;
+  }
+  table th {
+    border-bottom: 2px solid #ccc;
+    text-align: center;
+    background-color: #f1f1f1;
+  }
+
+  img { max-width: 100%; height: auto; }
+}
+
+/* 暗色模式适配 */
+.theme-dark .wangeditor-content {
+  color: var(--text-color, #e5e7eb);
+
+  /* 覆盖 WangEditor HTML 中可能存在的内联白色/浅色背景和深色文字 */
+  [style*="background-color"] {
+    background-color: transparent !important;
+  }
+  [style*="color"] {
+    color: inherit !important;
+  }
+
+  blockquote {
+    border-left-color: #4a6fa5;
+    background-color: var(--bg-tertiary, #1a2332);
+    color: var(--text-secondary, #cbd5e1);
+  }
+
+  code {
+    background-color: var(--bg-tertiary, #1a2332);
+    color: var(--text-color, #e5e7eb);
+  }
+
+  table {
+    border-color: var(--border-color, #334155);
+  }
+  table td, table th {
+    border-color: var(--border-color, #334155);
+    color: var(--text-color, #e5e7eb);
+  }
+  table th {
+    background-color: var(--bg-tertiary, #1a2332);
+  }
+
+  hr {
+    border-top-color: var(--border-color, #334155);
+  }
+}
+
+/* 暗色模式下 WangEditor 编辑区样式覆盖（编辑模式） */
+.theme-dark .w-e-text {
+  blockquote {
+    background-color: var(--bg-tertiary, #1a2332) !important;
+    border-left-color: #4a6fa5;
+    color: var(--text-secondary, #cbd5e1);
+  }
+  code {
+    background-color: var(--bg-tertiary, #1a2332) !important;
+    color: var(--text-color, #e5e7eb);
+  }
+  table th {
+    background-color: var(--bg-tertiary, #1a2332) !important;
+  }
+  table, table td, table th {
+    border-color: var(--border-color, #334155) !important;
+  }
+}

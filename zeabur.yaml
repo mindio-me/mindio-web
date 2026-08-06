@@ -1,0 +1,113 @@
+apiVersion: zeabur.com/v1
+kind: Template
+metadata:
+  name: MindIO
+spec:
+  description: "MindIO is a personal workspace for turning input into output. Self-hostable notes, local resources, AI analysis, and publishing."
+  icon: "https://raw.githubusercontent.com/mindio-me/mindio-web/master/static/favicon.png"
+  tags:
+    - productivity
+    - notes
+    - ai
+  variables:
+    - key: DB_PASSWORD
+      type: STRING
+      name: Database Password
+      description: "Password for the MySQL database (choose a strong password)"
+    - key: DB_ROOT_PASSWORD
+      type: STRING
+      name: Database Root Password
+      description: "Root password for MySQL"
+    - key: JWT_SECRET
+      type: STRING
+      name: JWT Secret
+      description: "A long random string for signing JWT tokens (at least 32 characters)"
+  services:
+    - name: db
+      icon: "https://raw.githubusercontent.com/zeabur/service-icons/main/marketplace/mysql.svg"
+      template: PREBUILT
+      spec:
+        source:
+          image: mysql:5.7
+        ports:
+          - id: database
+            port: 3306
+            type: TCP
+        volumes:
+          - id: data
+            dir: /var/lib/mysql
+        env:
+          MYSQL_DATABASE:
+            default: mindio_app
+            expose: true
+          MYSQL_USER:
+            default: mindio
+            expose: true
+          MYSQL_PASSWORD:
+            default: ${DB_PASSWORD}
+            expose: true
+          MYSQL_ROOT_PASSWORD:
+            default: ${DB_ROOT_PASSWORD}
+          MYSQL_HOST:
+            default: ${CONTAINER_HOSTNAME}
+            expose: true
+          MYSQL_PORT:
+            default: "3306"
+            expose: true
+        command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+    - name: server
+      template: GIT
+      spec:
+        source:
+          source: GITHUB
+          repo: 1247446367
+          branch: master
+          dockerfile: |
+            FROM eclipse-temurin:17-jre-alpine
+            WORKDIR /app
+            ARG SERVER_VERSION=1.0.0
+            RUN apk add --no-cache wget && \
+                wget -O mindio-server.jar \
+                "https://github.com/mindio-me/mindio-web/releases/download/v${SERVER_VERSION}/mindio-server-${SERVER_VERSION}.jar"
+            EXPOSE 8080
+            ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+            CMD ["sh", "-c", "java $JAVA_OPTS -jar mindio-server.jar --spring.profiles.active=prod"]
+        ports:
+          - id: web
+            port: 8080
+            type: HTTP
+        volumes:
+          - id: uploads
+            dir: /app/uploads
+        env:
+          SPRING_DATASOURCE_URL:
+            default: "jdbc:mysql://db:3306/mindio_app?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true"
+          DB_USERNAME:
+            default: mindio
+          DB_PASSWORD:
+            default: ${DB_PASSWORD}
+          JWT_SECRET:
+            default: ${JWT_SECRET}
+          WORKNOTES_UPLOAD_PATH:
+            default: /app/uploads
+          WORKNOTES_UPLOAD_URL_PREFIX:
+            default: ${ZEABUR_WEB_DOMAIN}/api
+          WORKNOTES_FRONTEND_BASE_URL:
+            default: ${ZEABUR_WEB_DOMAIN}
+        dependencies:
+          - db
+
+    - name: web
+      template: GIT
+      spec:
+        source:
+          source: GITHUB
+          repo: 1247446367
+          branch: master
+        ports:
+          - id: web
+            port: 80
+            type: HTTP
+        dependencies:
+          - server

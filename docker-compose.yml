@@ -1,0 +1,48 @@
+services:
+  db:
+    image: mysql:5.7
+    restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: mindio_app
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    volumes:
+      - uploads_data:/app/uploads
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/mindio_app?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      WORKNOTES_UPLOAD_PATH: /app/uploads
+      WORKNOTES_UPLOAD_URL_PREFIX: ${SITE_URL}/api
+      WORKNOTES_FRONTEND_BASE_URL: ${SITE_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - server
+
+volumes:
+  db_data:
+  uploads_data:
