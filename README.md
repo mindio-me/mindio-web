@@ -67,3 +67,8 @@ The backend server is built with Java / Spring Boot.
 ## License
 
 Licensed under the [GNU AGPL v3.0](LICENSE).
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. Pull
+requests require agreeing to our [Contributor License Agreement](CLA.md).
