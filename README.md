@@ -72,3 +72,4 @@ Licensed under the [GNU AGPL v3.0](LICENSE).
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. Pull
 requests require agreeing to our [Contributor License Agreement](CLA.md).
+<!-- cla verification, will be closed -->
