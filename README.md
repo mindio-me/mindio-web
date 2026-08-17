@@ -2,6 +2,8 @@
 
 > Your personal workspace for turning input into output.
 
+This is the frontend (Nuxt.js). The API it talks to lives in a separate repo: [mindio-server](https://github.com/mindio-me/mindio-server).
+
 MindIO is a self-hostable personal workspace that combines note-taking, local resources, AI analysis, and multi-platform publishing into one system.
 
 ```text
@@ -62,7 +64,7 @@ For containerized or one-click deployments, Docker builds the frontend with
 
 ## Backend
 
-The backend server is built with Java / Spring Boot.
+This repo is the frontend only. The API is a separate Spring Boot service — see [mindio-server](https://github.com/mindio-me/mindio-server) for the backend source, database setup, and API docs. Run both together for a full local stack.
 
 ## License
 
