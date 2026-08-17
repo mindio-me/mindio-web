@@ -1,6 +1,6 @@
 # MindIO Backend API
 
-Spring Boot backend for MindIO, a personal workspace for turning input into output.
+Spring Boot backend for MindIO, a personal workspace for turning input into output. This is the API-only backend; the web UI lives in a separate repo: [mindio-web](https://github.com/mindio-me/mindio-web).
 
 ## Tech Stack
 
@@ -36,6 +36,14 @@ jdbc:mysql://localhost:3306/mindio_app
 ```
 
 Override it with `SPRING_DATASOURCE_URL`, `DB_USERNAME`, and `DB_PASSWORD` when needed. The older `worknotes` database name is reserved for the personal branch/database.
+
+## Desktop App
+
+MindIO is also available as a desktop app. No server to deploy or configure — it runs directly on your own computer, and your notes and data stay on your local machine.
+
+## Frontend
+
+This is an API-only backend with no bundled UI. The web frontend is a separate Nuxt.js app — see [mindio-web](https://github.com/mindio-me/mindio-web) for the frontend source, self-hosting instructions, and one-click deploy.
 
 ## Naming
 
