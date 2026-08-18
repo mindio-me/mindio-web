@@ -106,7 +106,7 @@ export default {
   name: 'NoteNewPage',
   async asyncData({ $axios }) {
     try {
-      const { data } = await $axios.get('/v1/tags')
+      const { data } = await $axios.get('/v1/tags?scope=note')
       return {
         tags: data || []
       }

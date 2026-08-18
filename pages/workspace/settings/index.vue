@@ -6,8 +6,8 @@
   <div class="settings-page">
     <div class="settings-container">
       <div class="settings-header">
-        <h1 class="settings-title">设置</h1>
-        <p class="settings-subtitle">站点与集成配置</p>
+        <h1 class="settings-title">{{ $t('workspace.settings.title') }}</h1>
+        <p class="settings-subtitle">{{ $t('workspace.settings.subtitle') }}</p>
       </div>
 
       <el-row :gutter="24">
@@ -15,7 +15,7 @@
           <!-- 网站信息 -->
           <el-card class="settings-card" shadow="never">
             <div slot="header" class="card-header">
-              <span>网站信息</span>
+              <span>{{ $t('workspace.settings.siteInfoTitle') }}</span>
             </div>
             <el-form
               ref="siteFormRef"
@@ -23,10 +23,10 @@
               label-position="top"
               v-loading="siteLoading"
             >
-              <el-form-item label="网站名称">
+              <el-form-item :label="$t('workspace.settings.fieldSiteName')">
                 <el-input
                   v-model="siteForm.siteName"
-                  placeholder="例如：MindIO"
+                  :placeholder="$t('workspace.settings.siteNamePlaceholder')"
                   maxlength="100"
                 />
               </el-form-item>
@@ -39,7 +39,7 @@
               </el-form-item>
               <div class="form-actions">
                 <el-button type="primary" :loading="siteSaving" @click="saveSiteConfig">
-                  <i class="el-icon-check"></i> 保存网站信息
+                  <i class="el-icon-check"></i> {{ $t('workspace.settings.saveSiteInfo') }}
                 </el-button>
               </div>
             </el-form>
@@ -50,14 +50,14 @@
           <!-- 集成配置：飞书 -->
           <el-card class="settings-card" shadow="never">
             <div slot="header" class="card-header">
-              <span>飞书集成</span>
+              <span>{{ $t('workspace.settings.feishuTitle') }}</span>
               <el-tag
                 v-if="feishuStatus.bound"
                 size="mini"
                 type="success"
                 effect="plain"
               >
-                已绑定
+                {{ $t('workspace.settings.feishuBound') }}
               </el-tag>
               <el-tag
                 v-else-if="feishuStatus.configured"
@@ -65,26 +65,26 @@
                 type="warning"
                 effect="plain"
               >
-                已配置，未绑定账号
+                {{ $t('workspace.settings.feishuConfiguredNotBound') }}
               </el-tag>
             </div>
             <p class="section-tip">
-              配置后可在工作台中导入飞书 Wiki 文档。App Secret 将加密存储在服务端数据库中。
+              {{ $t('workspace.settings.feishuIntro') }}
             </p>
             <el-form :model="feishuForm" label-position="top" v-loading="feishuLoading">
               <el-form-item label="App ID">
-                <el-input v-model="feishuForm.appId" placeholder="请输入 App ID" maxlength="200" />
+                <el-input v-model="feishuForm.appId" :placeholder="$t('workspace.settings.feishuAppIdPlaceholder')" maxlength="200" />
                 <div
                   v-if="feishuStatus.configured && feishuStatus.appIdMasked"
                   class="hint-text"
                 >
-                  已保存：{{ feishuStatus.appIdMasked }}
+                  {{ $t('workspace.settings.savedPrefix') }}{{ feishuStatus.appIdMasked }}
                 </div>
               </el-form-item>
               <el-form-item label="App Secret">
                 <el-input
                   v-model="feishuForm.appSecret"
-                  placeholder="请输入 App Secret（更新时需要填写）"
+                  :placeholder="$t('workspace.settings.feishuAppSecretPlaceholder')"
                   show-password
                 />
               </el-form-item>
@@ -95,7 +95,7 @@
                   :loading="feishuSaving"
                   @click="saveFeishuConfig"
                 >
-                  <i class="el-icon-check"></i> 保存飞书配置
+                  <i class="el-icon-check"></i> {{ $t('workspace.settings.saveFeishuConfigBtn') }}
                 </el-button>
               </div>
             </el-form>
@@ -106,39 +106,38 @@
           <!-- 集成配置：微信聊天导入 -->
           <el-card v-if="wechatBindingStatus.configured" class="settings-card" shadow="never">
             <div slot="header" class="card-header">
-              <span>微信聊天导入</span>
+              <span>{{ $t('workspace.settings.wechatImportTitle') }}</span>
             </div>
             <p class="section-tip">
-              绑定后，在微信里给接收服务号发链接/文字/图片，会自动保存为剪藏。
+              {{ $t('workspace.settings.wechatImportIntro') }}
             </p>
             <div v-loading="wechatBindingLoading">
               <div v-if="wechatBindCode" class="wechat-bind-code-box">
                 <div class="wechat-bind-code">{{ wechatBindCode }}</div>
                 <p class="section-tip">
-                  关注接收服务号后，把这个 6 位码作为一条消息发过去即可完成绑定
-                  （{{ wechatBindCodeCountdown }} 秒后失效）。
+                  {{ $t('workspace.settings.wechatBindCodeHint', { n: wechatBindCodeCountdown }) }}
                 </p>
               </div>
               <div v-else class="form-actions">
                 <el-button size="small" type="primary" @click="generateWechatBindCode">
-                  <i class="el-icon-connection"></i> 生成绑定码
+                  <i class="el-icon-connection"></i> {{ $t('workspace.settings.generateBindCode') }}
                 </el-button>
               </div>
 
               <div v-if="wechatBindings.length" class="wechat-binding-list">
                 <div v-for="item in wechatBindings" :key="item.id" class="wechat-binding-item">
-                  <span>绑定于 {{ formatDateTime(item.boundAt) }}</span>
-                  <el-button size="mini" type="text" @click="unbindWechat(item.id)">解除绑定</el-button>
+                  <span>{{ $t('workspace.settings.boundAtPrefix') }}{{ formatDateTime(item.boundAt) }}</span>
+                  <el-button size="mini" type="text" @click="unbindWechat(item.id)">{{ $t('workspace.settings.unbindButton') }}</el-button>
                 </div>
               </div>
             </div>
           </el-card>
           <el-card v-else class="settings-card" shadow="never">
             <div slot="header" class="card-header">
-              <span>微信聊天导入</span>
+              <span>{{ $t('workspace.settings.wechatImportTitle') }}</span>
             </div>
             <el-alert
-              title="管理员尚未配置接收服务号（WECHAT_INBOUND_APP_ID 等环境变量），此功能暂不可用。"
+              :title="$t('workspace.settings.wechatNotConfigured')"
               type="info"
               :closable="false"
               show-icon
@@ -150,49 +149,49 @@
           <!-- 集成配置：阿里云 OSS -->
           <el-card class="settings-card" shadow="never">
             <div slot="header" class="card-header">
-              <span>阿里云 OSS</span>
+              <span>{{ $t('workspace.settings.ossTitle') }}</span>
             </div>
             <p class="section-tip">
-              配置 OSS 后，可将附件或图片存储到阿里云对象存储（目前仅提供前端表单，占位待后端接口接入）。
+              {{ $t('workspace.settings.ossIntro') }}
             </p>
             <el-form :model="ossForm" label-position="top">
               <el-form-item label="AccessKey ID">
                 <el-input
                   v-model="ossForm.accessKeyId"
-                  placeholder="阿里云账号的 AccessKey ID"
+                  :placeholder="$t('workspace.settings.ossAccessKeyIdPlaceholder')"
                 />
               </el-form-item>
               <el-form-item label="AccessKey Secret">
                 <el-input
                   v-model="ossForm.accessKeySecret"
                   type="password"
-                  placeholder="阿里云账号的 AccessKey Secret"
+                  :placeholder="$t('workspace.settings.ossAccessKeySecretPlaceholder')"
                   show-password
                 />
               </el-form-item>
-              <el-form-item label="Bucket 名称">
+              <el-form-item :label="$t('workspace.settings.fieldBucketName')">
                 <el-input
                   v-model="ossForm.bucket"
-                  placeholder="例如：worknotes-bucket"
+                  :placeholder="$t('workspace.settings.bucketPlaceholder')"
                 />
               </el-form-item>
               <el-form-item label="Endpoint">
                 <el-input
                   v-model="ossForm.endpoint"
-                  placeholder="例如：oss-cn-beijing.aliyuncs.com"
+                  :placeholder="$t('workspace.settings.endpointPlaceholder')"
                 />
               </el-form-item>
-              <el-form-item label="公共访问前缀（可选）">
+              <el-form-item :label="$t('workspace.settings.fieldBaseUrl')">
                 <el-input
                   v-model="ossForm.baseUrl"
-                  placeholder="例如：https://worknotes-bucket.oss-cn-beijing.aliyuncs.com"
+                  :placeholder="$t('workspace.settings.baseUrlPlaceholder')"
                 />
               </el-form-item>
               <div class="form-actions">
                 <el-button type="primary" @click="saveOssConfig">
-                  <i class="el-icon-check"></i> 保存 OSS 配置
+                  <i class="el-icon-check"></i> {{ $t('workspace.settings.saveOssConfigBtn') }}
                 </el-button>
-                <span class="form-actions-tip">当前仅保存到前端状态，待后端接口接入后再联动保存。</span>
+                <span class="form-actions-tip">{{ $t('workspace.settings.ossSaveNote') }}</span>
               </div>
             </el-form>
           </el-card>
@@ -202,13 +201,13 @@
           <!-- 预留：大模型 / Notion 等集成 -->
           <el-card class="settings-card" shadow="never">
             <div slot="header" class="card-header">
-              <span>其他集成（预留）</span>
+              <span>{{ $t('workspace.settings.otherIntegrationsTitle') }}</span>
             </div>
             <p class="section-tip">
-              将来可在此配置大模型 API Key、Notion 集成等高级功能。
+              {{ $t('workspace.settings.otherIntegrationsIntro') }}
             </p>
             <el-alert
-              title="目前尚未接入这些集成，后续版本会在此处开放配置入口。"
+              :title="$t('workspace.settings.otherIntegrationsNotice')"
               type="info"
               :closable="false"
               show-icon
@@ -268,7 +267,7 @@ export default {
   },
   methods: {
     formatDateTime(value) {
-      if (!value) return '暂无'
+      if (!value) return this.$t('workspace.settings.noneYet')
       const date = new Date(value)
       if (Number.isNaN(date.getTime())) return value
       return date.toLocaleString()
@@ -283,7 +282,7 @@ export default {
         }
       } catch (error) {
         // 网站信息失败也不阻塞页面
-        this.$message.error('加载网站信息失败')
+        this.$message.error(this.$t('workspace.settings.loadSiteInfoFailed'))
       } finally {
         this.siteLoading = false
       }
@@ -296,9 +295,9 @@ export default {
           logoUrl: this.siteForm.logoUrl || ''
         }
         await this.$axios.$put('/v1/settings/site', payload)
-        this.$message.success('网站信息已保存')
+        this.$message.success(this.$t('workspace.settings.siteInfoSaved'))
       } catch (error) {
-        this.$message.error('保存网站信息失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.settings.saveSiteInfoFailed', { message: error.response?.data?.message || error.message }))
       } finally {
         this.siteSaving = false
       }
@@ -316,24 +315,24 @@ export default {
     },
     async saveFeishuConfig() {
       if (!this.feishuForm.appId || !this.feishuForm.appSecret) {
-        this.$message.warning('请填写 App ID 和 App Secret')
+        this.$message.warning(this.$t('workspace.settings.feishuFieldsRequired'))
         return
       }
       this.feishuSaving = true
       try {
         await this.$axios.$post('/v1/settings/integrations/feishu/credentials', { ...this.feishuForm })
-        this.$message.success('飞书配置已保存')
+        this.$message.success(this.$t('workspace.settings.feishuConfigSaved'))
         this.feishuForm.appSecret = ''
         await this.loadFeishuStatus()
       } catch (error) {
-        this.$message.error('保存飞书配置失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.settings.saveFeishuConfigFailed', { message: error.response?.data?.message || error.message }))
       } finally {
         this.feishuSaving = false
       }
     },
     saveOssConfig() {
       // 目前仅作占位，后续接入后端接口再实现实际保存逻辑
-      this.$message.info('OSS 配置目前仅作占位，后端接口接入后将支持实际保存。')
+      this.$message.info(this.$t('workspace.settings.ossConfigPlaceholderNotice'))
     },
     async loadWechatBindingStatus() {
       try {
@@ -360,7 +359,7 @@ export default {
         this.wechatBindCodeCountdown = result.expiresInSeconds
         this.startWechatBindCodeCountdown()
       } catch (error) {
-        this.$message.error('生成绑定码失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.settings.generateBindCodeFailed', { message: error.response?.data?.message || error.message }))
       } finally {
         this.wechatBindingLoading = false
       }
@@ -379,10 +378,10 @@ export default {
     async unbindWechat(id) {
       try {
         await this.$wechatBindingService.unbind(id)
-        this.$message.success('已解除绑定')
+        this.$message.success(this.$t('workspace.settings.unbindSuccess'))
         await this.loadWechatBindings()
       } catch (error) {
-        this.$message.error('解除绑定失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.settings.unbindFailed', { message: error.response?.data?.message || error.message }))
       }
     }
   }
@@ -400,7 +399,7 @@ export default {
   margin: 0 auto;
   background: var(--card-bg-color);
   border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 32px;
 }
 
@@ -427,7 +426,7 @@ export default {
   margin-bottom: 20px;
   background: var(--bg-secondary);
   border-radius: 8px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
 }
 
 .card-header {
@@ -508,5 +507,3 @@ export default {
   }
 }
 </style>
-
-

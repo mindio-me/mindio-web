@@ -8,11 +8,17 @@ import ApiService from './api'
 class ClipService extends ApiService {
   // ---- 素材 CRUD ----
 
-  getClips({ keyword, sourceType, page = 0, size = 20 } = {}) {
+  getClips({ keyword, sourceType, tagIds, untagged, page = 0, size = 20 } = {}) {
     const params = new URLSearchParams({ page, size })
     if (keyword) params.append('keyword', keyword)
     if (sourceType) params.append('sourceType', sourceType)
+    if (tagIds) tagIds.forEach(id => params.append('tagIds', id))
+    if (untagged) params.append('untagged', 'true')
     return this.get(`/v1/clips?${params}`)
+  }
+
+  getRecentClips(limit = 5) {
+    return this.get(`/v1/clips/recent?limit=${limit}`)
   }
 
   async getClipById(id) {
@@ -31,6 +37,19 @@ class ClipService extends ApiService {
 
   updateClipTitle(id, title) {
     return this.patch(`/v1/clips/${id}/title`, { title })
+  }
+
+  getTags(scope) {
+    const query = scope ? `?scope=${scope}` : ''
+    return this.get(`/v1/tags${query}`)
+  }
+
+  addClipTag(clipId, tagId) {
+    return this.post(`/v1/clips/${clipId}/tags/${tagId}`)
+  }
+
+  removeClipTag(clipId, tagId) {
+    return this.delete(`/v1/clips/${clipId}/tags/${tagId}`)
   }
 
   deleteClip(id) {

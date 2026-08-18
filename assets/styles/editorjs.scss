@@ -25,10 +25,19 @@
     font-size: 14px !important; line-height: 1.6 !important;
     border-radius: 8px !important; border: 1px solid rgba(255, 255, 255, 0.15) !important;
     padding: 16px 20px !important; min-height: 60px;
+    // 高度由 JS 按 scrollHeight 自适应撑开，这里禁掉纵向滚动条，避免残留缝隙
+    overflow-y: hidden;
   }
   .ce-code__textarea::selection {
     background: #bcd7ff !important;
     color: #0f172a !important;
+  }
+  // 代码块「自动换行」开启后（cdx-code--wrap，见 editorjsCodeWrapTune.js）：
+  // 覆盖 @editorjs/code 自带的 white-space: pre + overflow-x: auto，改为换行显示
+  .cdx-code--wrap .ce-code__textarea {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: hidden;
   }
 
   .ce-delimiter {

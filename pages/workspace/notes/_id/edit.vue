@@ -159,7 +159,7 @@ export default {
     try {
       const [noteRes, tagsRes, projectsRes] = await Promise.all([
         $axios.get(`/v1/notes/${params.id}`),
-        $axios.get('/v1/tags'),
+        $axios.get('/v1/tags?scope=note'),
         $axios.get('/v1/projects/my')
       ])
 
@@ -405,8 +405,7 @@ export default {
 // 左侧栏
 .editor-sidebar {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 24px;
   height: fit-content;
   position: sticky;
@@ -444,8 +443,7 @@ export default {
 // 右侧栏
 .editor-main {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 24px;
   display: flex;
   flex-direction: column;

@@ -276,12 +276,14 @@
                       </button>
                     </el-tooltip>
                   </div>
-                  <div
-                    class="document-icon-shell"
-                    :style="{ color: fileColor(doc.fileType), '--file-color': fileColor(doc.fileType) }"
-                  >
-                    <i :class="fileIcon(doc.fileType)"></i>
-                    <span class="document-extension">{{ doc.fileType.toUpperCase() }}</span>
+                  <div class="document-icon" :style="{ '--file-color': fileColor(doc.fileType) }">
+                    <svg class="document-icon-svg" viewBox="0 0 64 80" aria-hidden="true">
+                      <path class="page-body" d="M6 4 H42 L58 20 V76 H6 Z" />
+                      <path class="page-fold" d="M42 4 L58 20 H42 Z" />
+                      <line class="page-line" x1="14" y1="34" x2="48" y2="34" />
+                      <line class="page-line" x1="14" y1="42" x2="42" y2="42" />
+                    </svg>
+                    <span class="document-icon-ribbon">{{ doc.fileType.toUpperCase() }}</span>
                   </div>
                   <div class="document-card-name">{{ doc.fileName }}</div>
                   <div v-if="isAllSelected" class="document-card-directory">{{ doc.directoryName }}</div>
@@ -502,7 +504,9 @@ export default {
         if (!groupMap.has(key)) {
           const group = {
             key,
-            label: validDate ? `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}` : this.$t('workspace.localDocs.unknownTime'),
+            label: validDate
+              ? date.toLocaleDateString(this.$i18n.locale === 'zh-CN' ? 'zh-CN' : 'en-US', { year: 'numeric', month: 'long' })
+              : this.$t('workspace.localDocs.unknownTime'),
             documents: [],
           }
           groupMap.set(key, group)
@@ -960,8 +964,7 @@ export default {
 // 左侧栏
 .workspace-sidebar {
   background: var(--card-bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  // border: 1px solid var(--border-color);
   padding: 12px;
   overflow-y: auto;
   display: flex;
@@ -1103,7 +1106,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-radius: 8px;
+  // border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
 
@@ -1198,8 +1201,7 @@ export default {
 // 主内容区
 .workspace-main {
   background: var(--card-bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  // border: 1px solid var(--border-color);
   padding: 16px 20px;
   overflow-y: auto;
   display: flex;
@@ -1430,45 +1432,56 @@ export default {
   &:hover { color: #667eea; }
 }
 
-.document-icon-shell {
+.document-icon {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 10px;
-  border-radius: 16px;
-  background: var(--file-color);
+  width: 64px;
+  height: 78px;
+  margin: 0 auto 10px;
+}
 
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 1px;
-    border-radius: 15px;
-    background: var(--card-bg-color);
-    opacity: 0.9;
+.document-icon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.12));
+
+  .page-body {
+    fill: var(--card-bg-color);
+    stroke: var(--file-color);
+    stroke-width: 2.5;
+    stroke-linejoin: round;
   }
 
-  > i {
-    position: relative;
-    z-index: 1;
-    font-size: 38px;
+  .page-fold {
+    fill: var(--file-color);
+    opacity: 0.28;
+  }
+
+  .page-line {
+    stroke: var(--file-color);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    opacity: 0.35;
   }
 }
 
-.document-extension {
+.document-icon-ribbon {
   position: absolute;
-  right: -4px;
-  bottom: 7px;
-  z-index: 1;
-  padding: 2px 4px;
-  border-radius: 4px;
+  left: -2px;
+  right: -2px;
+  bottom: 16px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--file-color);
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 1;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  clip-path: polygon(0% 0%, 100% 0%, 85% 50%, 100% 100%, 0% 100%, 15% 50%);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18);
 }
 
 .document-card-name {
@@ -1612,31 +1625,36 @@ export default {
 
 .browser-card-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   align-content: start;
-  gap: 8px;
+  gap: 2px 4px;
   padding: 10px;
 
   .browser-entry {
     min-width: 0;
-    min-height: 104px;
-    padding: 13px 8px 10px;
-    border: 1px solid var(--border-color);
+    min-height: 118px;
+    padding: 10px 4px 8px;
+    border: 1px solid transparent;
     border-radius: 8px;
     flex-direction: column;
-    justify-content: center;
-    gap: 7px;
+    justify-content: flex-start;
+    gap: 6px;
     text-align: center;
+    background: transparent;
 
     &:hover {
-      border-color: rgba(102, 126, 234, 0.5);
-      background: rgba(102, 126, 234, 0.06);
+      border-color: transparent;
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    &:active {
+      background: rgba(102, 126, 234, 0.18);
     }
   }
 
   .browser-entry-icon {
     color: #e6a23c;
-    font-size: 34px;
+    font-size: 60px;
   }
 
   .browser-entry-name {

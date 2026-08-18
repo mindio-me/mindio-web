@@ -291,8 +291,37 @@
                 <span :key="'crumb-' + i" class="crumb" :class="{ 'crumb-last': i === breadcrumbs.length - 1 }" @click="navigateTo(crumb.path)">{{ crumb.name }}</span>
               </template>
             </div>
+
+            <div class="browser-view-switcher">
+              <el-tooltip content="列表" placement="top">
+                <button
+                  type="button"
+                  class="browser-view-button"
+                  :class="{ active: browserViewMode === 'list' }"
+                  aria-label="目录列表"
+                  @click="setBrowserViewMode('list')"
+                >
+                  <i class="el-icon-s-unfold"></i>
+                </button>
+              </el-tooltip>
+              <el-tooltip content="卡片" placement="top">
+                <button
+                  type="button"
+                  class="browser-view-button"
+                  :class="{ active: browserViewMode === 'grid' }"
+                  aria-label="目录卡片"
+                  @click="setBrowserViewMode('grid')"
+                >
+                  <i class="el-icon-menu"></i>
+                </button>
+              </el-tooltip>
+            </div>
           </div>
-          <div v-loading="browserLoading" class="browser-list">
+          <div
+            v-loading="browserLoading"
+            class="browser-list"
+            :class="{ 'browser-card-grid': browserViewMode === 'grid' }"
+          >
             <div v-for="entry in browserEntries" :key="entry.path" class="browser-entry" @click="navigateTo(entry.path)">
               <i class="el-icon-folder browser-entry-icon"></i>
               <span class="browser-entry-name">{{ entry.name }}</span>
@@ -356,6 +385,7 @@ export default {
       browserLoading: false,
       browserCurrentPath: '',
       browserEntries: [],
+      browserViewMode: 'list',
     }
   },
   computed: {
@@ -431,6 +461,10 @@ export default {
     this.selectAllDirectories()
   },
   mounted() {
+    const savedBrowserView = window.localStorage.getItem('local-media-browser-view-mode')
+    if (savedBrowserView === 'list' || savedBrowserView === 'grid') {
+      this.browserViewMode = savedBrowserView
+    }
     if (process.client && window.matchMedia) {
       const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
       this.prefersReducedMotion = motionQuery.matches
@@ -769,6 +803,12 @@ export default {
 
     closeBrowser() { this.browserVisible = false },
 
+    setBrowserViewMode(mode) {
+      if (mode === this.browserViewMode) return
+      this.browserViewMode = mode
+      window.localStorage.setItem('local-media-browser-view-mode', mode)
+    },
+
     async navigateTo(path) {
       this.browserLoading = true
       try {
@@ -933,8 +973,7 @@ export default {
 
 .workspace-sidebar {
   background: var(--card-bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  // border: 1px solid var(--border-color);
   padding: 12px;
   overflow-y: auto;
   display: flex;
@@ -957,7 +996,7 @@ export default {
   align-items: center;
   justify-content: space-between;
   padding: 8px 10px;
-  border-radius: 8px;
+  // border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
 
@@ -994,8 +1033,7 @@ export default {
 
 .workspace-main {
   background: var(--card-bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
+  // border: 1px solid var(--border-color);
   padding: 16px 20px;
   overflow-y: auto;
   display: flex;
@@ -1180,7 +1218,7 @@ export default {
 
 .detail-panel {
   width: 300px; flex-shrink: 0; background: var(--card-bg-color);
-  border: 1px solid var(--border-color); border-radius: 10px;
+  // border: 1px solid var(--border-color);
   display: flex; flex-direction: column; overflow: hidden;
 }
 
@@ -1251,6 +1289,7 @@ export default {
 .browser-toolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   padding: 8px 12px;
   background: var(--bg-secondary);
@@ -1260,6 +1299,35 @@ export default {
 .browser-breadcrumb {
   display: flex; align-items: center; flex-wrap: wrap; gap: 2px; font-size: 12px; min-width: 0;
 }
+
+.browser-view-switcher {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--card-bg-color);
+}
+
+.browser-view-button {
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+
+  &:hover { color: #667eea; }
+
+  &.active {
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.12);
+  }
+}
 .crumb {
   cursor: pointer; color: #667eea; padding: 1px 3px; border-radius: 3px;
   &:hover { background: rgba(102,126,234,0.1); }
@@ -1268,6 +1336,62 @@ export default {
   &-sep { color: var(--text-muted); user-select: none; }
 }
 .browser-list { height: 42vh; min-height: 300px; max-height: 420px; overflow-y: auto; padding: 4px 0; }
+
+.browser-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  align-content: start;
+  gap: 2px 4px;
+  padding: 10px;
+
+  .browser-entry {
+    min-width: 0;
+    min-height: 118px;
+    padding: 10px 4px 8px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 6px;
+    text-align: center;
+    background: transparent;
+
+    &:hover {
+      border-color: transparent;
+      background: rgba(102, 126, 234, 0.1);
+    }
+
+    &:active {
+      background: rgba(102, 126, 234, 0.18);
+    }
+  }
+
+  .browser-entry-icon {
+    color: #e6a23c;
+    font-size: 60px;
+  }
+
+  .browser-entry-name {
+    display: -webkit-box;
+    flex: none;
+    width: 100%;
+    min-height: 32px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 16px;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .browser-entry-arrow {
+    display: none;
+  }
+
+  .browser-empty {
+    grid-column: 1 / -1;
+  }
+}
+
 .browser-entry {
   display: flex; align-items: center; gap: 8px; padding: 7px 14px;
   cursor: pointer; font-size: 13px; color: var(--text-color); transition: background 0.12s;
@@ -1291,6 +1415,10 @@ export default {
   .browser-list {
     height: 46vh;
     min-height: 240px;
+  }
+
+  .browser-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 </style>

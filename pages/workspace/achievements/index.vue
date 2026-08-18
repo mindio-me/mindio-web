@@ -522,8 +522,7 @@ export default {
 
 .workspace-sidebar {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 12px 12px 8px;
   display: flex;
   flex-direction: column;
@@ -608,7 +607,7 @@ export default {
 
 .note-list-item {
   padding: 8px;
-  border-radius: 8px;
+  // border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s;
   margin-bottom: 4px;
@@ -620,7 +619,7 @@ export default {
   }
   &.active {
     background: rgba(102, 126, 234, 0.12);
-    border: 1px solid #667eea;
+    // border: 1px solid #667eea;
   }
 }
 
@@ -655,8 +654,7 @@ export default {
 
 .workspace-main {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 16px 20px;
   overflow-y: auto;
 }
@@ -869,8 +867,7 @@ export default {
 
 .workspace-right {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 12px 12px 8px;
   overflow-y: auto;
 }

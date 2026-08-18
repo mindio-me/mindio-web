@@ -17,7 +17,7 @@
             class="view-toggle-btn"
             :class="{ active: viewMode === 'list' }"
             @click="switchToListMode"
-            title="列表视图"
+            :title="$t('workspace.notes.listView')"
           >
             <i class="el-icon-menu"></i>
           </button>
@@ -25,7 +25,7 @@
             class="view-toggle-btn"
             :class="{ active: viewMode === 'calendar' }"
             @click="switchToCalendarMode"
-            title="月历视图"
+            :title="$t('workspace.notes.monthView')"
           >
             <i class="el-icon-date"></i>
           </button>
@@ -35,7 +35,7 @@
             <div class="sidebar-search">
               <el-input
                 v-model="searchKeyword"
-                placeholder="搜索笔记标题"
+                :placeholder="$t('workspace.notes.searchTitlePlaceholder')"
                 prefix-icon="el-icon-search"
                 clearable
                 size="small"
@@ -50,8 +50,8 @@
                   {{ $t('workspace.notes.tags') }}
                 </span>
                 <div class="filter-actions">
-                  <el-button type="text" size="mini" @click="selectedTags = []; handleTagFilter()">清除</el-button>
-                  <el-tooltip content="管理标签" placement="top">
+                  <el-button type="text" size="mini" @click="selectedTags = []; handleTagFilter()">{{ $t('workspace.notes.clear') }}</el-button>
+                  <el-tooltip :content="$t('workspace.notes.manageTags')" placement="top">
                     <el-button
                       type="text"
                       size="mini"
@@ -80,7 +80,7 @@
                   <i class="el-icon-arrow-right filter-arrow" :class="{ 'filter-arrow--collapsed': projectsCollapsed }"></i>
                   {{ $t('workspace.notes.projects') }}
                 </span>
-                <el-button type="text" size="mini" @click="selectedProjects = []; handleProjectFilter()">清除</el-button>
+                <el-button type="text" size="mini" @click="selectedProjects = []; handleProjectFilter()">{{ $t('workspace.notes.clear') }}</el-button>
               </div>
               <div v-show="!projectsCollapsed" class="filter-tags">
                 <el-tag
@@ -101,7 +101,7 @@
           <div v-if="viewMode === 'list'" class="sidebar-section sidebar-notes">
             <div class="sidebar-section-header">
               <span class="section-title">{{ $t('workspace.notes.allNotes') }}</span>
-              <span class="section-subtitle">{{ total }} 条</span>
+              <span class="section-subtitle">{{ $t('workspace.notes.countSuffix', { n: total }) }}</span>
             </div>
             <div v-loading="loading" class="note-list-wrapper">
               <div v-if="notes.length > 0" class="note-list">
@@ -113,7 +113,7 @@
                   @click="selectNote(note)"
                 >
                   <div class="note-list-title">
-                    {{ note.title || '未命名笔记' }}
+                    {{ note.title || $t('workspace.notes.untitledNote') }}
                     <span v-if="note.language === 'en'" class="note-lang-badge">EN</span>
                   </div>
                   <div class="note-list-meta">
@@ -123,8 +123,8 @@
                 </div>
               </div>
               <div v-else-if="!loading" class="sidebar-empty">
-                <p>暂无笔记</p>
-                <el-button type="primary" size="mini" @click="showCreateNoteDialog">立即创建</el-button>
+                <p>{{ $t('workspace.notes.noNotes') }}</p>
+                <el-button type="primary" size="mini" @click="showCreateNoteDialog">{{ $t('workspace.notes.createNow') }}</el-button>
               </div>
             </div>
             <div v-if="total > pageSize" class="sidebar-pagination">
@@ -160,21 +160,21 @@
             <div class="month-calendar-left">
               <span class="cal-month-title">{{ formatCalendarMonthTitle(calendarMonth) }}</span>
               <div class="cal-nav-group">
-                <button class="cal-nav-btn" title="上个月" @click="navigateCalendarMonth(-1)">
+                <button class="cal-nav-btn" :title="$t('workspace.notes.prevMonth')" @click="navigateCalendarMonth(-1)">
                   <i class="el-icon-arrow-left"></i>
                 </button>
-                <button class="cal-nav-btn" title="下个月" @click="navigateCalendarMonth(1)">
+                <button class="cal-nav-btn" :title="$t('workspace.notes.nextMonth')" @click="navigateCalendarMonth(1)">
                   <i class="el-icon-arrow-right"></i>
                 </button>
               </div>
             </div>
-            <button class="cal-close-btn" title="关闭" @click="closeMonthCalendar()">
+            <button class="cal-close-btn" :title="$t('workspace.notes.close')" @click="closeMonthCalendar()">
               <i class="el-icon-close"></i>
             </button>
           </div>
           <div class="cal-grid-container">
             <div class="cal-weekdays">
-              <div v-for="wd in ['一','二','三','四','五','六','日']" :key="wd" class="cal-weekday">{{ wd }}</div>
+              <div v-for="wd in $t('workspace.notes.weekdaysShort')" :key="wd" class="cal-weekday">{{ wd }}</div>
             </div>
             <div class="cal-grid">
               <div
@@ -197,7 +197,7 @@
                       class="cal-note-chip"
                       @click="openNoteFromCalendar(note)"
                     >
-                      {{ note.title || '未命名笔记' }}
+                      {{ note.title || $t('workspace.notes.untitledNote') }}
                     </div>
                   </div>
                 </template>
@@ -208,25 +208,33 @@
         <!-- 笔记编辑 -->
           <div v-if="activeNote && !showMonthCalendar" key="note-editor" class="note-main">
             <div v-if="calendarFromMonth" class="calendar-breadcrumb" @click="returnToCalendar()">
-              ← 返回 {{ formatCalendarMonthTitle(calendarFromMonth) }} 
+              ← {{ $t('workspace.notes.backTo') }} {{ formatCalendarMonthTitle(calendarFromMonth) }}
             </div>
-            <div class="note-main-header">
+            <button
+              v-if="isFullscreen"
+              class="fullscreen-exit-float"
+              :title="$t('workspace.notes.exitFullscreen')"
+              @click="isFullscreen = false"
+            >
+              <i class="el-icon-close"></i>
+            </button>
+            <div v-if="!isFullscreen" class="note-main-header">
               <div class="note-main-title-wrapper" :class="{ 'note-main-title-wrapper--editorjs': isEditorjsNote }">
                 <el-input
                   :value="displayTitle"
-                  placeholder="请输入标题"
+                  :placeholder="$t('workspace.notes.titlePlaceholder')"
                   class="note-main-title-input"
                   @input="onTitleInput"
                   @keydown.native="handleTitleNavigationKeydown"
                 />
                 <div v-if="activeNote.feishuSourceUrl" class="note-main-source">
-                  <span>来源：飞书 · </span>
+                  <span>{{ $t('workspace.notes.feishuSource') }}</span>
                   <a
                     :href="activeNote.feishuSourceUrl"
                     target="_blank"
                     rel="noopener"
                     class="note-main-source-link"
-                  >打开源文档</a>
+                  >{{ $t('workspace.notes.openSourceDoc') }}</a>
                 </div>
                 <div class="note-main-meta">
                   <span>{{ $t('workspace.notes.lastUpdated') }}：{{ formatTime(activeNote.modifiedAt || activeNote.createdAt) }}</span>
@@ -241,7 +249,7 @@
                   <span v-if="isEditorjsNote && wechatPublished" class="wechat-published-inline">
                     ·
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="#07c160" style="vertical-align:-2px;margin-right:2px;"><path d="M8.7 10.6c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9zm5.1 0c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9zM12 2C6.48 2 2 6.03 2 11c0 2.7 1.24 5.12 3.2 6.8L4 22l4.83-1.61A10.63 10.63 0 0012 21c5.52 0 10-4.03 10-9S17.52 2 12 2z"/></svg>
-                    已发布
+                    {{ $t('workspace.notes.published') }}
                   </span>
                 </div>
               </div>
@@ -290,14 +298,14 @@
                   {{ $t('workspace.notes.references') }}<span v-if="clipCount > 0"> ({{ clipCount }})</span>
                 </el-button>
                 <el-button v-if="!isEditorjsNote" size="mini" @click="openInEditor">
-                  <i class="el-icon-edit"></i> 在编辑器中打开
+                  <i class="el-icon-edit"></i> {{ $t('workspace.notes.openInEditor') }}
                 </el-button>
                 <el-button v-if="!isFullscreen" size="mini" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
                 <el-button v-if="isFullscreen" size="mini" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
                 <button
                   v-if="!isFullscreen"
                   class="panel-toggle-btn"
-                  :title="rightPanelCollapsed ? '展开侧栏' : '收起侧栏'"
+                  :title="rightPanelCollapsed ? $t('workspace.notes.expandSidebar') : $t('workspace.notes.collapseSidebar')"
                   @click="rightPanelCollapsed = !rightPanelCollapsed"
                 >
                   <i :class="rightPanelCollapsed ? 'el-icon-d-arrow-left' : 'el-icon-d-arrow-right'"></i>
@@ -340,25 +348,25 @@
                 class="calendar-nav-btn"
                 :disabled="selectedDateNoteIndex === 0"
                 @click="handleDateNavigation('prev')"
-                title="上一篇 (Ctrl+←)"
+                :title="$t('workspace.notes.prevNote')"
               >
                 <i class="el-icon-arrow-left"></i>
               </button>
               <span class="calendar-nav-info">
-                {{ selectedDate }} · 第 {{ selectedDateNoteIndex + 1 }} / {{ selectedDateNotes.length }} 篇
+                {{ $t('workspace.notes.noteIndexOf', { date: selectedDate, n: selectedDateNoteIndex + 1, total: selectedDateNotes.length }) }}
               </span>
               <button
                 class="calendar-nav-btn"
                 :disabled="selectedDateNoteIndex === selectedDateNotes.length - 1"
                 @click="handleDateNavigation('next')"
-                title="下一篇 (Ctrl+→)"
+                :title="$t('workspace.notes.nextNote')"
               >
                 <i class="el-icon-arrow-right"></i>
               </button>
-              <span class="calendar-nav-hint">Ctrl+← → 切换</span>
+              <span class="calendar-nav-hint">{{ $t('workspace.notes.switchHint') }}</span>
             </div>
             <!-- EditorJS 类型笔记：可编辑标签选择器 -->
-            <div v-if="isEditorjsNote" class="note-main-tags-editable">
+            <div v-if="isEditorjsNote && !isFullscreen" class="note-main-tags-editable">
               <div class="tag-selector">
                 <div class="tag-list">
                   <el-tag
@@ -399,7 +407,7 @@
               </el-tag>
             </div>
             <div v-if="activeNote.summary" class="note-main-summary">
-              <div class="summary-header"><i class="el-icon-document"></i><span>摘要</span></div>
+              <div class="summary-header"><i class="el-icon-document"></i><span>{{ $t('workspace.notes.summary') }}</span></div>
               <p class="summary-content">{{ activeNote.summary }}</p>
             </div>
             <div class="note-main-content">
@@ -426,7 +434,7 @@
           </div>
           <div v-else-if="!showMonthCalendar" class="note-main-empty">
             <i class="el-icon-notebook-2 empty-icon"></i>
-            <p class="empty-text">选择左侧一条笔记，在这里查看详情</p>
+            <p class="empty-text">{{ $t('workspace.notes.selectNoteHint') }}</p>
           </div>
       </main>
 
@@ -441,13 +449,13 @@
                 <span class="outline-text">{{ item.text }}</span>
               </li>
             </ul>
-            <p v-else class="right-empty-text">暂无可用大纲</p>
+            <p v-else class="right-empty-text">{{ $t('workspace.notes.noOutline') }}</p>
           </div>
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.notes.recentNotes') }}</h3>
             <ul class="recent-list">
               <li v-for="note in recentNotes" :key="note.id" class="recent-item" @click="selectNote(note)">
-                <div class="recent-title">{{ note.title || '未命名笔记' }}</div>
+                <div class="recent-title">{{ note.title || $t('workspace.notes.untitledNote') }}</div>
                 <div class="recent-meta">{{ formatTime(note.modifiedAt || note.createdAt) }}</div>
               </li>
             </ul>
@@ -455,21 +463,21 @@
           <div class="right-section">
             <h3 class="right-title">Reddit</h3>
             <p v-if="!redditStatus.appConfigured" class="right-empty-text">
-              服务端未配置 Reddit（REDDIT_CLIENT_ID 等）
+              {{ $t('workspace.notes.redditNotConfigured') }}
             </p>
             <template v-else>
               <p v-if="redditStatus.connected" class="linkedin-status-line">
-                已连接 u/{{ redditStatus.redditUsername }}
-                <span v-if="redditStatus.tokenExpired" class="linkedin-warn">（建议重新授权）</span>
+                {{ $t('workspace.notes.redditConnectedAs', { username: redditStatus.redditUsername }) }}
+                <span v-if="redditStatus.tokenExpired" class="linkedin-warn">{{ $t('workspace.notes.redditReauthHint') }}</span>
               </p>
-              <p v-else class="right-empty-text">未连接 Reddit 账号</p>
+              <p v-else class="right-empty-text">{{ $t('workspace.notes.redditNotConnected') }}</p>
               <div class="linkedin-actions">
                 <el-button
                   v-if="!redditStatus.connected"
                   type="primary"
                   size="mini"
                   @click="connectReddit"
-                >连接 Reddit</el-button>
+                >{{ $t('workspace.notes.connectReddit') }}</el-button>
                 <template v-if="redditStatus.connected">
                   <el-button
                     size="mini"
@@ -477,9 +485,9 @@
                     plain
                     :disabled="!activeNote"
                     @click="openRedditPublishDialog"
-                  >发布当前笔记</el-button>
-                  <el-button size="mini" type="text" @click="showRedditLogs">发布记录</el-button>
-                  <el-button size="mini" type="text" @click="disconnectReddit">断开</el-button>
+                  >{{ $t('workspace.notes.publishCurrentNote') }}</el-button>
+                  <el-button size="mini" type="text" @click="showRedditLogs">{{ $t('workspace.notes.publishRecords') }}</el-button>
+                  <el-button size="mini" type="text" @click="disconnectReddit">{{ $t('workspace.notes.disconnect') }}</el-button>
                 </template>
               </div>
             </template>
@@ -530,7 +538,7 @@
     />
 
     <el-dialog
-      title="管理标签"
+      :title="$t('workspace.notes.manageTags')"
       :visible.sync="tagManagerVisible"
       width="640px"
       class="tag-manager-dialog"
@@ -539,7 +547,7 @@
         <div class="tag-manager-toolbar">
           <el-input
             v-model="tagManagerSearch"
-            placeholder="搜索标签"
+            :placeholder="$t('workspace.notes.searchTagsPlaceholder')"
             prefix-icon="el-icon-search"
             size="small"
             clearable
@@ -547,7 +555,7 @@
           <div class="tag-manager-create">
             <el-input
               v-model="newTagName"
-              placeholder="新增标签"
+              :placeholder="$t('workspace.notes.newTagNamePlaceholder')"
               size="small"
               maxlength="50"
               @keyup.enter.native="createManagedTag"
@@ -558,7 +566,7 @@
               :disabled="!newTagName || !newTagName.trim()"
               :loading="tagManagerSaving"
               @click="createManagedTag"
-            >新增</el-button>
+            >{{ $t('workspace.notes.add') }}</el-button>
           </div>
         </div>
 
@@ -575,13 +583,13 @@
               <span>{{ tag.name }}</span>
               <i class="el-icon-arrow-right"></i>
             </button>
-            <div v-if="filteredManagedTags.length === 0" class="tag-manager-empty">暂无标签</div>
+            <div v-if="filteredManagedTags.length === 0" class="tag-manager-empty">{{ $t('workspace.notes.noTags') }}</div>
           </div>
 
           <div class="tag-manager-editor">
             <template v-if="managedTagId">
               <el-form label-position="top">
-                <el-form-item label="标签名称">
+                <el-form-item :label="$t('workspace.notes.tagName')">
                   <el-input
                     v-model="tagManagerForm.name"
                     maxlength="50"
@@ -597,17 +605,17 @@
                   size="small"
                   :loading="tagManagerSaving"
                   @click="deleteManagedTag"
-                >删除</el-button>
+                >{{ $t('workspace.notes.deleteBtn') }}</el-button>
                 <el-button
                   type="primary"
                   size="small"
                   :disabled="!tagManagerForm.name || !tagManagerForm.name.trim()"
                   :loading="tagManagerSaving"
                   @click="saveManagedTag"
-                >保存</el-button>
+                >{{ $t('workspace.notes.saveBtn') }}</el-button>
               </div>
             </template>
-            <div v-else class="tag-manager-empty tag-manager-empty--editor">选择一个标签进行编辑</div>
+            <div v-else class="tag-manager-empty tag-manager-empty--editor">{{ $t('workspace.notes.selectTagToEdit') }}</div>
           </div>
         </div>
       </div>
@@ -639,7 +647,7 @@ export default {
         $axios.get('/v1/notes', {
           params: { page: 0, size: 5, sortBy: 'modifiedAt', direction: 'DESC' }
         }),
-        $axios.get('/v1/tags'),
+        $axios.get('/v1/tags?scope=note'),
         $axios.get('/v1/projects/my')
       ])
       return {
@@ -756,18 +764,10 @@ export default {
     contentTypeLabel() {
       if (!this.activeNote || !this.activeNote.contentType) return ''
       if (this.activeNote.contentType === 'editorjs') return '' // editorjs 不显示
-      const labels = {
-        'richtext': '富文本',
-        'markdown': 'Markdown',
-        'Richtext': '富文本', // 兼容大小写
-        'Markdown': 'Markdown', // 兼容大小写
-        'RICH TEXT': '富文本', // 兼容其他格式
-        'MARKDOWN': 'Markdown' // 兼容其他格式
-      }
       const contentType = this.activeNote.contentType.toLowerCase()
-      if (contentType === 'richtext' || contentType === 'rich text') return '富文本'
-      if (contentType === 'markdown') return 'Markdown'
-      return labels[this.activeNote.contentType] || ''
+      if (contentType === 'richtext' || contentType === 'rich text') return this.$t('workspace.notes.typeRichtext')
+      if (contentType === 'markdown') return this.$t('workspace.notes.typeMarkdown')
+      return ''
     },
     filteredManagedTags() {
       const keyword = (this.tagManagerSearch || '').trim().toLowerCase()
@@ -848,11 +848,11 @@ export default {
     document.addEventListener('keydown', this._onDateNav)
     this.loadRedditStatus()
     if (this.$route.query.reddit_connected === '1') {
-      this.$message.success('Reddit 账号已连接')
+      this.$message.success(this.$t('workspace.notes.redditConnected'))
       this.$router.replace({ path: this.$route.path, query: {} })
     }
     if (this.$route.query.reddit_error) {
-      this.$message.error('Reddit 连接失败：' + decodeURIComponent(this.$route.query.reddit_error))
+      this.$message.error(this.$t('workspace.notes.redditConnectFailedPrefix') + decodeURIComponent(this.$route.query.reddit_error))
       this.$router.replace({ path: this.$route.path, query: {} })
     }
     // 月グルーピング用に全ノートデータをバックグラウンドでロード
@@ -884,7 +884,7 @@ export default {
         // 同时加载右侧"最近笔记"：按修改时间排序
         await this.loadRecentNotes()
       } catch (error) {
-        this.$message.error('加载笔记失败')
+        this.$message.error(this.$t('workspace.notes.loadNotesFailed'))
       } finally {
         this.loading = false
       }
@@ -966,9 +966,9 @@ export default {
         this.destroyEditor()
         this.activeNoteId = response.id
         await this.loadActiveNote()
-        this.$message.success('笔记已创建')
+        this.$message.success(this.$t('workspace.notes.noteCreated'))
       } catch (error) {
-        this.$message.error('创建笔记失败')
+        this.$message.error(this.$t('workspace.notes.noteCreateFailed'))
       }
     },
     async handleImportFeishu() {
@@ -989,11 +989,11 @@ export default {
           if (res && res.url) {
             window.location.href = res.url
           } else {
-            this.$message.error('未获取到授权地址')
+            this.$message.error(this.$t('workspace.notes.noAuthUrl'))
           }
         }
       } catch (error) {
-        this.$message.error('检查飞书绑定状态失败')
+        this.$message.error(this.$t('workspace.notes.checkFeishuBindingFailed'))
       }
     },
 
@@ -1018,10 +1018,10 @@ export default {
         if (res && res.url) {
           window.location.href = res.url
         } else {
-          this.$message.error('未获取到授权地址')
+          this.$message.error(this.$t('workspace.notes.noAuthUrl'))
         }
       } catch (e) {
-        this.$message.error(e.response?.data?.message || e.message || '获取授权地址失败')
+        this.$message.error(e.response?.data?.message || e.message || this.$t('workspace.notes.getAuthUrlFailed'))
       }
     },
     openRedditPublishDialog() {
@@ -1033,16 +1033,16 @@ export default {
     },
     async disconnectReddit() {
       try {
-        await this.$confirm('确定断开 Reddit 连接？', '提示', { type: 'warning' })
+        await this.$confirm(this.$t('workspace.notes.confirmDisconnectReddit'), this.$t('workspace.notes.confirmTitle'), { type: 'warning' })
       } catch (e) {
         return
       }
       try {
         await this.$redditService.disconnect()
-        this.$message.success('已断开')
+        this.$message.success(this.$t('workspace.notes.disconnected'))
         await this.loadRedditStatus()
       } catch (e) {
-        this.$message.error(e.response?.data?.message || e.message || '断开失败')
+        this.$message.error(e.response?.data?.message || e.message || this.$t('workspace.notes.disconnectFailed'))
       }
     },
     async showRedditLogs() {
@@ -1050,7 +1050,7 @@ export default {
       try {
         const logs = await this.$redditService.getLogs(this.activeNote.id)
         if (!logs || !logs.length) {
-          this.$message.info('暂无 Reddit 发布记录')
+          this.$message.info(this.$t('workspace.notes.noRedditRecords'))
           return
         }
         const lines = logs.map((l) => {
@@ -1059,19 +1059,19 @@ export default {
           const err = l.errorMessage ? ` ${l.errorMessage}` : ''
           return `[${t}] r/${l.subreddit} ${l.status}${u}${err}`
         })
-        await this.$alert(lines.join('\n'), 'Reddit 发布记录', {
-          confirmButtonText: '关闭',
+        await this.$alert(lines.join('\n'), this.$t('workspace.notes.redditRecordsTitle'), {
+          confirmButtonText: this.$t('workspace.notes.close'),
           customClass: 'linkedin-logs-alert'
         })
       } catch (e) {
-        this.$message.error(e.response?.data?.message || e.message || '加载记录失败')
+        this.$message.error(e.response?.data?.message || e.message || this.$t('workspace.notes.loadRecordsFailed'))
       }
     },
 
     async saveFeishuCredentials({ appId, appSecret }) {
       try {
         await this.$feishuService.saveCredentials({ appId, appSecret })
-        this.$message.success('飞书配置已保存')
+        this.$message.success(this.$t('workspace.notes.feishuConfigSaved'))
         if (this.pendingFeishuConnect) {
           this.pendingFeishuConnect = false
           // 继续走连接流程
@@ -1079,7 +1079,7 @@ export default {
         }
       } catch (error) {
         this.pendingFeishuConnect = false
-        this.$message.error('保存飞书配置失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.notes.saveFeishuConfigFailed') + (error.response?.data?.message || error.message))
         throw error
       }
     },
@@ -1089,7 +1089,7 @@ export default {
           ? new Date(file.lastModified).toISOString().replace('Z', '')
           : undefined
         const noteData = {
-          title: title || '导入的笔记',
+          title: title || this.$t('workspace.createNote.defaultTitle'),
           content: content,
           contentType: 'markdown',
           isPublic: false,
@@ -1110,9 +1110,9 @@ export default {
         }
         this.activeNoteId = response.id
         await this.loadActiveNote()
-        this.$message.success('Markdown 文件已导入为笔记')
+        this.$message.success(this.$t('workspace.notes.markdownImported'))
       } catch (error) {
-        this.$message.error('导入 Markdown 文件失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.notes.importMarkdownFailed') + (error.response?.data?.message || error.message))
       }
     },
     async selectNote(note) {
@@ -1169,7 +1169,7 @@ export default {
           setTimeout(() => { this._editorReady = true }, 500)
         }
       } catch (error) {
-        this.$message.error('加载笔记详情失败')
+        this.$message.error(this.$t('workspace.notes.loadNoteDetailFailed'))
       }
     },
 
@@ -1186,27 +1186,29 @@ export default {
         { default: CodeTool }, { default: Delimiter }, { default: Quote },
         { default: Table }, { default: InlineCode }, { default: ImageTool },
         { default: Marker }, { default: MarkdownBlock },
-        { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool }
+        { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool },
+        { default: CodeWrapTune }
       ] = await Promise.all([
         import('@editorjs/editorjs'), import('@editorjs/header'), import('@editorjs/list'),
         import('@editorjs/code'), import('@editorjs/delimiter'), import('@editorjs/quote'),
         import('@editorjs/table'), import('@editorjs/inline-code'), import('@editorjs/image'),
         import('@editorjs/marker'), import('~/utils/editorjs-markdown-block'),
         import('~/utils/editorjsVideoTool'), import('~/utils/editorjsEmbedVideoTool'),
-        import('~/utils/editorjsAudioTool')
+        import('~/utils/editorjsAudioTool'), import('~/utils/editorjsCodeWrapTune')
       ])
       const uploadService = this.$uploadService
       const noteId = this.activeNote ? this.activeNote.id : 0
       this.editor = new EditorJS({
         holder: holderId,
-        placeholder: '输入 "/" 唤出快捷菜单，或直接开始输入...',
+        placeholder: this.$t('workspace.notes.editorPlaceholder'),
         autofocus: false,
         tools: {
-          header: { class: Header, config: { placeholder: '请输入标题', levels: [1, 2, 3], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
+          header: { class: Header, config: { placeholder: this.$t('workspace.notes.editorHeaderPlaceholder'), levels: [1, 2, 3], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
           list: { class: List, inlineToolbar: true, config: { defaultStyle: 'unordered' } },
-          code: { class: CodeTool, config: { placeholder: '输入代码...' } },
+          code: { class: CodeTool, config: { placeholder: this.$t('workspace.notes.editorCodePlaceholder') }, tunes: ['codeWrap'] },
+          codeWrap: { class: CodeWrapTune },
           delimiter: { class: Delimiter },
-          quote: { class: Quote, config: { quotePlaceholder: '输入引用内容...', captionPlaceholder: '引用来源（可选）' }, shortcut: 'CMD+SHIFT+O' },
+          quote: { class: Quote, config: { quotePlaceholder: this.$t('workspace.notes.editorQuotePlaceholder'), captionPlaceholder: this.$t('workspace.notes.editorQuoteCaptionPlaceholder') }, shortcut: 'CMD+SHIFT+O' },
           table: { class: Table, inlineToolbar: true, config: { rows: 3, cols: 3, withHeadings: true } },
           inlineCode: { class: InlineCode, shortcut: 'CMD+SHIFT+M' },
           image: {
@@ -1283,7 +1285,9 @@ export default {
           this.hasUnsavedChanges = true
           this.debouncedSave()
         },
-        i18n: {
+        // EditorJS 自身有一套独立于 vue-i18n 的内部 i18n 机制（块工具/菜单文案），
+        // 只在中文界面下覆盖成中文；英文界面下不传，落回 EditorJS 自带的英文默认文案
+        i18n: this.$i18n.locale === 'zh-CN' ? {
           messages: {
             ui: {
               blockTunes: { toggler: { 'Click to tune': '点击调整', 'or drag to move': '或拖动移动' } },
@@ -1308,7 +1312,7 @@ export default {
               moveDown: { 'Move down': '下移' }
             }
           }
-        }
+        } : undefined
       })
       await this.editor.isReady
       if (!this.imageResizer) {
@@ -1325,7 +1329,70 @@ export default {
       this.imageResizer.setupImageResize()
       this.setupCodeBlockAutoResize()
       this.setupImagePaste(uploadService, noteId)
+      this.setupHeaderToggleShortcut()
+      this.setupListCopyFix()
       // _editorReady 由 loadActiveNote 在清除 saveTimeout 后设置
+    },
+
+    // 整块复制/剪切时，EditorJS 自带的 copySelectedBlocks 用 .textContent 拼接每个 block，
+    // list 内各项之间不会插入换行，粘贴到只认 text/plain 的地方（如代码块）会挤成一行。
+    // 监听器同样挂在 document 冒泡阶段，但在 editor 初始化完成后才注册——
+    // 依据 DOM 规范，同一元素同一阶段的监听器按注册顺序执行，所以会排在 EditorJS 自己的 handler 之后，
+    // 待其写入（有问题的）text/plain 后，再用保留换行的版本覆盖掉。只覆盖 text/plain，
+    // text/html 和 EditorJS 内部富结构 MIME 数据不受影响。
+    setupListCopyFix() {
+      const fixClipboardText = (e) => {
+        if (!e.clipboardData || !this.editor) return
+        const count = this.editor.blocks.getBlocksCount()
+        const selected = []
+        for (let i = 0; i < count; i++) {
+          const block = this.editor.blocks.getBlockByIndex(i)
+          if (block && block.selected) selected.push(block)
+        }
+        if (selected.length === 0) return // 未整块选中，走浏览器原生复制，不干预
+
+        const text = selected.map(block => {
+          const clone = block.holder.cloneNode(true)
+          clone.querySelectorAll('.cdx-list__item').forEach(item => {
+            item.insertAdjacentText('afterend', '\n')
+          })
+          return clone.textContent
+        }).join('\n\n')
+
+        e.clipboardData.setData('text/plain', text)
+      }
+
+      document.addEventListener('copy', fixClipboardText)
+      document.addEventListener('cut', fixClipboardText)
+      this._listCopyFixHandler = () => {
+        document.removeEventListener('copy', fixClipboardText)
+        document.removeEventListener('cut', fixClipboardText)
+      }
+    },
+
+    // Cmd/Ctrl+Shift+H 双向切换：当前块已是 header 时转回 paragraph，
+    // 否则放行给 EditorJS 自带的 header shortcut（文本转标题）
+    setupHeaderToggleShortcut() {
+      const container = this.$refs.editorContainer
+      if (!container) return
+
+      const handler = async (e) => {
+        const isCmd = e.ctrlKey || e.metaKey
+        if (!isCmd || !e.shiftKey || e.key.toUpperCase() !== 'H') return
+
+        const index = this.editor.blocks.getCurrentBlockIndex()
+        const block = this.editor.blocks.getBlockByIndex(index)
+        if (!block || block.name !== 'header') return
+
+        e.stopPropagation()
+        e.preventDefault()
+        const newBlock = await this.editor.blocks.convert(block.id, 'paragraph')
+        this.editor.caret.setToBlock(newBlock, 'end')
+      }
+
+      // useCapture=true：抢在 EditorJS 自身的 header shortcut 处理之前判断
+      container.addEventListener('keydown', handler, true)
+      this._headerToggleHandler = () => container.removeEventListener('keydown', handler, true)
     },
 
     setupImagePaste(uploadService, noteId) {
@@ -1341,12 +1408,12 @@ export default {
 
         const payload = await getClipboardImagePayload(clipboardData)
         if (!payload) {
-          this.$message.warning('剪贴板图片无法读取，请保存为文件后拖入或上传')
+          this.$message.warning(this.$t('workspace.notes.clipboardImageReadFailed'))
           return
         }
 
         const sizeText = payload.file ? ` (${(payload.file.size / 1024 / 1024).toFixed(1)}MB)` : ''
-        const loadingMsg = this.$message({ message: `正在上传图片${sizeText}...`, duration: 0 })
+        const loadingMsg = this.$message({ message: this.$t('workspace.notes.uploadingImage', { size: sizeText }), duration: 0 })
         try {
           const result = payload.file
             ? await uploadService.uploadLocal(payload.file, 'note', noteId || 0)
@@ -1368,9 +1435,9 @@ export default {
           console.error('粘贴图片上传失败:', err)
           const status = err?.response?.status
           if (status === 413) {
-            this.$message.error(`图片过大${sizeText}，上传失败，请压缩后重试`)
+            this.$message.error(this.$t('workspace.notes.imageTooLarge', { size: sizeText }))
           } else {
-            this.$message.error(`图片粘贴上传失败${sizeText}`)
+            this.$message.error(this.$t('workspace.notes.imagePasteUploadFailed', { size: sizeText }))
           }
         }
       }
@@ -1385,13 +1452,11 @@ export default {
       if (!container) return
 
       const autoResize = (textarea) => {
-        const lines = (textarea.value || '').split('\n').length
-        // font-size: 14px, line-height: 1.6 → 每行 22.4px；padding: 16px × 2 = 32px
-        const lineHeight = 14 * 1.6
-        const padding = 32
+        // 用 scrollHeight 量实际渲染高度，而不是按 \n 数逻辑行——
+        // 这样无论是否开启自动换行、字体多大，都能量出正确高度，不会出现纵向滚动条
         const minH = 60
-        const contentH = Math.ceil(lines * lineHeight + padding)
-        textarea.style.height = Math.max(contentH, minH) + 'px'
+        textarea.style.height = 'auto'
+        textarea.style.height = Math.max(textarea.scrollHeight, minH) + 'px'
         // 禁用拼写检查和语法检查，屏蔽蓝色双下划线告警
         textarea.setAttribute('spellcheck', 'false')
         textarea.setAttribute('autocomplete', 'off')
@@ -1441,6 +1506,14 @@ export default {
       if (this._imagePasteHandler) {
         this._imagePasteHandler()
         this._imagePasteHandler = null
+      }
+      if (this._headerToggleHandler) {
+        this._headerToggleHandler()
+        this._headerToggleHandler = null
+      }
+      if (this._listCopyFixHandler) {
+        this._listCopyFixHandler()
+        this._listCopyFixHandler = null
       }
       if (this.editor) {
         try { this.editor.destroy() } catch (e) { /* ignore */ }
@@ -1598,7 +1671,7 @@ export default {
           const text = (b.data.text || '').replace(/<[^>]*>/g, '')
           return { text: text.length > 40 ? text.slice(0, 40) + '...' : text, indent: ((b.data.level || 2) - minLevel) * 12 }
         })
-        if (this.outline.length === 0) this.outline = [{ text: '（无标题块）', indent: 0 }]
+        if (this.outline.length === 0) this.outline = [{ text: this.$t('workspace.notes.noHeaderBlock'), indent: 0 }]
         return
       }
       if (this.activeNote.contentType === 'editorjs' && this.activeNote.content) {
@@ -1613,7 +1686,7 @@ export default {
             })
           }
         } catch (e) { /* ignore */ }
-        if (this.outline.length === 0) this.outline = [{ text: '（无标题块）', indent: 0 }]
+        if (this.outline.length === 0) this.outline = [{ text: this.$t('workspace.notes.noHeaderBlock'), indent: 0 }]
         return
       }
       if (this.activeNote.contentType === 'markdown' && this.activeNote.content) {
@@ -1643,7 +1716,7 @@ export default {
         return
       }
       this.outline = sections.map((section, index) => ({
-        text: this.extractOutlineTitle(section) || `区块 ${index + 1}`,
+        text: this.extractOutlineTitle(section) || this.$t('workspace.notes.blockN', { n: index + 1 }),
         indent: 0
       }))
     },
@@ -1655,8 +1728,24 @@ export default {
       return lines[0].length > 40 ? lines[0].slice(0, 40) + '...' : lines[0]
     },
     getSectionTypeLabel(type) {
-      const labels = { 'richtext': '富文本', 'markdown': 'Markdown', 'paragraph': '段落', 'header': '标题', 'quote': '引用', 'code': '代码块', 'inline-code': '行内代码', 'delimiter': '分割线', 'divider': '分割线', 'table': '表格', 'image': '图片', 'list': '列表', 'ai-chat': 'AI 对话', 'iframe': '嵌入页面', 'gallery': '图片库' }
-      return labels[type] || '文本'
+      const labels = {
+        'richtext': this.$t('workspace.notes.typeRichtext'),
+        'markdown': this.$t('workspace.notes.typeMarkdown'),
+        'paragraph': this.$t('workspace.notes.typeParagraph'),
+        'header': this.$t('workspace.notes.typeHeader'),
+        'quote': this.$t('workspace.notes.typeQuote'),
+        'code': this.$t('workspace.notes.typeCode'),
+        'inline-code': this.$t('workspace.notes.typeInlineCode'),
+        'delimiter': this.$t('workspace.notes.typeDelimiter'),
+        'divider': this.$t('workspace.notes.typeDelimiter'),
+        'table': this.$t('workspace.notes.typeTable'),
+        'image': this.$t('workspace.notes.typeImage'),
+        'list': this.$t('workspace.notes.typeList'),
+        'ai-chat': this.$t('workspace.notes.typeAiChat'),
+        'iframe': this.$t('workspace.notes.typeIframe'),
+        'gallery': this.$t('workspace.notes.typeGallery')
+      }
+      return labels[type] || this.$t('workspace.notes.typeDefault')
     },
     getSectionPreview(content) {
       if (!content) return ''
@@ -1690,7 +1779,7 @@ export default {
         try { blocks = JSON.parse(note.content).blocks || [] } catch (e) { /* ignore */ }
       }
       this.$refs.linkedinShareDialog && this.$refs.linkedinShareDialog.open(
-        (note.title || '').trim() || '未命名笔记',
+        (note.title || '').trim() || this.$t('workspace.notes.untitledNote'),
         blocks
       )
     },
@@ -1698,17 +1787,18 @@ export default {
       if (!note) return
       try {
         const contentHtml = await this._buildNoteContentHtml(note)
-        const title = (note.title || '').trim() || '未命名笔记'
+        const title = (note.title || '').trim() || this.$t('workspace.notes.untitledNote')
+        const dateLocale = this.$i18n.locale === 'zh-CN' ? 'zh-CN' : 'en-US'
         const fmt = dt => dt
-          ? new Date(dt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+          ? new Date(dt).toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' })
           : ''
         const createdAt = fmt(note.createdAt)
         const modifiedAt = fmt(note.modifiedAt)
         const tagHtml = (note.tags || []).map(t => `<span class="pdf-tag">${this._escapeHtmlForPdf(t.name)}</span>`).join('')
         const metaParts = []
-        if (createdAt) metaParts.push(`创建于 ${createdAt}`)
-        if (modifiedAt && modifiedAt !== createdAt) metaParts.push(`最后更新 ${modifiedAt}`)
-        if (note.projectName) metaParts.push(`项目：${this._escapeHtmlForPdf(note.projectName)}`)
+        if (createdAt) metaParts.push(this.$t('workspace.notes.createdAtPrefix', { date: createdAt }))
+        if (modifiedAt && modifiedAt !== createdAt) metaParts.push(this.$t('workspace.notes.lastUpdatedPrefix', { date: modifiedAt }))
+        if (note.projectName) metaParts.push(this.$t('workspace.notes.projectPrefix', { name: this._escapeHtmlForPdf(note.projectName) }))
         const headerHtml = `
           <div class="pdf-header-section">
             <h1 class="pdf-title">${this._escapeHtmlForPdf(title)}</h1>
@@ -1720,7 +1810,7 @@ export default {
         this._openPrintWindow(fullHtml)
       } catch (e) {
         console.error('[exportNoteToPdf]', e)
-        this.$message.error('PDF 导出失败，请重试')
+        this.$message.error(this.$t('workspace.notes.pdfExportFailed'))
       }
     },
     async _buildNoteContentHtml(note) {
@@ -1772,7 +1862,7 @@ export default {
       const win = window.open(url, '_blank', 'width=900,height=700')
       if (!win) {
         URL.revokeObjectURL(url)
-        this.$message.warning('请允许弹出窗口以导出 PDF')
+        this.$message.warning(this.$t('workspace.notes.allowPopupForPdf'))
         return
       }
       win.addEventListener('load', () => {
@@ -1793,7 +1883,7 @@ export default {
     },
     openTranslationDialog(note) {
       if (!note || !note.id) {
-        this.$message.warning('请先保存笔记后再翻译')
+        this.$message.warning(this.$t('workspace.notes.saveNoteBeforeTranslate'))
         return
       }
       this.$refs.translationDialog.open()
@@ -1804,18 +1894,18 @@ export default {
       this.activeNoteId = newNote.id
       this.destroyEditor()
       this.loadActiveNote()
-      this.$message.success('英文版本已创建')
+      this.$message.success(this.$t('workspace.notes.englishVersionCreated'))
     },
     openWechatPublish(note) {
       if (!note || !note.id) {
-        this.$message.warning('请先保存笔记后再发布')
+        this.$message.warning(this.$t('workspace.notes.saveNoteBeforePublish'))
         return
       }
       this.$refs.wechatDialog.open(this.activeNote ? (this.activeNote.content || '') : '')
     },
     onWechatPublished(result) {
       this.wechatPublished = true
-      const modeText = result.mode === 'PUBLISHED' ? '群发成功！' : '草稿已推送至微信公众号后台'
+      const modeText = result.mode === 'PUBLISHED' ? this.$t('workspace.notes.wechatBroadcastSuccess') : this.$t('workspace.notes.wechatDraftPushed')
       this.$message.success(modeText)
     },
     async toggleNotePublic(note) {
@@ -1845,19 +1935,19 @@ export default {
         // 刷新最近笔记列表
         await this.loadRecentNotes()
         
-        this.$message.success(newIsPublic ? '笔记已公开' : '笔记已关闭')
+        this.$message.success(newIsPublic ? this.$t('workspace.notes.notePublished') : this.$t('workspace.notes.noteUnpublished'))
       } catch (error) {
-        this.$message.error('切换公开状态失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.notes.togglePublicFailed') + (error.response?.data?.message || error.message))
       }
     },
     deleteNote(note) {
-      this.$confirm(`确定要删除笔记 "${note.title}" 吗？`, '提示', {
-        confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+      this.$confirm(this.$t('workspace.notes.confirmDeleteNote', { title: note.title }), this.$t('workspace.notes.confirmTitle'), {
+        confirmButtonText: this.$t('confirm.confirmBtn'), cancelButtonText: this.$t('confirm.cancelBtn'), type: 'warning'
       }).then(async () => {
         try {
           this.destroyEditor()
           await this.$axios.delete(`/v1/notes/${note.id}`)
-        this.$message.success('删除成功')
+        this.$message.success(this.$t('workspace.notes.deleteSuccess'))
         this.activeNoteId = null
         this.activeNote = null
         await this.loadNotes()
@@ -1866,7 +1956,7 @@ export default {
           this.activeNoteId = this.notes[0].id
           await this.loadActiveNote()
         }
-        } catch (error) { this.$message.error('删除失败') }
+        } catch (error) { this.$message.error(this.$t('workspace.notes.deleteFailed')) }
       }).catch(() => {})
     },
 
@@ -1928,7 +2018,7 @@ export default {
           this.debouncedSave()
         }
         this.newTagName = ''
-        this.$message.info('标签已存在，已自动选中')
+        this.$message.info(this.$t('workspace.notes.tagAlreadySelected'))
         return
       }
 
@@ -1940,8 +2030,8 @@ export default {
         }
         this.activeNote.tags.push(res.data)
         this.newTagName = ''
-        this.$message.success('标签创建成功')
-        
+        this.$message.success(this.$t('workspace.notes.tagCreated'))
+
         // 标记有未保存变更并触发保存
         this.hasUnsavedChanges = true
         this.updateSaveStatus('saving')
@@ -1953,7 +2043,7 @@ export default {
           listNote.tags = [...this.activeNote.tags]
         }
       } catch (error) {
-        this.$message.error('创建标签失败：' + (error.response?.data?.message || error.message))
+        this.$message.error(this.$t('workspace.notes.tagCreateFailed') + '：' + (error.response?.data?.message || error.message))
       }
     },
 
@@ -1994,7 +2084,7 @@ export default {
       if (existingTag) {
         this.selectManagedTag(existingTag)
         this.newTagName = ''
-        this.$message.info('标签已存在')
+        this.$message.info(this.$t('workspace.notes.tagAlreadyExists'))
         return
       }
 
@@ -2004,9 +2094,9 @@ export default {
         this.tags.push(data)
         this.newTagName = ''
         this.selectManagedTag(data)
-        this.$message.success('标签创建成功')
+        this.$message.success(this.$t('workspace.notes.tagCreated'))
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '创建标签失败')
+        this.$message.error(error.response?.data?.message || this.$t('workspace.notes.tagCreateFailed'))
       } finally {
         this.tagManagerSaving = false
       }
@@ -2023,9 +2113,9 @@ export default {
           tag.name = tagName
           this.syncTagReferences(tag)
         }
-        this.$message.success('标签已保存')
+        this.$message.success(this.$t('workspace.notes.tagSaved'))
       } catch (error) {
-        this.$message.error(error.response?.data?.message || '保存标签失败')
+        this.$message.error(error.response?.data?.message || this.$t('workspace.notes.tagSaveFailed'))
       } finally {
         this.tagManagerSaving = false
       }
@@ -2034,9 +2124,9 @@ export default {
       const tag = this.tags.find(t => t.id === this.managedTagId)
       if (!tag) return
 
-      this.$confirm(`确定要删除标签 "${tag.name}" 吗？`, '提示', {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+      this.$confirm(this.$t('workspace.notes.confirmDeleteTag', { name: tag.name }), this.$t('workspace.notes.confirmTitle'), {
+        confirmButtonText: this.$t('confirm.confirmBtn'),
+        cancelButtonText: this.$t('confirm.cancelBtn'),
         type: 'warning'
       }).then(async () => {
         this.tagManagerSaving = true
@@ -2051,10 +2141,10 @@ export default {
             this.managedTagId = null
             this.tagManagerForm = { name: '' }
           }
-          this.$message.success('标签已删除')
+          this.$message.success(this.$t('workspace.notes.tagDeleted'))
           this.handleTagFilter()
         } catch (error) {
-          this.$message.error(error.response?.data?.message || '删除标签失败')
+          this.$message.error(error.response?.data?.message || this.$t('workspace.notes.tagDeleteFailed'))
         } finally {
           this.tagManagerSaving = false
         }
@@ -2132,7 +2222,7 @@ export default {
     formatCalendarMonthTitle(ym) {
       if (!ym) return ''
       const [y, m] = ym.split('-').map(Number)
-      return `${y}年${m}月`
+      return this.$t('workspace.notes.monthTitle', { y, m })
     },
     async closeMonthCalendar() {
       this.showMonthCalendar = false
@@ -2202,7 +2292,7 @@ export default {
         this.notesByDate = notesByDate
       } catch (error) {
         console.error('加载笔记日期数据失败:', error)
-        this.$message.error('加载笔记日期数据失败')
+        this.$message.error(this.$t('workspace.notes.loadNoteDatesFailed'))
       }
     },
     async selectDate(dateStr) {
@@ -2262,8 +2352,7 @@ export default {
 
 .workspace-sidebar {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 12px 12px 8px;
   display: flex;
   flex-direction: column;
@@ -2446,7 +2535,7 @@ export default {
 
 .note-list-item {
   padding: 8px;
-  border-radius: 8px;
+  // border-radius: 8px;
           cursor: pointer;
   transition: all 0.15s;
   margin-bottom: 4px;
@@ -2456,7 +2545,7 @@ export default {
   &:hover { background: var(--bg-secondary); }
   &.active {
     background: rgba(102, 126, 234, 0.12);
-    border: 1px solid #667eea;
+    // border: 1px solid #667eea;
   }
 }
 
@@ -2534,8 +2623,7 @@ export default {
 
 .workspace-main {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 16px 20px;
   overflow-y: auto;
 }
@@ -3030,8 +3118,7 @@ export default {
 // 右侧面板
 .workspace-right {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 12px 12px 8px;
   overflow-y: auto;
 }
@@ -3190,6 +3277,34 @@ export default {
   border: none !important;
   overflow-y: auto;
   padding: 16px 32px;
+}
+
+// 全屏模式：悬浮退出按钮，替代原本在 note-main-header 里的退出按钮
+.fullscreen-exit-float {
+  position: fixed;
+  top: 20px;
+  right: 32px;
+  z-index: 2001;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
+  background: var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.2s;
+
+  i { font-size: 16px; }
+
+  &:hover {
+    opacity: 1;
+    transform: scale(1.05);
+  }
 }
 
 /* ===== 大月カレンダー main area ===== */

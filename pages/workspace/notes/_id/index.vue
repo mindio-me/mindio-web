@@ -519,7 +519,7 @@ export default {
      */
     editNote() {
       if (this.note.contentType === 'editorjs') {
-        this.$router.push(`/workspace/editor?id=${this.note.id}`)
+        this.$router.push(`/workspace/notes?openNoteId=${this.note.id}`)
       } else {
         this.$router.push(`/workspace/notes/${this.note.id}/edit`)
       }

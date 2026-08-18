@@ -378,8 +378,7 @@ export default {
 
 .workspace-sidebar {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 12px 12px 8px;
   display: flex;
   flex-direction: column;
@@ -572,8 +571,7 @@ export default {
 
 .workspace-main {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 16px 20px;
   overflow-y: auto;
 }
@@ -731,8 +729,7 @@ export default {
 
 .workspace-right {
   background: var(--card-bg-color);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 12px 12px 8px;
   overflow-y: auto;
 }

@@ -6,10 +6,10 @@
   <div class="profile-page">
     <div class="profile-container">
       <div class="profile-header">
-        <h1 class="profile-title">个人信息设置</h1>
-        <p class="profile-subtitle">管理您的个人资料和联系方式等个人信息。</p>
+        <h1 class="profile-title">{{ $t('workspace.profile.title') }}</h1>
+        <p class="profile-subtitle">{{ $t('workspace.profile.subtitle') }}</p>
         <p class="profile-subtitle secondary">
-          站点信息与集成配置已迁移到「设置」页面，请通过顶部菜单进入。
+          {{ $t('workspace.profile.subtitleSecondary') }}
         </p>
       </div>
 
@@ -21,12 +21,82 @@
         class="profile-form"
         v-loading="loading"
       >
-        <!-- 联系方式部分 -->
+        <!-- 个人资料部分 -->
         <div class="form-section">
-          <h2 class="section-title">联系方式</h2>
+          <h2 class="section-title">{{ $t('workspace.profile.sectionProfile') }}</h2>
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="邮箱" prop="email">
+              <el-form-item :label="$t('workspace.profile.fieldFullName')" prop="fullName">
+                <el-input
+                  v-model="profileForm.fullName"
+                  :placeholder="$t('workspace.profile.fullNamePlaceholder')"
+                  maxlength="100"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="$t('workspace.profile.fieldTitle')" prop="title">
+                <el-input
+                  v-model="profileForm.title"
+                  :placeholder="$t('workspace.profile.titlePlaceholder')"
+                  maxlength="200"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item :label="$t('workspace.profile.fieldBio')" prop="bio">
+            <el-input
+              v-model="profileForm.bio"
+              type="textarea"
+              :rows="4"
+              :placeholder="$t('workspace.profile.bioPlaceholder')"
+              maxlength="1000"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="$t('workspace.profile.fieldAvatarUrl')">
+                <div class="avatar-upload-area">
+                  <div v-if="profileForm.avatarUrl" class="avatar-preview">
+                    <img :src="resolveUrl(profileForm.avatarUrl)" :alt="$t('workspace.profile.fieldAvatarUrl')" class="avatar-preview-img" />
+                    <el-button size="mini" type="text" class="avatar-remove-btn" @click="profileForm.avatarUrl = ''">
+                      <i class="el-icon-delete"></i> {{ $t('workspace.profile.removeAvatar') }}
+                    </el-button>
+                  </div>
+                  <div v-else class="avatar-upload-placeholder" @click="triggerAvatarUpload">
+                    <i class="el-icon-plus qr-upload-icon"></i>
+                    <span>{{ $t('workspace.profile.uploadAvatarHint') }}</span>
+                  </div>
+                  <input
+                    ref="avatarFileInput"
+                    type="file"
+                    accept="image/*"
+                    style="display:none"
+                    @change="handleAvatarUpload"
+                  />
+                </div>
+                <p class="hint-text">{{ $t('workspace.profile.avatarHint') }}</p>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="$t('workspace.profile.fieldLocation')" prop="location">
+                <el-input
+                  v-model="profileForm.location"
+                  :placeholder="$t('workspace.profile.locationPlaceholder')"
+                  maxlength="200"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 联系方式部分 -->
+        <div class="form-section">
+          <h2 class="section-title">{{ $t('workspace.profile.sectionContact') }}</h2>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="$t('workspace.profile.fieldEmail')" prop="email">
                 <el-input
                   v-model="profileForm.email"
                   placeholder="you@example.com"
@@ -35,7 +105,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="Twitter / X" prop="twitter">
+              <el-form-item :label="$t('workspace.profile.fieldTwitter')" prop="twitter">
                 <el-input
                   v-model="profileForm.twitter"
                   placeholder="x.com/yourprofile"
@@ -46,7 +116,7 @@
           </el-row>
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="LinkedIn" prop="linkedin">
+              <el-form-item :label="$t('workspace.profile.fieldLinkedin')" prop="linkedin">
                 <el-input
                   v-model="profileForm.linkedin"
                   placeholder="linkedin.com/in/yourprofile"
@@ -55,10 +125,10 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="WeChat" prop="wechat">
+              <el-form-item :label="$t('workspace.profile.fieldWechat')" prop="wechat">
                 <el-input
                   v-model="profileForm.wechat"
-                  placeholder="微信号或二维码描述"
+                  :placeholder="$t('workspace.profile.wechatPlaceholder')"
                   maxlength="200"
                 />
               </el-form-item>
@@ -66,17 +136,17 @@
           </el-row>
           <el-row :gutter="20">
             <el-col :span="24">
-              <el-form-item label="微信二维码">
+              <el-form-item :label="$t('workspace.profile.wechatQrLabel')">
                 <div class="qr-upload-area">
                   <div v-if="profileForm.wechatQrUrl" class="qr-preview">
-                    <img :src="resolveUrl(profileForm.wechatQrUrl)" alt="微信二维码" class="qr-preview-img" />
+                    <img :src="resolveUrl(profileForm.wechatQrUrl)" :alt="$t('workspace.profile.wechatQrLabel')" class="qr-preview-img" />
                     <el-button size="mini" type="text" class="qr-remove-btn" @click="profileForm.wechatQrUrl = ''">
-                      <i class="el-icon-delete"></i> 移除
+                      <i class="el-icon-delete"></i> {{ $t('workspace.profile.removeQr') }}
                     </el-button>
                   </div>
                   <div v-else class="qr-upload-placeholder" @click="triggerQrUpload">
                     <i class="el-icon-plus qr-upload-icon"></i>
-                    <span>点击上传二维码图片</span>
+                    <span>{{ $t('workspace.profile.uploadQrHint') }}</span>
                   </div>
                   <input
                     ref="qrFileInput"
@@ -86,62 +156,7 @@
                     @change="handleQrUpload"
                   />
                 </div>
-                <p class="hint-text">建议尺寸 300×300px，支持 JPG / PNG，上传后自动保存到服务器</p>
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <!-- 个人资料部分 -->
-        <div class="form-section">
-          <h2 class="section-title">个人资料</h2>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="全名" prop="fullName">
-                <el-input
-                  v-model="profileForm.fullName"
-                  placeholder="您的全名"
-                  maxlength="100"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="职位/头衔" prop="title">
-                <el-input
-                  v-model="profileForm.title"
-                  placeholder="例如：Full-Stack Developer"
-                  maxlength="200"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item label="个人简介" prop="bio">
-            <el-input
-              v-model="profileForm.bio"
-              type="textarea"
-              :rows="4"
-              placeholder="介绍一下您自己..."
-              maxlength="1000"
-              show-word-limit
-            />
-          </el-form-item>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="头像 URL" prop="avatarUrl">
-                <el-input
-                  v-model="profileForm.avatarUrl"
-                  placeholder="https://..."
-                  maxlength="500"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="地理位置" prop="location">
-                <el-input
-                  v-model="profileForm.location"
-                  placeholder="例如：Beijing, China"
-                  maxlength="200"
-                />
+                <p class="hint-text">{{ $t('workspace.profile.qrHint') }}</p>
               </el-form-item>
             </el-col>
           </el-row>
@@ -149,10 +164,10 @@
 
         <!-- 其他链接部分 -->
         <div class="form-section">
-          <h2 class="section-title">其他链接</h2>
+          <h2 class="section-title">{{ $t('workspace.profile.sectionLinks') }}</h2>
           <el-row :gutter="20">
             <el-col :span="12">
-              <el-form-item label="个人网站" prop="website">
+              <el-form-item :label="$t('workspace.profile.fieldWebsite')" prop="website">
                 <el-input
                   v-model="profileForm.website"
                   placeholder="https://..."
@@ -161,7 +176,7 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="GitHub" prop="github">
+              <el-form-item :label="$t('workspace.profile.fieldGithub')" prop="github">
                 <el-input
                   v-model="profileForm.github"
                   placeholder="github.com/yourusername"
@@ -175,22 +190,22 @@
         <!-- 提交按钮 -->
         <div class="form-actions">
           <el-button type="primary" :loading="saving" @click="handleSave">
-            <i class="el-icon-check"></i> 保存
+            <i class="el-icon-check"></i> {{ $t('common.save') }}
           </el-button>
-          <el-button @click="handleCancel">取消</el-button>
+          <el-button @click="handleCancel">{{ $t('common.cancel') }}</el-button>
         </div>
       </el-form>
 
       <!-- 账户安全部分 -->
       <div class="form-section security-section">
-        <h2 class="section-title">账户安全</h2>
+        <h2 class="section-title">{{ $t('workspace.profile.sectionSecurity') }}</h2>
         <div class="security-item">
           <div class="security-info">
-            <span class="security-label">登录密码</span>
-            <span class="security-desc">定期更换密码可以提高账户安全性</span>
+            <span class="security-label">{{ $t('workspace.profile.securityLoginPassword') }}</span>
+            <span class="security-desc">{{ $t('workspace.profile.securityPasswordDesc') }}</span>
           </div>
           <el-button size="small" @click="showPasswordDialog = true">
-            <i class="el-icon-lock"></i> 修改密码
+            <i class="el-icon-lock"></i> {{ $t('workspace.profile.changePassword') }}
           </el-button>
         </div>
       </div>
@@ -198,7 +213,7 @@
 
     <!-- 修改密码弹窗 -->
     <el-dialog
-      title="修改密码"
+      :title="$t('workspace.profile.changePassword')"
       :visible.sync="showPasswordDialog"
       width="420px"
       :close-on-click-modal="false"
@@ -210,35 +225,35 @@
         :rules="passwordRules"
         label-position="top"
       >
-        <el-form-item label="当前密码" prop="currentPassword">
+        <el-form-item :label="$t('workspace.profile.fieldCurrentPassword')" prop="currentPassword">
           <el-input
             v-model="passwordForm.currentPassword"
             type="password"
-            placeholder="请输入当前密码"
+            :placeholder="$t('workspace.profile.currentPasswordPlaceholder')"
             show-password
           />
         </el-form-item>
-        <el-form-item label="新密码" prop="newPassword">
+        <el-form-item :label="$t('workspace.profile.fieldNewPassword')" prop="newPassword">
           <el-input
             v-model="passwordForm.newPassword"
             type="password"
-            placeholder="请输入新密码（至少6位）"
+            :placeholder="$t('workspace.profile.newPasswordPlaceholder')"
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认新密码" prop="confirmPassword">
+        <el-form-item :label="$t('workspace.profile.fieldConfirmPassword')" prop="confirmPassword">
           <el-input
             v-model="passwordForm.confirmPassword"
             type="password"
-            placeholder="请再次输入新密码"
+            :placeholder="$t('workspace.profile.confirmPasswordPlaceholder')"
             show-password
           />
         </el-form-item>
       </el-form>
       <div slot="footer">
-        <el-button @click="showPasswordDialog = false">取消</el-button>
+        <el-button @click="showPasswordDialog = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
-          确认修改
+          {{ $t('workspace.profile.confirmChange') }}
         </el-button>
       </div>
     </el-dialog>
@@ -251,13 +266,6 @@ export default {
   layout: 'workspace',
   middleware: 'auth',
   data() {
-    const validateConfirmPassword = (rule, value, callback) => {
-      if (value !== this.passwordForm.newPassword) {
-        callback(new Error('两次输入的密码不一致'))
-      } else {
-        callback()
-      }
-    }
     return {
       loading: false,
       saving: false,
@@ -283,23 +291,29 @@ export default {
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
-      },
-      rules: {
+      }
+    }
+  },
+  computed: {
+    rules() {
+      return {
         email: [
-          { type: 'email', message: '请输入正确的邮箱地址', trigger: 'blur' }
+          { type: 'email', message: this.$t('workspace.profile.emailFormat'), trigger: 'blur' }
         ]
-      },
-      passwordRules: {
+      }
+    },
+    passwordRules() {
+      return {
         currentPassword: [
-          { required: true, message: '请输入当前密码', trigger: 'blur' }
+          { required: true, message: this.$t('workspace.profile.currentPasswordRequired'), trigger: 'blur' }
         ],
         newPassword: [
-          { required: true, message: '请输入新密码', trigger: 'blur' },
-          { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+          { required: true, message: this.$t('workspace.profile.newPasswordRequired'), trigger: 'blur' },
+          { min: 6, message: this.$t('workspace.profile.passwordMinLength'), trigger: 'blur' }
         ],
         confirmPassword: [
-          { required: true, message: '请确认新密码', trigger: 'blur' },
-          { validator: validateConfirmPassword, trigger: 'blur' }
+          { required: true, message: this.$t('workspace.profile.confirmPasswordRequired'), trigger: 'blur' },
+          { validator: this.validateConfirmPassword, trigger: 'blur' }
         ]
       }
     }
@@ -330,7 +344,7 @@ export default {
         }
       } catch (error) {
         console.error('加载个人信息失败:', error)
-        this.$message.error('加载个人信息失败')
+        this.$message.error(this.$t('workspace.profile.loadFailed'))
       } finally {
         this.loading = false
       }
@@ -343,12 +357,12 @@ export default {
         this.saving = true
         try {
           await this.$profileService.updateProfile(this.profileForm)
-          this.$message.success('保存成功')
+          this.$message.success(this.$t('workspace.profile.saveSuccess'))
           // 可选：刷新页面数据
           await this.loadProfile()
         } catch (error) {
           console.error('保存个人信息失败:', error)
-          this.$message.error('保存失败：' + (error.response?.data?.message || '未知错误'))
+          this.$message.error(this.$t('workspace.profile.saveFailed', { message: error.response?.data?.message || this.$t('workspace.profile.unknownError') }))
         } finally {
           this.saving = false
         }
@@ -366,9 +380,27 @@ export default {
         const base = this.$axios.defaults.baseURL || ''
         const url = result.url
         this.profileForm.wechatQrUrl = base && url.startsWith(base) ? url.slice(base.length) : url
-        this.$message.success('二维码上传成功')
+        this.$message.success(this.$t('workspace.profile.qrUploadSuccess'))
       } catch (error) {
-        this.$message.error('上传失败：' + (error.message || '未知错误'))
+        this.$message.error(this.$t('workspace.profile.uploadFailed', { message: error.message || this.$t('workspace.profile.unknownError') }))
+      }
+      event.target.value = ''
+    },
+    triggerAvatarUpload() {
+      this.$refs.avatarFileInput.click()
+    },
+    async handleAvatarUpload(event) {
+      const file = event.target.files[0]
+      if (!file) return
+      try {
+        const result = await this.$uploadService.uploadLocal(file, 'profile', 2)
+        // 只保存相对路径，避免写死环境域名
+        const base = this.$axios.defaults.baseURL || ''
+        const url = result.url
+        this.profileForm.avatarUrl = base && url.startsWith(base) ? url.slice(base.length) : url
+        this.$message.success(this.$t('workspace.profile.avatarUploadSuccess'))
+      } catch (error) {
+        this.$message.error(this.$t('workspace.profile.uploadFailed', { message: error.message || this.$t('workspace.profile.unknownError') }))
       }
       event.target.value = ''
     },
@@ -396,16 +428,23 @@ export default {
         this.changingPassword = true
         try {
           await this.$profileService.changePassword(this.passwordForm)
-          this.$message.success('密码修改成功')
+          this.$message.success(this.$t('workspace.profile.passwordChangeSuccess'))
           this.showPasswordDialog = false
         } catch (error) {
           console.error('修改密码失败:', error)
-          const errorMsg = error.response?.data?.message || error.response?.data || '修改失败'
-          this.$message.error(typeof errorMsg === 'string' ? errorMsg : '修改失败')
+          const errorMsg = error.response?.data?.message || error.response?.data || this.$t('workspace.profile.passwordChangeFailed')
+          this.$message.error(typeof errorMsg === 'string' ? errorMsg : this.$t('workspace.profile.passwordChangeFailed'))
         } finally {
           this.changingPassword = false
         }
       })
+    },
+    validateConfirmPassword(_rule, value, callback) {
+      if (value !== this.passwordForm.newPassword) {
+        callback(new Error(this.$t('workspace.profile.passwordMismatch')))
+      } else {
+        callback()
+      }
     }
   }
 }
@@ -422,7 +461,7 @@ export default {
   margin: 0 auto;
   background: var(--card-bg-color);
   border-radius: 12px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
   padding: 32px;
 }
 
@@ -579,6 +618,56 @@ export default {
   font-size: 24px;
 }
 
+.avatar-upload-area {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.avatar-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.avatar-preview-img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: var(--bg-secondary);
+}
+
+.avatar-remove-btn {
+  color: #f56c6c;
+  font-size: 12px;
+}
+
+.avatar-upload-placeholder {
+  width: 96px;
+  height: 96px;
+  border: 2px dashed var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+  padding: 0 8px;
+  transition: border-color 0.2s, color 0.2s;
+
+  &:hover {
+    border-color: #667eea;
+    color: #667eea;
+  }
+}
+
 .inline-actions {
   display: flex;
   justify-content: flex-end;
@@ -600,7 +689,7 @@ export default {
   padding: 16px;
   background: var(--bg-secondary);
   border-radius: 8px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
 }
 
 .security-info {

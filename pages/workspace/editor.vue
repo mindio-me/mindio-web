@@ -287,6 +287,14 @@ export default {
       this._imagePasteHandler()
       this._imagePasteHandler = null
     }
+    if (this._headerToggleHandler) {
+      this._headerToggleHandler()
+      this._headerToggleHandler = null
+    }
+    if (this._listCopyFixHandler) {
+      this._listCopyFixHandler()
+      this._listCopyFixHandler = null
+    }
     if (this.editor) {
       this.editor.destroy()
     }
@@ -313,7 +321,8 @@ export default {
         { default: MarkdownBlock },
         { default: VideoTool },
         { default: EmbedVideoTool },
-        { default: AudioTool }
+        { default: AudioTool },
+        { default: CodeWrapTune }
       ] = await Promise.all([
         import('@editorjs/editorjs'),
         import('@editorjs/header'),
@@ -328,7 +337,8 @@ export default {
         import('~/utils/editorjs-markdown-block'),
         import('~/utils/editorjsVideoTool'),
         import('~/utils/editorjsEmbedVideoTool'),
-        import('~/utils/editorjsAudioTool')
+        import('~/utils/editorjsAudioTool'),
+        import('~/utils/editorjsCodeWrapTune')
       ])
 
       const uploadService = this.$uploadService
@@ -359,7 +369,11 @@ export default {
             class: CodeTool,
             config: {
               placeholder: '输入代码...'
-            }
+            },
+            tunes: ['codeWrap']
+          },
+          codeWrap: {
+            class: CodeWrapTune
           },
           delimiter: {
             class: Delimiter
@@ -601,6 +615,69 @@ export default {
       this.imageResizer.setupImageResize()
       this.setupCodeBlockAutoResize()
       this.setupImagePaste(uploadService, noteId)
+      this.setupHeaderToggleShortcut()
+      this.setupListCopyFix()
+    },
+
+    // 整块复制/剪切时，EditorJS 自带的 copySelectedBlocks 用 .textContent 拼接每个 block，
+    // list 内各项之间不会插入换行，粘贴到只认 text/plain 的地方（如代码块）会挤成一行。
+    // 监听器同样挂在 document 冒泡阶段，但在 editor 初始化完成后才注册——
+    // 依据 DOM 规范，同一元素同一阶段的监听器按注册顺序执行，所以会排在 EditorJS 自己的 handler 之后，
+    // 待其写入（有问题的）text/plain 后，再用保留换行的版本覆盖掉。只覆盖 text/plain，
+    // text/html 和 EditorJS 内部富结构 MIME 数据不受影响。
+    setupListCopyFix() {
+      const fixClipboardText = (e) => {
+        if (!e.clipboardData || !this.editor) return
+        const count = this.editor.blocks.getBlocksCount()
+        const selected = []
+        for (let i = 0; i < count; i++) {
+          const block = this.editor.blocks.getBlockByIndex(i)
+          if (block && block.selected) selected.push(block)
+        }
+        if (selected.length === 0) return // 未整块选中，走浏览器原生复制，不干预
+
+        const text = selected.map(block => {
+          const clone = block.holder.cloneNode(true)
+          clone.querySelectorAll('.cdx-list__item').forEach(item => {
+            item.insertAdjacentText('afterend', '\n')
+          })
+          return clone.textContent
+        }).join('\n\n')
+
+        e.clipboardData.setData('text/plain', text)
+      }
+
+      document.addEventListener('copy', fixClipboardText)
+      document.addEventListener('cut', fixClipboardText)
+      this._listCopyFixHandler = () => {
+        document.removeEventListener('copy', fixClipboardText)
+        document.removeEventListener('cut', fixClipboardText)
+      }
+    },
+
+    // Cmd/Ctrl+Shift+H 双向切换：当前块已是 header 时转回 paragraph，
+    // 否则放行给 EditorJS 自带的 header shortcut（文本转标题）
+    setupHeaderToggleShortcut() {
+      const editorEl = document.getElementById('editorjs')
+      if (!editorEl) return
+
+      const handler = async (e) => {
+        const isCmd = e.ctrlKey || e.metaKey
+        if (!isCmd || !e.shiftKey || e.key.toUpperCase() !== 'H') return
+
+        const index = this.editor.blocks.getCurrentBlockIndex()
+        const block = this.editor.blocks.getBlockByIndex(index)
+        if (!block || block.name !== 'header') return
+
+        e.stopPropagation()
+        e.preventDefault()
+        const newBlock = await this.editor.blocks.convert(block.id, 'paragraph')
+        this.editor.caret.setToBlock(newBlock, 'end')
+      }
+
+      // useCapture=true：抢在 EditorJS 自身的 header shortcut 处理之前判断
+      editorEl.addEventListener('keydown', handler, true)
+      this._headerToggleHandler = () => editorEl.removeEventListener('keydown', handler, true)
     },
 
     // 拦截剪贴板图片粘贴：在 EditorJS 处理前（capture 阶段）捕获，避免被路由到 paragraph block
@@ -664,14 +741,11 @@ export default {
       if (!editorEl) return
 
       const autoResize = (textarea) => {
-        const lines = (textarea.value || '').split('\n').length
-        // font-size: 14px, line-height: 1.6 → 每行 22.4px；padding: 16px × 2 = 32px
-        const lineHeight = 14 * 1.6
-        const padding = 32
+        // 用 scrollHeight 量实际渲染高度，而不是按 \n 数逻辑行——
+        // 这样无论是否开启自动换行、字体多大，都能量出正确高度，不会出现纵向滚动条
         const minH = 60
-        const contentH = Math.ceil(lines * lineHeight + padding)
-        console.log('contentH 代码块高度', contentH)
-        textarea.style.height = Math.max(contentH, minH) + 'px'
+        textarea.style.height = 'auto'
+        textarea.style.height = Math.max(textarea.scrollHeight, minH) + 'px'
         // 禁用拼写检查和语法检查，屏蔽蓝色双下划线告警
         textarea.setAttribute('spellcheck', 'false')
         textarea.setAttribute('autocomplete', 'off')

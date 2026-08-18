@@ -55,9 +55,16 @@
       </div>
     </transition>
 
-    <!-- 模块 Tab 切换 -->
+    <!-- 模块 Tab 切换 / 账户页返回入口 -->
     <transition name="tabs-slide">
-      <div v-show="!topbarCollapsed && !isAccountPage" class="module-tabs-row">
+      <div v-show="!topbarCollapsed" class="module-tabs-row">
+      <template v-if="isAccountPage">
+        <div class="module-tabs-back" @click="$router.push('/workspace/notes')">
+          <i class="el-icon-back"></i>
+          <span>{{ $t('topbar.backToWorkspace') }}</span>
+        </div>
+      </template>
+      <template v-else>
       <div class="module-tabs">
         <div
           v-for="tab in visibleModuleTabs"
@@ -107,6 +114,7 @@
           @click="handleCreate"
         >{{ $t('actions.newTag') }}</el-button>
       </div>
+      </template>
     </div>
     </transition>
 
@@ -427,9 +435,9 @@ export default {
   display: flex;
   gap: 4px;
   background: var(--card-bg-color);
-  border-radius: 10px;
+  // border-radius: 10px;
   padding: 4px;
-  border: 1px solid var(--border-color);
+  // border: 1px solid var(--border-color);
 }
 
 .module-tab {
@@ -437,7 +445,7 @@ export default {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border-radius: 8px;
+  // border-radius: 8px;
   cursor: pointer;
   font-size: 14px;
   color: var(--text-secondary);
@@ -461,6 +469,22 @@ export default {
 
 .module-tabs-actions {
   flex-shrink: 0;
+}
+
+.module-tabs-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+
+  &:hover {
+    background: var(--bg-secondary);
+    color: var(--text-color);
+  }
 }
 
 @media screen and (max-width: 768px) {
