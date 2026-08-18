@@ -49,6 +49,10 @@ public class BookmarkAgentJob {
     @Builder.Default
     private Integer completedSteps = 0;
 
+    /** 当前进度所处的阶段，如 CLASSIFYING / SUMMARIZING，供前端翻译成对应的阶段说明文案 */
+    @Column(length = 30)
+    private String phaseLabel;
+
     private Long resultNoteId;
 
     @Column(length = 500)

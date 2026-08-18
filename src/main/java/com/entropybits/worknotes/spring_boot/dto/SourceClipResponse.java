@@ -28,9 +28,10 @@ public class SourceClipResponse {
     private String content;   // null in list responses
     private String contentFormat;
     private String excerpt;
-    private Set<TagResponse> tags;
+    private Set<ClipTagResponse> tags;
     private LocalDateTime createdAt;
     private LocalDateTime modifiedAt;
+    private LocalDateTime lastAccessedAt;
 
     /** 列表用：不含 content 全文 */
     public static SourceClipResponse fromEntitySummary(SourceClip c) {
@@ -45,9 +46,13 @@ public class SourceClipResponse {
                 .title(c.getTitle())
                 .contentFormat(c.getContentFormat())
                 .excerpt(c.getExcerpt())
-                .tags(c.getTags().stream().map(TagResponse::fromEntity).collect(Collectors.toSet()))
+                .tags(c.getClipTagLinks().stream()
+                        .filter(l -> Boolean.TRUE.equals(l.getManuallyAdded()) || Boolean.TRUE.equals(l.getAiSuggested()))
+                        .map(ClipTagResponse::fromEntity)
+                        .collect(Collectors.toSet()))
                 .createdAt(c.getCreatedAt())
                 .modifiedAt(c.getModifiedAt())
+                .lastAccessedAt(c.getLastAccessedAt())
                 .build();
     }
 

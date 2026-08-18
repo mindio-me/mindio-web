@@ -6,6 +6,7 @@
 package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.entity.*;
+import com.entropybits.worknotes.spring_boot.repository.ClipTagLinkRepository;
 import com.entropybits.worknotes.spring_boot.repository.ImportItemRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
@@ -14,9 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +24,7 @@ public class BookmarkMergeService {
     private final ImportItemRepository itemRepository;
     private final SourceClipRepository clipRepository;
     private final TagRepository tagRepository;
+    private final ClipTagLinkRepository clipTagLinkRepository;
 
     @Transactional
     public void markDecision(ImportJob job, ImportItem.Category category, ImportItem.UserDecision decision) {
@@ -49,11 +49,8 @@ public class BookmarkMergeService {
     public List<SourceClip> merge(ImportJob job, List<ImportItem> confirmedItems) {
         List<SourceClip> created = new ArrayList<>();
         for (ImportItem item : confirmedItems) {
-            Set<Tag> tags = new HashSet<>();
             String leafFolder = leafFolderName(item.getFolderPath());
-            if (leafFolder != null) {
-                tags.add(resolveTag(leafFolder, job.getOwner()));
-            }
+            Tag tag = leafFolder != null ? resolveTag(leafFolder, job.getOwner()) : null;
 
             boolean fromDeadLink = item.getCategory() == ImportItem.Category.DEAD_LINK;
 
@@ -67,10 +64,17 @@ public class BookmarkMergeService {
                     .originalBookmarkedAt(item.getBookmarkAddedAt())
                     .wasDetectedDeadLink(fromDeadLink)
                     .manuallyConfirmedAlive(fromDeadLink)
-                    .tags(tags)
                     .owner(job.getOwner())
                     .build();
             clip = clipRepository.save(clip);
+
+            if (tag != null) {
+                markUsedByClips(tag);
+                ClipTagLink link = clipTagLinkRepository.save(ClipTagLink.builder()
+                        .clip(clip).tag(tag).manuallyAdded(true).build());
+                clip.getClipTagLinks().add(link);
+            }
+
             created.add(clip);
 
             item.setResultClipId(clip.getId());
@@ -88,5 +92,12 @@ public class BookmarkMergeService {
     private Tag resolveTag(String name, User owner) {
         return tagRepository.findByNameAndOwner(name, owner)
                 .orElseGet(() -> tagRepository.save(Tag.builder().name(name).owner(owner).build()));
+    }
+
+    private void markUsedByClips(Tag tag) {
+        if (!Boolean.TRUE.equals(tag.getUsedByClips())) {
+            tag.setUsedByClips(true);
+            tagRepository.save(tag);
+        }
     }
 }

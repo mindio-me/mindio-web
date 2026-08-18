@@ -19,6 +19,7 @@ public class BookmarkAgentJobResponse {
     private BookmarkAgentJob.Status status;
     private int completedSteps;
     private int totalSteps;
+    private String phaseLabel;
     private Long resultNoteId;
     private LocalDateTime finishedAt;
     private String errorMessage;
@@ -36,6 +37,7 @@ public class BookmarkAgentJobResponse {
                 .status(job.getStatus())
                 .completedSteps(job.getCompletedSteps())
                 .totalSteps(job.getTotalSteps())
+                .phaseLabel(job.getPhaseLabel())
                 .resultNoteId(job.getResultNoteId())
                 .finishedAt(job.getFinishedAt())
                 .errorMessage(job.getErrorMessage())

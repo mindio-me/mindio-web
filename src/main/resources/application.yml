@@ -131,6 +131,12 @@ ai:
     base-url: https://ark.cn-beijing.volces.com
     chat-path: /api/v3/chat/completions
 
+# 收藏页 AI 联网搜索的搜索后端
+search:
+  tavily:
+    api-key: ${SEARCH_TAVILY_KEY:}   # 留空则回退到免费的 Google News RSS 搜索
+    base-url: https://api.tavily.com
+
 # 微信公众号集成（认证订阅号，用于发布文章草稿）
 wechat:
   app-id: ${WECHAT_APP_ID:}

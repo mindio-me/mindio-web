@@ -22,4 +22,7 @@ public class TagRequest {
     @NotBlank(message = "标签名称不能为空")
     @Size(max = 50, message = "标签名称长度不能超过50个字符")
     private String name;
+
+    /** 可选，"clip" 表示这个标签从收藏的标签管理弹窗创建，默认（缺省/其他值）保持笔记标签管理原有行为 */
+    private String scope;
 }

@@ -66,13 +66,14 @@ public class TagController {
     }
 
     /**
-     * 获取当前用户的所有标签
+     * 获取当前用户的标签；scope=note|clip 可选，用于把笔记的标签管理器和收藏夹的标签筛选互相隔离
      */
     @GetMapping
     public ResponseEntity<List<TagResponse>> getUserTags(
+            @RequestParam(required = false) String scope,
             @AuthenticationPrincipal UserDetails userDetails
     ) {
-        List<TagResponse> tags = tagService.getUserTags(userDetails.getUsername());
+        List<TagResponse> tags = tagService.getUserTags(userDetails.getUsername(), scope);
         return ResponseEntity.ok(tags);
     }
 

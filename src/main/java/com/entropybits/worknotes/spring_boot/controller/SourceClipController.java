@@ -48,11 +48,20 @@ public class SourceClipController {
     public ResponseEntity<Page<SourceClipResponse>> list(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) SourceClip.SourceType sourceType,
+            @RequestParam(required = false) java.util.List<Long> tagIds,
+            @RequestParam(defaultValue = "false") boolean untagged,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal UserDetails user) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-        return ResponseEntity.ok(clipService.listClips(user.getUsername(), keyword, sourceType, pageable));
+        return ResponseEntity.ok(clipService.listClips(user.getUsername(), keyword, sourceType, tagIds, untagged, pageable));
+    }
+
+    @GetMapping("/recent")
+    public ResponseEntity<java.util.List<SourceClipResponse>> listRecentlyAccessed(
+            @RequestParam(defaultValue = "5") int limit,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(clipService.listRecentlyAccessed(user.getUsername(), limit));
     }
 
     @GetMapping("/{id}")
@@ -84,6 +93,22 @@ public class SourceClipController {
             @AuthenticationPrincipal UserDetails user) {
         clipService.deleteClip(id, user.getUsername());
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/tags/{tagId}")
+    public ResponseEntity<SourceClipResponse> addTag(
+            @PathVariable Long id,
+            @PathVariable Long tagId,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(clipService.addTag(id, tagId, user.getUsername()));
+    }
+
+    @DeleteMapping("/{id}/tags/{tagId}")
+    public ResponseEntity<SourceClipResponse> removeTag(
+            @PathVariable Long id,
+            @PathVariable Long tagId,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(clipService.removeTag(id, tagId, user.getUsername()));
     }
 
     @GetMapping("/{id}/notes")

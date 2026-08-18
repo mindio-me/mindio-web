@@ -29,8 +29,12 @@ public interface BookmarkAgentJobRepository extends JpaRepository<BookmarkAgentJ
     @Query("UPDATE BookmarkAgentJob j SET j.completedSteps = j.completedSteps + 1 WHERE j.id = :jobId")
     void incrementCompletedSteps(@Param("jobId") Long jobId);
 
+    /**
+     * 切换到一个新的进度阶段：重置 completedSteps=0 并设置该阶段自己的总步数，
+     * 避免跨阶段共用同一个计数器导致前端进度条中途跳变/回退。
+     */
     @Transactional
     @Modifying
-    @Query("UPDATE BookmarkAgentJob j SET j.totalSteps = :totalSteps WHERE j.id = :jobId")
-    void updateTotalSteps(@Param("jobId") Long jobId, @Param("totalSteps") int totalSteps);
+    @Query("UPDATE BookmarkAgentJob j SET j.totalSteps = :totalSteps, j.completedSteps = 0, j.phaseLabel = :phaseLabel WHERE j.id = :jobId")
+    void startPhase(@Param("jobId") Long jobId, @Param("totalSteps") int totalSteps, @Param("phaseLabel") String phaseLabel);
 }

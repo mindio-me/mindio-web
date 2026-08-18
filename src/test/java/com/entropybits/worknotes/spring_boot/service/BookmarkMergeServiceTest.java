@@ -6,6 +6,7 @@
 package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.entity.*;
+import com.entropybits.worknotes.spring_boot.repository.ClipTagLinkRepository;
 import com.entropybits.worknotes.spring_boot.repository.ImportItemRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
@@ -31,17 +32,19 @@ class BookmarkMergeServiceTest {
     @Mock ImportItemRepository itemRepository;
     @Mock SourceClipRepository clipRepository;
     @Mock TagRepository tagRepository;
+    @Mock ClipTagLinkRepository clipTagLinkRepository;
 
     private BookmarkMergeService service;
 
     private void setUp() {
-        service = new BookmarkMergeService(itemRepository, clipRepository, tagRepository);
+        service = new BookmarkMergeService(itemRepository, clipRepository, tagRepository, clipTagLinkRepository);
         when(clipRepository.save(any())).thenAnswer(inv -> {
             SourceClip c = inv.getArgument(0);
             if (c.getId() == null) c.setId(999L);
             return c;
         });
         when(itemRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
 
     @Test
@@ -141,7 +144,8 @@ class BookmarkMergeServiceTest {
         List<SourceClip> result = service.merge(job, List.of(item));
 
         assertThat(result.get(0).getTags()).extracting(Tag::getName).containsExactly("工具");
-        verify(tagRepository).save(argThat(t -> "工具".equals(t.getName()) && t.getOwner().equals(owner)));
+        // 新建 tag 走 resolveTag 保存一次，markUsedByClips 把 usedByClips 置 true 再保存一次
+        verify(tagRepository, times(2)).save(argThat(t -> "工具".equals(t.getName()) && t.getOwner().equals(owner)));
     }
 
     @Test

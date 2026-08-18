@@ -26,11 +26,17 @@ import java.util.concurrent.Executors;
 @Service
 public class BookmarkAgentService {
 
+    /** 进度阶段标识，原样透传给前端翻译成对应的阶段说明文案 */
+    static final String PHASE_CLASSIFYING = "CLASSIFYING";
+    static final String PHASE_SUMMARIZING = "SUMMARIZING";
+
     private final BookmarkAgentJobRepository jobRepository;
     private final SourceClipRepository clipRepository;
     private final NoteRepository noteRepository;
     private final NoteClipRefRepository noteClipRefRepository;
     private final UserRepository userRepository;
+    private final TagRepository tagRepository;
+    private final ClipTagLinkRepository clipTagLinkRepository;
     private final AiProperties aiProperties;
     private final AiTranslationService anthropicService;
     private final AiTranslationService openAiService;
@@ -49,6 +55,8 @@ public class BookmarkAgentService {
             NoteRepository noteRepository,
             NoteClipRefRepository noteClipRefRepository,
             UserRepository userRepository,
+            TagRepository tagRepository,
+            ClipTagLinkRepository clipTagLinkRepository,
             AiProperties aiProperties,
             @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
             @Qualifier("openAiTranslationService") AiTranslationService openAiService,
@@ -59,6 +67,8 @@ public class BookmarkAgentService {
         this.noteRepository = noteRepository;
         this.noteClipRefRepository = noteClipRefRepository;
         this.userRepository = userRepository;
+        this.tagRepository = tagRepository;
+        this.clipTagLinkRepository = clipTagLinkRepository;
         this.aiProperties = aiProperties;
         this.anthropicService = anthropicService;
         this.openAiService = openAiService;
@@ -169,18 +179,49 @@ public class BookmarkAgentService {
 
     Note runCluster(Long jobId, User owner, List<SourceClip> clips) throws Exception {
         AiTranslationService ai = resolveService();
-        List<List<SourceClip>> batches = partition(clips, 50);
-        jobRepository.updateTotalSteps(jobId, batches.size());
 
-        List<List<String>> topicsPerClip = new ArrayList<>();
+        List<SourceClip> toClassify = clips.stream()
+                .filter(c -> !Boolean.TRUE.equals(c.getTagsManuallyAdjusted()))
+                .toList();
+        List<List<SourceClip>> batches = partition(toClassify, 50);
+        jobRepository.startPhase(jobId, batches.size(), PHASE_CLASSIFYING);
+
+        List<String> existingTopics = tagRepository.findByOwnerAndUsedByClipsTrue(owner).stream()
+                .map(Tag::getName)
+                .distinct()
+                .sorted()
+                .limit(200)
+                .toList();
+
+        Map<Long, List<String>> topicsByClipId = new HashMap<>();
         for (List<SourceClip> batch : batches) {
             List<String> titles = batch.stream().map(SourceClip::getTitle).toList();
-            topicsPerClip.addAll(ai.classifyTopics(titles));
+            List<List<String>> batchTopics = ai.classifyTopics(titles, existingTopics);
+            for (int i = 0; i < batch.size(); i++) {
+                topicsByClipId.put(batch.get(i).getId(), batchTopics.get(i));
+            }
             jobRepository.incrementCompletedSteps(jobId);
         }
 
+        List<List<String>> topicsPerClip = new ArrayList<>();
+        for (SourceClip clip : clips) {
+            topicsPerClip.add(topicsByClipId.containsKey(clip.getId())
+                    ? topicsByClipId.get(clip.getId())
+                    : manualTopicFor(clip));
+        }
+
         LinkedHashMap<String, List<SourceClip>> groups = groupByTopic(clips, topicsPerClip);
-        jobRepository.updateTotalSteps(jobId, batches.size() + groups.size());
+        jobRepository.startPhase(jobId, groups.size(), PHASE_SUMMARIZING);
+
+        // 标签落库必须用 groupByTopic 合并后的最终分组名（成员数 < 2 的已并入"其他"），
+        // 而不是 AI 原始候选词，否则左侧标签列表会比知识地图标题多出大量只关联 1 条收藏的零散标签
+        Map<Long, String> finalTopicByClipId = new HashMap<>();
+        for (Map.Entry<String, List<SourceClip>> entry : groups.entrySet()) {
+            for (SourceClip clip : entry.getValue()) {
+                finalTopicByClipId.put(clip.getId(), entry.getKey());
+            }
+        }
+        upsertClipTags(toClassify, finalTopicByClipId);
 
         StringBuilder markdown = new StringBuilder();
         List<SourceClip> orderedRefs = new ArrayList<>();
@@ -197,10 +238,73 @@ public class BookmarkAgentService {
         return self.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", markdown.toString(), orderedRefs);
     }
 
+    /** 手动调整过标签的 clip 不参与 AI 分类，文档分组时退回它自己当前的人工标签（没有则归入"其他"） */
+    private List<String> manualTopicFor(SourceClip clip) {
+        return clipTagLinkRepository.findByClip(clip).stream()
+                .filter(l -> Boolean.TRUE.equals(l.getManuallyAdded()))
+                .map(l -> l.getTag().getName())
+                .findFirst()
+                .map(List::of)
+                .orElse(List.of());
+    }
+
+    /**
+     * 把该 clip 在 groupByTopic 合并后最终所在的分组名写成 aiSuggested=true 的 ClipTagLink
+     * （而不是 AI 原始候选词），确保标签列表与知识地图标题严格一致。
+     * 上一轮生成过、这一轮没再命中同一个词的旧 aiSuggested 关联会被回收：manuallyAdded 仍为 true 的只清掉
+     * aiSuggested 标记，否则整行删除。
+     */
+    private void upsertClipTags(List<SourceClip> clips, Map<Long, String> finalTopicByClipId) {
+        for (SourceClip clip : clips) {
+            String topicWord = finalTopicByClipId.get(clip.getId());
+
+            List<ClipTagLink> existingLinks = clipTagLinkRepository.findByClip(clip);
+            for (ClipTagLink link : existingLinks) {
+                boolean isStaleAiLink = Boolean.TRUE.equals(link.getAiSuggested())
+                        && (topicWord == null || !link.getTag().getName().equals(topicWord));
+                if (!isStaleAiLink) continue;
+                if (Boolean.TRUE.equals(link.getManuallyAdded())) {
+                    link.setAiSuggested(false);
+                    clipTagLinkRepository.save(link);
+                } else {
+                    clipTagLinkRepository.delete(link);
+                    reconcileUsedByClips(link.getTag());
+                }
+            }
+
+            if (topicWord == null || topicWord.isEmpty()) continue;
+
+            Tag tag = tagRepository.findByNameAndOwner(topicWord, clip.getOwner()).orElse(null);
+            if (tag == null) {
+                tag = tagRepository.save(Tag.builder()
+                        .name(topicWord).owner(clip.getOwner()).usedByClips(true).build());
+            } else if (!Boolean.TRUE.equals(tag.getUsedByClips())) {
+                tag.setUsedByClips(true);
+                tagRepository.save(tag);
+            }
+
+            ClipTagLink link = clipTagLinkRepository.findByClipAndTag(clip, tag).orElse(null);
+            if (link == null) {
+                link = ClipTagLink.builder().clip(clip).tag(tag).aiSuggested(true).build();
+            } else {
+                link.setAiSuggested(true);
+            }
+            clipTagLinkRepository.save(link);
+        }
+    }
+
+    /** 标签最后一条生效的 ClipTagLink 被删除后，把 usedByClips 重置为 false，避免僵尸标签常驻标签列表 */
+    private void reconcileUsedByClips(Tag tag) {
+        if (Boolean.TRUE.equals(tag.getUsedByClips()) && !clipTagLinkRepository.existsByTag(tag)) {
+            tag.setUsedByClips(false);
+            tagRepository.save(tag);
+        }
+    }
+
     Note runTimeline(Long jobId, User owner, List<SourceClip> clips) throws Exception {
         AiTranslationService ai = resolveService();
         Map<Integer, List<SourceClip>> byYear = groupByYear(clips);
-        jobRepository.updateTotalSteps(jobId, byYear.size());
+        jobRepository.startPhase(jobId, byYear.size(), PHASE_SUMMARIZING);
 
         StringBuilder markdown = new StringBuilder();
         List<SourceClip> orderedRefs = new ArrayList<>();
@@ -241,7 +345,7 @@ public class BookmarkAgentService {
         try {
             User owner = userRepository.findById(ownerId).orElseThrow();
             List<SourceClip> clips = clipRepository
-                    .findByOwnerAndSourceType(owner, SourceClip.SourceType.WEBPAGE, Pageable.unpaged())
+                    .findByOwner(owner, Pageable.unpaged())
                     .getContent();
             Note note = type == BookmarkAgentJob.Type.CLUSTER
                     ? runCluster(jobId, owner, clips)

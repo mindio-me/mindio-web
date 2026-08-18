@@ -27,8 +27,11 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
@@ -134,7 +137,7 @@ public class LocalMediaService {
         Path cacheDir = Paths.get(System.getProperty("user.home"), ".worknotes", "thumbnails");
         Files.createDirectories(cacheDir);
 
-        Path cachePath = cacheDir.resolve(fileId + ".jpg");
+        Path cachePath = cacheDir.resolve(thumbnailCacheKey(file) + ".jpg");
         if (Files.exists(cachePath)) {
             return cachePath.toFile();
         }
@@ -250,6 +253,28 @@ public class LocalMediaService {
         }
 
         return dirRepository.save(dir);
+    }
+
+    /**
+     * 缩略图缓存文件名。故意不用数据库自增 id：
+     * scan() 每次都会整批删除重插该目录下的记录，id 会变化甚至被后续记录复用，
+     * 若缓存按 id 命名，复用 id 后会把磁盘上旧文件的缩略图错发给新文件。
+     * 改用 owner + 绝对路径 + 最后修改时间的哈希，缓存跟着文件本身走。
+     */
+    private String thumbnailCacheKey(LocalMediaFile file) {
+        String raw = file.getOwner().getId() + "|" + file.getAbsolutePath() + "|" + file.getFileLastModified();
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(raw.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
+                sb.append(Character.forDigit(b & 0xF, 16));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 
     private String resolveMediaType(String ext) {

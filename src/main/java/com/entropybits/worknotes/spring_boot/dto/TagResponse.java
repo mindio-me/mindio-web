@@ -23,12 +23,23 @@ public class TagResponse {
     private Long id;
     private String name;
     private Long ownerId;
+    /** 该标签当前挂着的收藏数；只在 scope=clip 查询时填充，其余场景为 null */
+    private Long clipCount;
 
     public static TagResponse fromEntity(Tag tag) {
         return TagResponse.builder()
                 .id(tag.getId())
                 .name(tag.getName())
                 .ownerId(tag.getOwner().getId())
+                .build();
+    }
+
+    public static TagResponse fromEntity(Tag tag, Long clipCount) {
+        return TagResponse.builder()
+                .id(tag.getId())
+                .name(tag.getName())
+                .ownerId(tag.getOwner().getId())
+                .clipCount(clipCount)
                 .build();
     }
 }

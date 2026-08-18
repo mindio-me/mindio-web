@@ -38,6 +38,8 @@ class BookmarkAgentServiceTest {
     @Mock NoteRepository noteRepository;
     @Mock NoteClipRefRepository noteClipRefRepository;
     @Mock UserRepository userRepository;
+    @Mock TagRepository tagRepository;
+    @Mock ClipTagLinkRepository clipTagLinkRepository;
     @Mock AiProperties aiProperties;
     @Mock AiTranslationService anthropicService;
     @Mock AiTranslationService openAiService;
@@ -48,7 +50,8 @@ class BookmarkAgentServiceTest {
 
     private void setUp() {
         service = new BookmarkAgentService(jobRepository, clipRepository, noteRepository, noteClipRefRepository,
-                userRepository, aiProperties, anthropicService, openAiService, deepseekService, doubaoService);
+                userRepository, tagRepository, clipTagLinkRepository, aiProperties,
+                anthropicService, openAiService, deepseekService, doubaoService);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "self", service);
     }
 
@@ -151,8 +154,10 @@ class BookmarkAgentServiceTest {
         List<SourceClip> clips = List.of(c1, c2);
 
         when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(anthropicService.classifyTopics(List.of("标题一", "标题二")))
+        when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
                 .thenReturn(List.of(List.of("AI"), List.of("AI")));
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(anthropicService.summarizeCluster(eq("AI"), any()))
                 .thenReturn("这是一组 AI 相关收藏。");
         when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
@@ -172,10 +177,208 @@ class BookmarkAgentServiceTest {
                 .contains("这是一组 AI 相关收藏。")
                 .contains("- [标题一](https://example.com/a)")
                 .contains("- [标题二](https://example.com/b)");
-        verify(jobRepository).updateTotalSteps(1L, 1); // 1 个批次
-        verify(jobRepository).updateTotalSteps(1L, 2); // 1 个批次 + 1 个分组
+        verify(jobRepository).startPhase(1L, 1, "CLASSIFYING"); // 1 个批次
+        verify(jobRepository).startPhase(1L, 1, "SUMMARIZING"); // 1 个分组，各阶段单独计数
         verify(jobRepository, times(2)).incrementCompletedSteps(1L); // 1 个批次 + 1 个分组
         verify(noteClipRefRepository, times(2)).save(any());
+    }
+
+    @Test
+    void runCluster_skipsClassificationForClipsWithManuallyAdjustedTags() throws Exception {
+        setUp();
+        User owner = User.builder().id(1L).build();
+        // groupByTopic 会把成员数 < 2 的分组并入"其他"，所以人工组和 AI 组都各造 2 条才能各自成组，
+        // 从而验证"人工分类"这个分组名确实来自 manualTopicFor 而不是被合并掉
+        SourceClip manual1 = clip(1, "标题一");
+        manual1.setSourceUrl("https://example.com/a1");
+        manual1.setTagsManuallyAdjusted(true);
+        SourceClip manual2 = clip(2, "标题二");
+        manual2.setSourceUrl("https://example.com/a2");
+        manual2.setTagsManuallyAdjusted(true);
+        Tag manualTag = Tag.builder().id(9L).name("人工分类").owner(owner).build();
+        ClipTagLink manualLink1 = ClipTagLink.builder().clip(manual1).tag(manualTag).manuallyAdded(true).build();
+        ClipTagLink manualLink2 = ClipTagLink.builder().clip(manual2).tag(manualTag).manuallyAdded(true).build();
+        SourceClip auto1 = clip(3, "标题三");
+        auto1.setSourceUrl("https://example.com/b1");
+        SourceClip auto2 = clip(4, "标题四");
+        auto2.setSourceUrl("https://example.com/b2");
+        List<SourceClip> clips = List.of(manual1, manual2, auto1, auto2);
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(clipTagLinkRepository.findByClip(manual1)).thenReturn(List.of(manualLink1));
+        when(clipTagLinkRepository.findByClip(manual2)).thenReturn(List.of(manualLink2));
+        when(anthropicService.classifyTopics(List.of("标题三", "标题四"), List.of()))
+                .thenReturn(List.of(List.of("AI"), List.of("AI")));
+        when(anthropicService.summarizeCluster(eq("人工分类"), any())).thenReturn("人工分类摘要。");
+        when(anthropicService.summarizeCluster(eq("AI"), any())).thenReturn("AI 摘要。");
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(101L);
+            return n;
+        });
+
+        Note result = service.runCluster(1L, owner, clips);
+
+        verify(anthropicService, org.mockito.Mockito.never())
+                .classifyTopics(argThat(l -> l.contains("标题一") || l.contains("标题二")), any());
+        assertThat(result.getContent()).contains("## 人工分类").contains("## AI");
+    }
+
+    @Test
+    void runCluster_upsertsAiSuggestedTagFromFirstCandidateTopic() throws Exception {
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceUrl("https://example.com/a");
+        c1.setOwner(owner);
+        // groupByTopic 会把成员数 < 2 的分组并入"其他"，两条都归到 AI 才能让 AI 分组本身不被合并掉
+        SourceClip c2 = clip(2, "标题二");
+        c2.setSourceUrl("https://example.com/b");
+        c2.setOwner(owner);
+        List<SourceClip> clips = List.of(c1, c2);
+        Tag aiTag = Tag.builder().id(7L).name("AI").owner(owner).usedByClips(false).build();
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
+                .thenReturn(List.of(List.of("AI"), List.of("AI")));
+        when(anthropicService.summarizeCluster(eq("AI"), any())).thenReturn("摘要。");
+        when(tagRepository.findByNameAndOwner("AI", owner)).thenReturn(java.util.Optional.of(aiTag));
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(102L);
+            return n;
+        });
+
+        service.runCluster(1L, owner, clips);
+
+        verify(clipTagLinkRepository).save(argThat(l ->
+                l.getClip() == c1 && l.getTag() == aiTag && Boolean.TRUE.equals(l.getAiSuggested())));
+        verify(clipTagLinkRepository).save(argThat(l ->
+                l.getClip() == c2 && l.getTag() == aiTag && Boolean.TRUE.equals(l.getAiSuggested())));
+        verify(tagRepository).save(argThat(t -> t == aiTag && Boolean.TRUE.equals(t.getUsedByClips())));
+    }
+
+    @Test
+    void runCluster_foldsSingletonTopicIntoOtherTagToMatchKnowledgeMapDoc() throws Exception {
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceUrl("https://example.com/a");
+        c1.setOwner(owner);
+        List<SourceClip> clips = List.of(c1);
+        // 单独一条 clip 命中的主题词在 groupByTopic 里成员数 < 2，会被并入"其他"；
+        // 标签落库必须用这个合并后的最终分组名，而不是 AI 原始候选词，否则左侧标签列表会和知识地图标题不一致
+        Tag otherTag = Tag.builder().id(11L).name("其他").owner(owner).usedByClips(false).build();
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(anthropicService.classifyTopics(List.of("标题一"), List.of()))
+                .thenReturn(List.of(List.of("小众话题")));
+        when(anthropicService.summarizeCluster(eq("其他"), any())).thenReturn("摘要。");
+        when(tagRepository.findByNameAndOwner("其他", owner)).thenReturn(java.util.Optional.of(otherTag));
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(105L);
+            return n;
+        });
+
+        service.runCluster(1L, owner, clips);
+
+        verify(clipTagLinkRepository).save(argThat(l ->
+                l.getClip() == c1 && l.getTag() == otherTag && Boolean.TRUE.equals(l.getAiSuggested())));
+        verify(tagRepository, org.mockito.Mockito.never()).findByNameAndOwner(eq("小众话题"), any());
+    }
+
+    @Test
+    void runCluster_demotesStaleAiSuggestedLinkWhenManuallyAddedTooInsteadOfDeleting() throws Exception {
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceUrl("https://example.com/a");
+        c1.setOwner(owner);
+        // groupByTopic 会把成员数 < 2 的分组并入"其他"，加一条同样落在"新标签"的 clip 让该分组不被合并掉
+        SourceClip c2 = clip(2, "标题二");
+        c2.setSourceUrl("https://example.com/b");
+        c2.setOwner(owner);
+        List<SourceClip> clips = List.of(c1, c2);
+        Tag oldTag = Tag.builder().id(8L).name("旧标签").owner(owner).usedByClips(true).build();
+        // 上一轮生成的 aiSuggested 关联，同时被用户手动确认过（manuallyAdded=true），
+        // 这一轮 classifyTopics 命中了不同的词，旧关联应当被"降级"而不是删除
+        ClipTagLink staleLink = ClipTagLink.builder().clip(c1).tag(oldTag).aiSuggested(true).manuallyAdded(true).build();
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(clipTagLinkRepository.findByClip(c1)).thenReturn(List.of(staleLink));
+        when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
+                .thenReturn(List.of(List.of("新标签"), List.of("新标签")));
+        when(anthropicService.summarizeCluster(any(), any())).thenReturn("摘要。");
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(103L);
+            return n;
+        });
+
+        service.runCluster(1L, owner, clips);
+
+        verify(clipTagLinkRepository).save(argThat(l ->
+                l == staleLink && Boolean.FALSE.equals(l.getAiSuggested()) && Boolean.TRUE.equals(l.getManuallyAdded())));
+        verify(clipTagLinkRepository, org.mockito.Mockito.never()).delete(staleLink);
+    }
+
+    @Test
+    void runCluster_deletesStaleAiSuggestedLinkWhenNotManuallyAdded() throws Exception {
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceUrl("https://example.com/a");
+        c1.setOwner(owner);
+        // groupByTopic 会把成员数 < 2 的分组并入"其他"，加一条同样落在"新标签"的 clip 让该分组不被合并掉
+        SourceClip c2 = clip(2, "标题二");
+        c2.setSourceUrl("https://example.com/b");
+        c2.setOwner(owner);
+        List<SourceClip> clips = List.of(c1, c2);
+        Tag oldTag = Tag.builder().id(8L).name("旧标签").owner(owner).usedByClips(true).build();
+        // 上一轮纯 AI 建议、用户从未手动确认过（manuallyAdded=false），这一轮没再命中同一个词，
+        // 旧关联应当被直接删除而不是保留降级
+        ClipTagLink staleLink = ClipTagLink.builder().clip(c1).tag(oldTag).aiSuggested(true).manuallyAdded(false).build();
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(clipTagLinkRepository.findByClip(c1)).thenReturn(List.of(staleLink));
+        when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
+                .thenReturn(List.of(List.of("新标签"), List.of("新标签")));
+        when(anthropicService.summarizeCluster(any(), any())).thenReturn("摘要。");
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // 旧标签删完这条链接后不再有任何生效链接 —— 不应留成僵尸标签
+        when(clipTagLinkRepository.existsByTag(oldTag)).thenReturn(false);
+        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(104L);
+            return n;
+        });
+
+        service.runCluster(1L, owner, clips);
+
+        verify(clipTagLinkRepository).delete(staleLink);
+        verify(clipTagLinkRepository, org.mockito.Mockito.never()).save(argThat(l -> l == staleLink));
+        assertThat(oldTag.getUsedByClips()).isFalse();
+        verify(tagRepository).save(argThat(t -> t == oldTag && Boolean.FALSE.equals(t.getUsedByClips())));
     }
 
     @Test
@@ -205,7 +408,7 @@ class BookmarkAgentServiceTest {
                 .contains("## 2023 年")
                 .contains("这一年收藏了不少内容")
                 .contains("- [标题A](https://example.com/a2023)");
-        verify(jobRepository).updateTotalSteps(1L, 1);
+        verify(jobRepository).startPhase(1L, 1, "SUMMARIZING");
         verify(jobRepository, times(1)).incrementCompletedSteps(1L);
     }
 
@@ -273,7 +476,7 @@ class BookmarkAgentServiceTest {
         setUp();
         User owner = User.builder().id(1L).build();
         when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(owner));
-        when(clipRepository.findByOwnerAndSourceType(eq(owner), eq(SourceClip.SourceType.WEBPAGE), any()))
+        when(clipRepository.findByOwner(eq(owner), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
         when(aiProperties.getProvider()).thenReturn("anthropic");
         when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
@@ -297,10 +500,10 @@ class BookmarkAgentServiceTest {
         setUp();
         User owner = User.builder().id(1L).build();
         when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(owner));
-        when(clipRepository.findByOwnerAndSourceType(eq(owner), eq(SourceClip.SourceType.WEBPAGE), any()))
+        when(clipRepository.findByOwner(eq(owner), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(clip(1, "标题一"))));
         when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(anthropicService.classifyTopics(any())).thenThrow(new RuntimeException("AI 调用失败"));
+        when(anthropicService.classifyTopics(any(), any())).thenThrow(new RuntimeException("AI 调用失败"));
         when(jobRepository.findById(1L)).thenReturn(java.util.Optional.of(
                 BookmarkAgentJob.builder().id(1L).status(BookmarkAgentJob.Status.RUNNING).build()));
 

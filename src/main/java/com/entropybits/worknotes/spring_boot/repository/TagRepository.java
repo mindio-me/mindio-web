@@ -33,4 +33,14 @@ public interface TagRepository extends JpaRepository<Tag, Long> {
      * 检查标签名称是否存在（同一用户下）
      */
     Boolean existsByNameAndOwner(String name, User owner);
+
+    /**
+     * 查找用户被笔记使用过（或在笔记场景创建）的标签
+     */
+    List<Tag> findByOwnerAndUsedByNotesTrue(User owner);
+
+    /**
+     * 查找用户被收藏使用过（或由 AI 分类创建）的标签
+     */
+    List<Tag> findByOwnerAndUsedByClipsTrue(User owner);
 }

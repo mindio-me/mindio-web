@@ -21,7 +21,7 @@ import java.util.Set;
 @Table(name = "source_clips")
 @Getter
 @Setter
-@ToString(exclude = "tags")
+@ToString(exclude = "clipTagLinks")
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
@@ -82,14 +82,9 @@ public class SourceClip {
     @Column(length = 20)
     private ExtractionStatus extractionStatus;
 
-    @ManyToMany
-    @JoinTable(
-            name = "source_clip_tags",
-            joinColumns = @JoinColumn(name = "clip_id"),
-            inverseJoinColumns = @JoinColumn(name = "tag_id")
-    )
+    @OneToMany(mappedBy = "clip", fetch = FetchType.LAZY)
     @Builder.Default
-    private Set<Tag> tags = new HashSet<>();
+    private Set<ClipTagLink> clipTagLinks = new HashSet<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
@@ -105,6 +100,9 @@ public class SourceClip {
 
     private LocalDateTime originalBookmarkedAt; // 可空；来自导入的书签原始 ADD_DATE，其余创建途径为 null
 
+    /** 用户上次点开详情查看这条收藏的时间；从未打开过时为 null，排序时回退到 createdAt */
+    private LocalDateTime lastAccessedAt;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean wasDetectedDeadLink = false; // AI 体检阶段曾判定为疑似失效
@@ -112,6 +110,21 @@ public class SourceClip {
     @Column(nullable = false)
     @Builder.Default
     private Boolean manuallyConfirmedAlive = false; // 用户人工判断这个链接其实正常，修正了 AI 的判断
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean tagsManuallyAdjusted = false; // 用户手动增删过标签；true 时知识地图重新生成不再覆盖分类
+
+    /** 兼容视图：把生效的 ClipTagLink（manuallyAdded 或 aiSuggested 为 true）映射回 Tag 集合 */
+    public Set<Tag> getTags() {
+        Set<Tag> tags = new HashSet<>();
+        for (ClipTagLink link : clipTagLinks) {
+            if (Boolean.TRUE.equals(link.getManuallyAdded()) || Boolean.TRUE.equals(link.getAiSuggested())) {
+                tags.add(link.getTag());
+            }
+        }
+        return tags;
+    }
 
     @Override
     public boolean equals(Object o) {

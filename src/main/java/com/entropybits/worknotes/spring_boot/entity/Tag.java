@@ -50,6 +50,14 @@ public class Tag {
     @JsonIgnore
     private User owner;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean usedByNotes = false;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean usedByClips = false;
+
     @ManyToMany(mappedBy = "tags")
     @JsonIgnore
     @Builder.Default

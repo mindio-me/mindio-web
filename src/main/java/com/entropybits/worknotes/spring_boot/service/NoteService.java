@@ -332,6 +332,11 @@ public class NoteService {
                     throw new BadRequestException("标签不属于当前用户");
                 }
 
+                if (!Boolean.TRUE.equals(tag.getUsedByNotes())) {
+                    tag.setUsedByNotes(true);
+                    tagRepository.save(tag);
+                }
+
                 tags.add(tag);
             }
         }

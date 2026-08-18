@@ -13,6 +13,7 @@ import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.exception.UnauthorizedException;
+import com.entropybits.worknotes.spring_boot.repository.ClipTagLinkRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +35,7 @@ public class TagService {
     private final TagRepository tagRepository;
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
+    private final ClipTagLinkRepository clipTagLinkRepository;
 
     /**
      * 创建标签
@@ -46,9 +49,12 @@ public class TagService {
             throw new BadRequestException("标签名称已存在");
         }
 
+        boolean isClipScope = "clip".equals(request.getScope());
         Tag tag = Tag.builder()
                 .name(request.getName())
                 .owner(user)
+                .usedByNotes(!isClipScope)
+                .usedByClips(isClipScope)
                 .build();
 
         Tag savedTag = tagRepository.save(tag);
@@ -101,16 +107,33 @@ public class TagService {
         }
         tag.getNotes().clear();
 
+        // clip_tag_links 的外键没有 ON DELETE CASCADE，需要应用层先手动删除关联行
+        clipTagLinkRepository.deleteAll(clipTagLinkRepository.findByTag(tag));
+
         tagRepository.delete(tag);
     }
 
     /**
-     * 获取用户的所有标签
+     * 获取用户的标签；scope="note" 只返回被笔记使用过的，scope="clip" 只返回被收藏使用过的，
+     * 其余值（含 null）返回全部，保持原有行为不破坏其他调用方。
      */
     @Transactional(readOnly = true)
-    public List<TagResponse> getUserTags(String username) {
+    public List<TagResponse> getUserTags(String username, String scope) {
         User user = getUserByUsername(username);
-        List<Tag> tags = tagRepository.findByOwner(user);
+        List<Tag> tags;
+        if ("note".equals(scope)) {
+            tags = tagRepository.findByOwnerAndUsedByNotesTrue(user);
+        } else if ("clip".equals(scope)) {
+            tags = tagRepository.findByOwnerAndUsedByClipsTrue(user);
+            Map<Long, Long> clipCountByTagId = clipTagLinkRepository.countActiveLinksByOwnerGroupedByTag(user).stream()
+                    .collect(Collectors.toMap(ClipTagLinkRepository.TagClipCount::getTagId,
+                            ClipTagLinkRepository.TagClipCount::getClipCount));
+            return tags.stream()
+                    .map(tag -> TagResponse.fromEntity(tag, clipCountByTagId.getOrDefault(tag.getId(), 0L)))
+                    .collect(Collectors.toList());
+        } else {
+            tags = tagRepository.findByOwner(user);
+        }
         return tags.stream()
                 .map(TagResponse::fromEntity)
                 .collect(Collectors.toList());
