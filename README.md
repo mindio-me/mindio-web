@@ -45,10 +45,11 @@ docker compose up -d
 ```
 
 MindIO will be available at `http://localhost` or your configured domain. This always builds
-against the latest backend release. To pin an older one, pass it as a build arg:
+against the latest backend release — no version to keep in sync with this doc. To pin a
+specific release instead, pass it as a build arg:
 
 ```bash
-docker compose build --build-arg SERVER_VERSION=1.0.0 server
+docker compose build --build-arg SERVER_VERSION=1.1.0 server
 ```
 
 If you're running behind an existing reverse proxy on the host (rather than exposing the `web`
