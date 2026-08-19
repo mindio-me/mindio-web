@@ -13,6 +13,7 @@ personal input -> MindIO -> personal output
 Capture notes, documents, images, media, AI conversations, and web clips. MindIO helps you organize and refine them, then publish the result to your personal website, articles, project pages, or social media.
 
 Website: https://mindio.me
+Live demo: https://demo.mindio.me
 
 ## Features
 
@@ -43,7 +44,15 @@ cp .env.example .env
 docker compose up -d
 ```
 
-MindIO will be available at `http://localhost` or your configured domain.
+MindIO will be available at `http://localhost` or your configured domain. This always builds
+against the latest backend release. To pin an older one, pass it as a build arg:
+
+```bash
+docker compose build --build-arg SERVER_VERSION=1.0.0 server
+```
+
+If you're running behind an existing reverse proxy on the host (rather than exposing the `web`
+container directly on 80/443), set `PORT` in `.env` to an internal port and proxy to it.
 
 ## Development
 
