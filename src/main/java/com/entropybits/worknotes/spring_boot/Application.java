@@ -12,6 +12,7 @@ import com.entropybits.worknotes.spring_boot.integration.reddit.RedditProperties
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
@@ -20,7 +21,15 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class Application {
 
 	public static void main(String[] args) {
-		SpringApplication.run(Application.class, args);
+		SpringApplication app = new SpringApplication(Application.class);
+		// ProGuard obfuscation can rename unrelated classes in different packages to the
+		// same simple name, which collides under Spring's default (simple-name-only) bean
+		// naming. Fully-qualified names stay unique regardless of what ProGuard renames
+		// classes to. Set via SpringApplication (not a second @ComponentScan) — stacking
+		// @ComponentScan next to @SpringBootApplication's implied one double-scans, since
+		// @ComponentScan is @Repeatable.
+		app.setBeanNameGenerator(new FullyQualifiedAnnotationBeanNameGenerator());
+		app.run(args);
 	}
 
 }
