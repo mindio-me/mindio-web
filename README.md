@@ -2,6 +2,8 @@
 
 Spring Boot backend for MindIO, a personal workspace for turning input into output. This is the API-only backend; the web UI lives in a separate repo: [mindio-web](https://github.com/mindio-me/mindio-web).
 
+Live demo: https://demo.mindio.me
+
 ## Tech Stack
 
 - Spring Boot 3.2
