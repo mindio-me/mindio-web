@@ -2608,6 +2608,8 @@ export default {
 
 <style scoped lang="scss">
 .notes-page {
+  height: 100%;
+  overflow: hidden;
   background: transparent;
 }
 

@@ -298,6 +298,13 @@ export default {
   }
 }
 
+// 顶部栏（及只读提示条）之外的剩余空间，页面内容在这里用 height:100% 铺满
+.workspace-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 // 切换按钮
 .topbar-toggle-btn {
   position: fixed;
@@ -342,6 +349,7 @@ export default {
   margin-bottom: 10px;
   padding: 0 2px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 // 顶部栏动画
@@ -499,6 +507,11 @@ export default {
     background: var(--bg-secondary);
     color: var(--text-color);
   }
+}
+
+.desktop-readonly-alert {
+  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 @media screen and (max-width: 768px) {
