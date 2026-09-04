@@ -8,6 +8,7 @@ package com.entropybits.worknotes.spring_boot.service;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipRequest;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipResponse;
 import com.entropybits.worknotes.spring_boot.entity.ClipTagLink;
+import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
 import com.entropybits.worknotes.spring_boot.entity.User;
@@ -23,6 +24,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -42,6 +45,7 @@ public class SourceClipService {
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
     private final ClipTagLinkRepository clipTagLinkRepository;
+    private final ContentIndexingService contentIndexingService;
 
     @Transactional
     public SourceClipResponse createClip(SourceClipRequest request, String username) {
@@ -63,6 +67,7 @@ public class SourceClipService {
                 .build();
         clip = clipRepository.save(clip);
         replaceManualTags(clip, request.getTagIds(), user, false);
+        reindexClipAfterCommit(clip.getId());
 
         return SourceClipResponse.fromEntity(clip);
     }
@@ -123,6 +128,7 @@ public class SourceClipService {
         clip.setExcerpt(buildExcerpt(request.getContent()));
         clip = clipRepository.save(clip);
         replaceManualTags(clip, request.getTagIds(), user, true);
+        reindexClipAfterCommit(clip.getId());
 
         return SourceClipResponse.fromEntity(clip);
     }
@@ -137,6 +143,7 @@ public class SourceClipService {
     @Transactional
     public void deleteClip(Long id, String username) {
         SourceClip clip = findClip(id);
+        contentIndexingService.deleteChunksFor(ContentChunk.SourceType.CLIP, id);
         // clip_tag_links 的外键没有 ON DELETE CASCADE，需要应用层先手动删除关联行
         List<ClipTagLink> links = clipTagLinkRepository.findByClip(clip);
         clipTagLinkRepository.deleteAll(links);
@@ -211,6 +218,26 @@ public class SourceClipService {
     private User getUser(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("用户不存在"));
+    }
+
+    /**
+     * 把异步重索引推迟到当前事务真正提交之后再触发。
+     * reindexClip 是 @Async + @Transactional：它跑在另一个线程、另一个连接、另一个事务里，
+     * 看不到调用方还没提交的行。若在事务内直接调用，创建场景会 findById 落空（静默不索引），
+     * 更新场景会读到旧内容（哈希不变，整篇跳过）。没有事务上下文时（如单元测试直接 new 出服务）
+     * 回退到立即调用，行为与改动前一致。
+     */
+    private void reindexClipAfterCommit(Long clipId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    contentIndexingService.reindexClip(clipId);
+                }
+            });
+        } else {
+            contentIndexingService.reindexClip(clipId);
+        }
     }
 
     /**

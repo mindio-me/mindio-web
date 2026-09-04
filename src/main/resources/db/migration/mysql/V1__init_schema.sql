@@ -1,3 +1,5 @@
+-- 本文件在 db/migration/h2/ 下有同版本号的兄弟文件（h2/V1__init_schema.sql），
+-- 两者必须保持同步：相同版本号、相同 schema，只允许 vendor 特定的类型/语法差异。
 
     create table achievements (
         display_order integer not null,
@@ -80,6 +82,28 @@
         id bigint not null auto_increment,
         linked_at datetime(6) not null,
         tag_id bigint not null,
+        primary key (id)
+    ) engine=InnoDB;
+
+    create table contact_submission_notes (
+        created_at datetime(6) not null,
+        created_by_id bigint not null,
+        id bigint not null auto_increment,
+        submission_id bigint not null,
+        content varchar(2000) not null,
+        primary key (id)
+    ) engine=InnoDB;
+
+    create table contact_submissions (
+        attachment_id bigint,
+        created_at datetime(6) not null,
+        id bigint not null auto_increment,
+        updated_at datetime(6) not null,
+        status varchar(20) not null,
+        email varchar(200) not null,
+        name varchar(200) not null,
+        organization varchar(200),
+        project_summary longtext not null,
         primary key (id)
     ) engine=InnoDB;
 
@@ -249,6 +273,32 @@
         primary key (id)
     ) engine=InnoDB;
 
+    create table news_item (
+        fetch_date date not null,
+        rank_order integer not null,
+        fetched_at datetime(6) not null,
+        id bigint not null auto_increment,
+        source_key varchar(50) not null,
+        title varchar(500) not null,
+        url varchar(1000),
+        primary key (id)
+    ) engine=InnoDB;
+
+    create table news_source_config (
+        enabled bit not null,
+        sort_order integer not null,
+        created_at datetime(6) not null,
+        id bigint not null auto_increment,
+        last_fetched_at datetime(6),
+        category varchar(10) not null,
+        last_fetch_status varchar(20),
+        source_key varchar(50) not null,
+        name_en varchar(100) not null,
+        name_zh varchar(100) not null,
+        last_fetch_error varchar(500),
+        primary key (id)
+    ) engine=InnoDB;
+
     create table note_clip_refs (
         sort_order integer not null,
         clip_id bigint not null,
@@ -388,6 +438,24 @@
         primary key (id)
     ) engine=InnoDB;
 
+    create table services (
+        display_order integer not null,
+        is_active bit not null,
+        is_featured bit not null,
+        created_at datetime(6) not null,
+        id bigint not null auto_increment,
+        modified_at datetime(6) not null,
+        owner_id bigint not null,
+        category varchar(100),
+        icon varchar(100),
+        name varchar(200) not null,
+        description longtext not null,
+        detailed_description longtext,
+        features longtext,
+        pricing longtext,
+        primary key (id)
+    ) engine=InnoDB;
+
     create table site_settings (
         created_at datetime(6) not null,
         id bigint not null auto_increment,
@@ -427,6 +495,20 @@
         id bigint not null auto_increment,
         owner_id bigint not null,
         name varchar(50) not null,
+        primary key (id)
+    ) engine=InnoDB;
+
+    create table timesheet_entries (
+        duration_minutes integer not null,
+        end_time time(6),
+        entry_date date not null,
+        start_time time(6),
+        created_at datetime(6) not null,
+        id bigint not null auto_increment,
+        project_id bigint,
+        updated_at datetime(6) not null,
+        label varchar(200),
+        note longtext,
         primary key (id)
     ) engine=InnoDB;
 
@@ -478,351 +560,391 @@
         primary key (id)
     ) engine=InnoDB;
 
-    alter table bookings
+    alter table bookings 
        add constraint UK_mk1onpvggblu0v2xsbrlsatg9 unique (external_id);
 
-    alter table clip_tag_links
+    alter table clip_tag_links 
        add constraint UK95rgdxsrwy8j0m6wfc5r6rnqg unique (clip_id, tag_id);
 
-    create index idx_mapping_id
+    create index idx_mapping_id 
        on feishu_document_snapshots (mapping_id);
 
-    create index idx_note_id
+    create index idx_note_id 
        on feishu_document_snapshots (note_id);
 
-    create index idx_document_id
+    create index idx_document_id 
        on feishu_document_snapshots (document_id);
 
-    create index idx_user_id
+    create index idx_user_id 
        on feishu_document_snapshots (user_id);
 
-    create index idx_created_at
+    create index idx_created_at 
        on feishu_document_snapshots (created_at);
 
-    create index idx_mapping_created
+    create index idx_mapping_created 
        on feishu_document_snapshots (mapping_id, created_at);
 
-    create index idx_document_created
+    create index idx_document_created 
        on feishu_document_snapshots (document_id, created_at);
 
-    create index idx_snapshot_id
+    create index idx_snapshot_id 
        on feishu_image_mappings (snapshot_id);
 
-    create index idx_fim_note_id
+    create index idx_fim_note_id 
        on feishu_image_mappings (note_id);
 
-    create index idx_fim_document_id
+    create index idx_fim_document_id 
        on feishu_image_mappings (document_id);
 
-    create index idx_fim_user_id
+    create index idx_fim_user_id 
        on feishu_image_mappings (user_id);
 
-    create index idx_download_status
+    create index idx_download_status 
        on feishu_image_mappings (download_status);
 
-    alter table feishu_image_mappings
+    alter table feishu_image_mappings 
        add constraint UK_co037nv2yfiptewn8psyht4uf unique (file_token);
 
-    alter table feishu_oauth_tokens
+    alter table feishu_oauth_tokens 
        add constraint UK_stwy2xkyb2onk72c6xkh61dc9 unique (user_id);
 
-    alter table feishu_wiki_import_mappings
+    alter table feishu_wiki_import_mappings 
        add constraint UKbc600o2jf0bfan1l92gkpblqs unique (user_id, space_id, node_token);
 
-    alter table feishu_wiki_import_mappings
+    alter table feishu_wiki_import_mappings 
        add constraint UK_8frxrib0rsafh4ej2te3anu2h unique (latest_snapshot_id);
 
-    alter table feishu_wiki_import_mappings
+    alter table feishu_wiki_import_mappings 
        add constraint UK_eprm3g92x57svienla8rm2csj unique (note_id);
 
-    create index idx_ldd_owner
+    create index idx_ldd_owner 
        on local_doc_directories (owner_id);
 
-    alter table local_doc_directories
+    alter table local_doc_directories 
        add constraint UKg0bmgl8xct5r0s6ykt5lcvs00 unique (owner_id, dir_path);
 
-    create index idx_ld_directory
+    create index idx_ld_directory 
        on local_documents (directory_id);
 
-    create index idx_ld_owner
+    create index idx_ld_owner 
        on local_documents (owner_id);
 
-    create index idx_ld_file_type
+    create index idx_ld_file_type 
        on local_documents (file_type);
 
-    create index idx_ld_file_name
+    create index idx_ld_file_name 
        on local_documents (file_name);
 
-    create index idx_lmd_owner
+    create index idx_lmd_owner 
        on local_media_directories (owner_id);
 
-    alter table local_media_directories
+    alter table local_media_directories 
        add constraint UK7k4ybh60o95yf2t72pml9dc5j unique (owner_id, dir_path);
 
-    create index idx_lmf_directory
+    create index idx_lmf_directory 
        on local_media_files (directory_id);
 
-    create index idx_lmf_owner
+    create index idx_lmf_owner 
        on local_media_files (owner_id);
 
-    create index idx_lmf_media_type
+    create index idx_lmf_media_type 
        on local_media_files (media_type);
 
-    create index idx_lmf_file_name
+    create index idx_lmf_file_name 
        on local_media_files (file_name);
 
-    alter table note_clip_refs
+    create index idx_ni_source_date 
+       on news_item (source_key, fetch_date);
+
+    create index idx_ni_fetch_date 
+       on news_item (fetch_date);
+
+    create index idx_nsc_category 
+       on news_source_config (category);
+
+    create index idx_nsc_sort 
+       on news_source_config (sort_order);
+
+    alter table news_source_config 
+       add constraint UK_sk1s7w1plt3msktv2de8lorr6 unique (source_key);
+
+    alter table note_clip_refs 
        add constraint UK1bp4kus2a826h2hrlds07515o unique (note_id, clip_id);
 
-    alter table profiles
+    alter table profiles 
        add constraint UK_4ixsj6aqve5pxrbw2u0oyk8bb unique (user_id);
 
-    alter table reddit_user_auth
+    alter table reddit_user_auth 
        add constraint UK_o7ck2ob7lsin4swr4ghaq86em unique (user_id);
 
-    alter table tags
+    alter table tags 
        add constraint UKb79b0c5nhcyj19v5obp52908f unique (name, owner_id);
 
-    create index idx_user_credentials_uid_provider
+    create index idx_user_credentials_uid_provider 
        on user_credentials (uid, provider);
 
-    alter table user_credentials
+    alter table user_credentials 
        add constraint uk_user_credentials_uid_provider unique (uid, provider);
 
-    alter table users
+    alter table users 
        add constraint UK_r43af9ap4edm43mmtq01oddj6 unique (username);
 
-    alter table users
+    alter table users 
        add constraint UK_6dotkott2kjsp8vw4d0m25fb7 unique (email);
 
-    alter table achievements
-       add constraint FK6l3b7vgp9oglk6k7104wv7kvf
-       foreign key (owner_id)
+    alter table achievements 
+       add constraint FK6l3b7vgp9oglk6k7104wv7kvf 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table attachments
-       add constraint FKrap79tymgdjf1c5x4dla3rekl
-       foreign key (user_id)
+    alter table attachments 
+       add constraint FKrap79tymgdjf1c5x4dla3rekl 
+       foreign key (user_id) 
        references users (id);
 
-    alter table bookmark_agent_job
-       add constraint FK4o3ex1kqpmhfnmyw11hxc33xn
-       foreign key (owner_id)
+    alter table bookmark_agent_job 
+       add constraint FK4o3ex1kqpmhfnmyw11hxc33xn 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table clip_search_messages
-       add constraint FKcc09h39tahamlcavaoh9wdrtr
-       foreign key (owner_id)
+    alter table clip_search_messages 
+       add constraint FKcc09h39tahamlcavaoh9wdrtr 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table clip_tag_links
-       add constraint FK8nokpg6b95lmpexc79u9oah9r
-       foreign key (clip_id)
-       references source_clips (id)
+    alter table clip_tag_links 
+       add constraint FK8nokpg6b95lmpexc79u9oah9r 
+       foreign key (clip_id) 
+       references source_clips (id) 
        on delete cascade;
 
-    alter table clip_tag_links
-       add constraint FK8rjoi82vbwf6aunghy4a9updk
-       foreign key (tag_id)
-       references tags (id)
+    alter table clip_tag_links 
+       add constraint FK8rjoi82vbwf6aunghy4a9updk 
+       foreign key (tag_id) 
+       references tags (id) 
        on delete cascade;
 
-    alter table feishu_document_snapshots
-       add constraint FKs9ag5kj0piekiy980g6523ei3
-       foreign key (mapping_id)
-       references feishu_wiki_import_mappings (id);
-
-    alter table feishu_document_snapshots
-       add constraint FK2xkd3eswsiam0q4n3r1deb43v
-       foreign key (note_id)
-       references notes (id);
-
-    alter table feishu_document_snapshots
-       add constraint FKe50aief8qy2mynibmeu1fg8f7
-       foreign key (user_id)
+    alter table contact_submission_notes 
+       add constraint FKbl2eu6ek5p3x4cbirn13n3gq8 
+       foreign key (created_by_id) 
        references users (id);
 
-    alter table feishu_image_mappings
-       add constraint FK1putipwa6vw06diqy74nnraom
-       foreign key (attachment_id)
+    alter table contact_submission_notes 
+       add constraint FK3p5lnsfw70inalwjvh6i38fik 
+       foreign key (submission_id) 
+       references contact_submissions (id);
+
+    alter table contact_submissions 
+       add constraint FKkijcnts80q614f3w7976wn20q 
+       foreign key (attachment_id) 
        references attachments (att_id);
 
-    alter table feishu_image_mappings
-       add constraint FK7n6h80r3mbtbrdafv7qi3x5ak
-       foreign key (note_id)
+    alter table feishu_document_snapshots 
+       add constraint FKs9ag5kj0piekiy980g6523ei3 
+       foreign key (mapping_id) 
+       references feishu_wiki_import_mappings (id);
+
+    alter table feishu_document_snapshots 
+       add constraint FK2xkd3eswsiam0q4n3r1deb43v 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table feishu_image_mappings
-       add constraint FKsh7p1g62hsrpbw8fmxxvhokd
-       foreign key (snapshot_id)
-       references feishu_document_snapshots (id);
-
-    alter table feishu_image_mappings
-       add constraint FKndg94u94fjr1basumh7rwkw6d
-       foreign key (user_id)
+    alter table feishu_document_snapshots 
+       add constraint FKe50aief8qy2mynibmeu1fg8f7 
+       foreign key (user_id) 
        references users (id);
 
-    alter table feishu_oauth_tokens
-       add constraint FKp7a7qfk04kbpnw167vyyirkpo
-       foreign key (user_id)
-       references users (id);
+    alter table feishu_image_mappings 
+       add constraint FK1putipwa6vw06diqy74nnraom 
+       foreign key (attachment_id) 
+       references attachments (att_id);
 
-    alter table feishu_wiki_import_mappings
-       add constraint FK9jbuye94036piq20e6tb7pj93
-       foreign key (latest_snapshot_id)
-       references feishu_document_snapshots (id);
-
-    alter table feishu_wiki_import_mappings
-       add constraint FK8bwdi6v4daim86cbsyo0f5dsh
-       foreign key (note_id)
+    alter table feishu_image_mappings 
+       add constraint FK7n6h80r3mbtbrdafv7qi3x5ak 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table feishu_wiki_import_mappings
-       add constraint FK4v0v958y39upqsn84ifimvgw5
-       foreign key (user_id)
+    alter table feishu_image_mappings 
+       add constraint FKsh7p1g62hsrpbw8fmxxvhokd 
+       foreign key (snapshot_id) 
+       references feishu_document_snapshots (id);
+
+    alter table feishu_image_mappings 
+       add constraint FKndg94u94fjr1basumh7rwkw6d 
+       foreign key (user_id) 
        references users (id);
 
-    alter table import_item
-       add constraint FKgq6qawhfhrstk0h6q8996wlhi
-       foreign key (job_id)
+    alter table feishu_oauth_tokens 
+       add constraint FKp7a7qfk04kbpnw167vyyirkpo 
+       foreign key (user_id) 
+       references users (id);
+
+    alter table feishu_wiki_import_mappings 
+       add constraint FK9jbuye94036piq20e6tb7pj93 
+       foreign key (latest_snapshot_id) 
+       references feishu_document_snapshots (id);
+
+    alter table feishu_wiki_import_mappings 
+       add constraint FK8bwdi6v4daim86cbsyo0f5dsh 
+       foreign key (note_id) 
+       references notes (id);
+
+    alter table feishu_wiki_import_mappings 
+       add constraint FK4v0v958y39upqsn84ifimvgw5 
+       foreign key (user_id) 
+       references users (id);
+
+    alter table import_item 
+       add constraint FKgq6qawhfhrstk0h6q8996wlhi 
+       foreign key (job_id) 
        references import_job (id);
 
-    alter table import_job
-       add constraint FKncka7a7bpq636cmcsvrnvaj10
-       foreign key (owner_id)
+    alter table import_job 
+       add constraint FKncka7a7bpq636cmcsvrnvaj10 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table local_doc_directories
-       add constraint FKfcvkb15pbj2fv3p03h4rwa4hv
-       foreign key (owner_id)
+    alter table local_doc_directories 
+       add constraint FKfcvkb15pbj2fv3p03h4rwa4hv 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table local_documents
-       add constraint FKjdrs71ru9s98b1gdm93rr6wv4
-       foreign key (directory_id)
+    alter table local_documents 
+       add constraint FKjdrs71ru9s98b1gdm93rr6wv4 
+       foreign key (directory_id) 
        references local_doc_directories (id);
 
-    alter table local_documents
-       add constraint FK3pk4yvm7secpyg0t9p0kdbbfx
-       foreign key (owner_id)
+    alter table local_documents 
+       add constraint FK3pk4yvm7secpyg0t9p0kdbbfx 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table local_media_directories
-       add constraint FKjybowpi1ncc6cmxoolqx54oof
-       foreign key (owner_id)
+    alter table local_media_directories 
+       add constraint FKjybowpi1ncc6cmxoolqx54oof 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table local_media_files
-       add constraint FK7i8juo71gj7k7s9ovem76srkt
-       foreign key (directory_id)
+    alter table local_media_files 
+       add constraint FK7i8juo71gj7k7s9ovem76srkt 
+       foreign key (directory_id) 
        references local_media_directories (id);
 
-    alter table local_media_files
-       add constraint FK54psjjr1h140a7wpiogctq8ey
-       foreign key (owner_id)
+    alter table local_media_files 
+       add constraint FK54psjjr1h140a7wpiogctq8ey 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table note_clip_refs
-       add constraint FKemkabqagq18ihc4m8vfey410a
-       foreign key (clip_id)
+    alter table note_clip_refs 
+       add constraint FKemkabqagq18ihc4m8vfey410a 
+       foreign key (clip_id) 
        references source_clips (id);
 
-    alter table note_clip_refs
-       add constraint FKr8qkrnv3nl5a9fw7w1qhpqwqw
-       foreign key (note_id)
+    alter table note_clip_refs 
+       add constraint FKr8qkrnv3nl5a9fw7w1qhpqwqw 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table note_section_types
-       add constraint FK45f896mb6irf80lf5u1tw9h8f
-       foreign key (note_id)
+    alter table note_section_types 
+       add constraint FK45f896mb6irf80lf5u1tw9h8f 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table note_sections
-       add constraint FKi4h2ixa94my7d36n6klat7kf2
-       foreign key (note_id)
+    alter table note_sections 
+       add constraint FKi4h2ixa94my7d36n6klat7kf2 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table note_tags
-       add constraint FK8babdwu6uqiu4rdkeuy8dkna0
-       foreign key (tag_id)
+    alter table note_tags 
+       add constraint FK8babdwu6uqiu4rdkeuy8dkna0 
+       foreign key (tag_id) 
        references tags (id);
 
-    alter table note_tags
-       add constraint FKb15yxop81senc5xs5tjrsy4k4
-       foreign key (note_id)
+    alter table note_tags 
+       add constraint FKb15yxop81senc5xs5tjrsy4k4 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table notes
-       add constraint FK5n5jgcd6tqt248r97q0yrt3xp
-       foreign key (owner_id)
+    alter table notes 
+       add constraint FK5n5jgcd6tqt248r97q0yrt3xp 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table notes
-       add constraint FKf5kwkuxo55mgr2vkluhrh7tth
-       foreign key (project_id)
+    alter table notes 
+       add constraint FKf5kwkuxo55mgr2vkluhrh7tth 
+       foreign key (project_id) 
        references projects (id);
 
-    alter table notes
-       add constraint FKmgt4jtaoph07qv3sfwk1m1gdu
-       foreign key (source_note_id)
+    alter table notes 
+       add constraint FKmgt4jtaoph07qv3sfwk1m1gdu 
+       foreign key (source_note_id) 
        references notes (id);
 
-    alter table profiles
-       add constraint FK410q61iev7klncmpqfuo85ivh
-       foreign key (user_id)
+    alter table profiles 
+       add constraint FK410q61iev7klncmpqfuo85ivh 
+       foreign key (user_id) 
        references users (id);
 
-    alter table projects
-       add constraint FKmueqy6cpcwpfl8gnnag4idjt9
-       foreign key (owner_id)
+    alter table projects 
+       add constraint FKmueqy6cpcwpfl8gnnag4idjt9 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table reddit_publish_logs
-       add constraint FK2i3wwv4047g6u0o7c4awkgj02
-       foreign key (note_id)
+    alter table reddit_publish_logs 
+       add constraint FK2i3wwv4047g6u0o7c4awkgj02 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table reddit_publish_logs
-       add constraint FKhie1uye7tp3qhyrii4ogc5bx5
-       foreign key (user_id)
+    alter table reddit_publish_logs 
+       add constraint FKhie1uye7tp3qhyrii4ogc5bx5 
+       foreign key (user_id) 
        references users (id);
 
-    alter table reddit_user_auth
-       add constraint FK31un24mrpkryo7ust8gv17h7s
-       foreign key (user_id)
+    alter table reddit_user_auth 
+       add constraint FK31un24mrpkryo7ust8gv17h7s 
+       foreign key (user_id) 
        references users (id);
 
-    alter table resources
-       add constraint FK89t6p8a75xsy1pikkwcx85grf
-       foreign key (owner_id)
+    alter table resources 
+       add constraint FK89t6p8a75xsy1pikkwcx85grf 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table source_clips
-       add constraint FKtbrug1dirmd9myxo10o6081d2
-       foreign key (owner_id)
+    alter table services 
+       add constraint FKelgjlc4287c3492tviyvrv52f 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table tags
-       add constraint FKx0nceen1ii190w7et5r042qt
-       foreign key (owner_id)
+    alter table source_clips 
+       add constraint FKtbrug1dirmd9myxo10o6081d2 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table user_credentials
-       add constraint FK86jxhugpvlrouvsseyxd2yaun
-       foreign key (uid)
+    alter table tags 
+       add constraint FKx0nceen1ii190w7et5r042qt 
+       foreign key (owner_id) 
        references users (id);
 
-    alter table wechat_bindings
-       add constraint FKpd453sx5dl6rc63qrvi3tarx3
-       foreign key (user_id)
+    alter table timesheet_entries 
+       add constraint FK9b4mie5i1xq36af6a87iucp5t 
+       foreign key (project_id) 
+       references projects (id);
+
+    alter table user_credentials 
+       add constraint FK86jxhugpvlrouvsseyxd2yaun 
+       foreign key (uid) 
        references users (id);
 
-    alter table wechat_publish_logs
-       add constraint FKpvmwrtrlbnxht58c5fxr5n9jv
-       foreign key (note_id)
+    alter table wechat_bindings 
+       add constraint FKpd453sx5dl6rc63qrvi3tarx3 
+       foreign key (user_id) 
+       references users (id);
+
+    alter table wechat_publish_logs 
+       add constraint FKpvmwrtrlbnxht58c5fxr5n9jv 
+       foreign key (note_id) 
        references notes (id);
 
-    alter table wechat_publish_logs
-       add constraint FKgyoxnu2u15451svx1ydren2e5
-       foreign key (user_id)
+    alter table wechat_publish_logs 
+       add constraint FKgyoxnu2u15451svx1ydren2e5 
+       foreign key (user_id) 
        references users (id);

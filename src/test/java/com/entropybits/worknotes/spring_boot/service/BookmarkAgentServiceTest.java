@@ -45,13 +45,14 @@ class BookmarkAgentServiceTest {
     @Mock AiTranslationService openAiService;
     @Mock AiTranslationService deepseekService;
     @Mock AiTranslationService doubaoService;
+    @Mock ContentIndexingService contentIndexingService;
 
     private BookmarkAgentService service;
 
     private void setUp() {
         service = new BookmarkAgentService(jobRepository, clipRepository, noteRepository, noteClipRefRepository,
                 userRepository, tagRepository, clipTagLinkRepository, aiProperties,
-                anthropicService, openAiService, deepseekService, doubaoService);
+                anthropicService, openAiService, deepseekService, doubaoService, contentIndexingService);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "self", service);
     }
 

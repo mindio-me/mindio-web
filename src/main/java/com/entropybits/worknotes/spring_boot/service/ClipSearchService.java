@@ -14,10 +14,12 @@ import com.entropybits.worknotes.spring_boot.dto.SourceClipDraft;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipRequest;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipResponse;
 import com.entropybits.worknotes.spring_boot.entity.ClipSearchMessage;
+import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.exception.UnauthorizedException;
 import com.entropybits.worknotes.spring_boot.repository.ClipSearchMessageRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.entropybits.worknotes.spring_boot.search.SearchResultItem;
 import com.entropybits.worknotes.spring_boot.search.WebSearchProviderResolver;
@@ -51,6 +53,8 @@ public class ClipSearchService {
     private final ObjectMapper objectMapper;
     private final ClipImportService clipImportService;
     private final SourceClipService sourceClipService;
+    private final NoteRepository noteRepository;
+    private final NoteClipRefService noteClipRefService;
 
     public ClipSearchService(
             ClipSearchMessageRepository messageRepository,
@@ -63,7 +67,9 @@ public class ClipSearchService {
             WebSearchProviderResolver searchProviderResolver,
             ObjectMapper objectMapper,
             ClipImportService clipImportService,
-            SourceClipService sourceClipService) {
+            SourceClipService sourceClipService,
+            NoteRepository noteRepository,
+            NoteClipRefService noteClipRefService) {
         this.messageRepository = messageRepository;
         this.userRepository = userRepository;
         this.aiProperties = aiProperties;
@@ -75,12 +81,15 @@ public class ClipSearchService {
         this.objectMapper = objectMapper;
         this.clipImportService = clipImportService;
         this.sourceClipService = sourceClipService;
+        this.noteRepository = noteRepository;
+        this.noteClipRefService = noteClipRefService;
     }
 
     @Transactional(readOnly = true)
-    public List<ClipSearchMessageResponse> listHistory(String username) {
+    public List<ClipSearchMessageResponse> listHistory(String username, Long noteId) {
         User user = getUser(username);
-        List<ClipSearchMessage> messages = new ArrayList<>(messageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user));
+        Note note = getNote(noteId);
+        List<ClipSearchMessage> messages = new ArrayList<>(messageRepository.findTop50ByOwnerAndNoteOrderByCreatedAtDesc(user, note));
         Collections.reverse(messages);
         return messages.stream().map(this::toResponse).toList();
     }
@@ -88,14 +97,15 @@ public class ClipSearchService {
     // 刻意不加 @Transactional：整条流水线要跑最长约 270 秒的外部 HTTP（两次 AI 调用 + 一次搜索），
     // 全程占着一条 Hikari 连接会把连接池耗尽。每次 save 各自开自己的短事务即可，这里也不需要跨语句原子性
     // ——流水线中途失败时用户自己那条消息本就应该留下来，而不是被一起回滚。
-    public List<ClipSearchMessageResponse> sendMessage(String username, String content) {
+    public List<ClipSearchMessageResponse> sendMessage(String username, String content, Long noteId) {
         User user = getUser(username);
+        Note note = getNote(noteId);
 
-        List<ClipSearchMessage> priorHistory = new ArrayList<>(messageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user));
+        List<ClipSearchMessage> priorHistory = new ArrayList<>(messageRepository.findTop50ByOwnerAndNoteOrderByCreatedAtDesc(user, note));
         Collections.reverse(priorHistory);
 
         ClipSearchMessage userMessage = messageRepository.save(ClipSearchMessage.builder()
-                .owner(user).role(ClipSearchMessage.Role.USER).content(content).build());
+                .owner(user).note(note).role(ClipSearchMessage.Role.USER).content(content).build());
 
         String assistantReply;
         List<ClipSearchResultItem> assistantResults = null;
@@ -143,7 +153,7 @@ public class ClipSearchService {
         }
 
         ClipSearchMessage assistantMessage = messageRepository.save(ClipSearchMessage.builder()
-                .owner(user).role(ClipSearchMessage.Role.ASSISTANT).content(assistantReply)
+                .owner(user).note(note).role(ClipSearchMessage.Role.ASSISTANT).content(assistantReply)
                 .resultsJson(assistantResults == null ? null : writeJson(assistantResults))
                 .build());
 
@@ -188,6 +198,10 @@ public class ClipSearchService {
         createRequest.setContentFormat(draft.getContentFormat());
 
         SourceClipResponse created = sourceClipService.createClip(createRequest, username);
+
+        if (message.getNote() != null) {
+            noteClipRefService.linkClipToNote(message.getNote().getId(), created.getId(), null);
+        }
 
         List<ClipSearchResultItem> updated = new ArrayList<>(results);
         updated.set(resultIndex, new ClipSearchResultItem(item.title(), item.url(), item.excerpt(), created.getId()));
@@ -248,5 +262,10 @@ public class ClipSearchService {
     private User getUser(String username) {
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("用户不存在"));
+    }
+
+    private Note getNote(Long noteId) {
+        return noteRepository.findById(noteId)
+                .orElseThrow(() -> new ResourceNotFoundException("笔记不存在"));
     }
 }

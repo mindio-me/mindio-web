@@ -7,6 +7,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.dto.NoteRequest;
 import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
+import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.Project;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
@@ -31,6 +32,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -52,6 +55,7 @@ public class NoteService {
     private final FeishuWikiImportMappingRepository feishuWikiImportMappingRepository;
     private final FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository;
     private final FeishuImageMappingRepository feishuImageMappingRepository;
+    private final ContentIndexingService contentIndexingService;
 
     /**
      * 创建笔记
@@ -82,6 +86,7 @@ public class NoteService {
                 .build();
 
         Note savedNote = noteRepository.save(note);
+        reindexNoteAfterCommit(savedNote.getId());
         return enrichWithFeishu(NoteResponse.fromEntity(savedNote), savedNote);
     }
 
@@ -116,6 +121,7 @@ public class NoteService {
         note.setSectionTypes(request.getSectionTypes());
 
         Note updatedNote = noteRepository.save(note);
+        reindexNoteAfterCommit(updatedNote.getId());
         return enrichWithFeishu(NoteResponse.fromEntity(updatedNote), updatedNote);
     }
 
@@ -158,6 +164,7 @@ public class NoteService {
         }
 
         // 4. 删除笔记
+        contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, note.getId());
         noteRepository.delete(note);
     }
 
@@ -313,6 +320,26 @@ public class NoteService {
     private Note getNoteById(Long noteId) {
         return noteRepository.findById(noteId)
                 .orElseThrow(() -> new ResourceNotFoundException("笔记", "id", noteId));
+    }
+
+    /**
+     * 把异步重索引推迟到当前事务真正提交之后再触发。
+     * reindexNote 是 @Async + @Transactional：它跑在另一个线程、另一个连接、另一个事务里，
+     * 看不到调用方还没提交的行。若在事务内直接调用，创建场景会 findById 落空（静默不索引），
+     * 更新场景会读到旧内容（哈希不变，整篇跳过）。没有事务上下文时（如单元测试直接 new 出服务）
+     * 回退到立即调用，行为与改动前一致。
+     */
+    private void reindexNoteAfterCommit(Long noteId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    contentIndexingService.reindexNote(noteId);
+                }
+            });
+        } else {
+            contentIndexingService.reindexNote(noteId);
+        }
     }
 
     private User getUserByUsername(String username) {

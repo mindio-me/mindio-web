@@ -17,6 +17,11 @@ import java.util.List;
 
 public interface SourceClipRepository extends JpaRepository<SourceClip, Long> {
 
+    /**
+     * 查找用户的所有收藏（不分页，用于存量回填索引）
+     */
+    List<SourceClip> findByOwner(User owner);
+
     Page<SourceClip> findByOwner(User owner, Pageable pageable);
 
     Page<SourceClip> findByOwnerAndSourceType(User owner, SourceClip.SourceType sourceType, Pageable pageable);

@@ -8,6 +8,7 @@ package com.entropybits.worknotes.spring_boot.service;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipRequest;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipResponse;
 import com.entropybits.worknotes.spring_boot.entity.ClipTagLink;
+import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
 import com.entropybits.worknotes.spring_boot.entity.User;
@@ -19,6 +20,7 @@ import com.entropybits.worknotes.spring_boot.repository.TagRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
@@ -34,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -46,12 +49,13 @@ class SourceClipServiceTest {
     @Mock UserRepository userRepository;
     @Mock TagRepository tagRepository;
     @Mock ClipTagLinkRepository clipTagLinkRepository;
+    @Mock ContentIndexingService contentIndexingService;
 
     private SourceClipService service;
 
     @Test
     void updateTitle_changesOnlyTitle_preservesOtherFields() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         SourceClip clip = SourceClip.builder()
                 .id(1L)
                 .sourceType(SourceClip.SourceType.WEBPAGE)
@@ -72,7 +76,7 @@ class SourceClipServiceTest {
 
     @Test
     void updateTitle_throwsWhenClipNotFound() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         when(clipRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateTitle(99L, "x"))
@@ -81,7 +85,7 @@ class SourceClipServiceTest {
 
     @Test
     void getClip_bumpsLastAccessedAtToNow() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         SourceClip clip = SourceClip.builder().id(1L).sourceType(SourceClip.SourceType.WEBPAGE)
                 .title("Title").lastAccessedAt(java.time.LocalDateTime.now().minusDays(3)).build();
         when(clipRepository.findById(1L)).thenReturn(Optional.of(clip));
@@ -96,7 +100,7 @@ class SourceClipServiceTest {
 
     @Test
     void listRecentlyAccessed_mapsToSummaryResponsesInRepositoryOrder() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip recent = SourceClip.builder().id(2L).title("最近打开的").build();
         SourceClip older = SourceClip.builder().id(1L).title("较早打开的").build();
@@ -120,7 +124,7 @@ class SourceClipServiceTest {
 
     @Test
     void createClip_withNewTagId_createsManualLinkAndFlipsTagUsedByClips() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).username("alice").build();
         Tag tag = Tag.builder().id(10L).name("AI").owner(user).usedByClips(false).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
@@ -140,7 +144,7 @@ class SourceClipServiceTest {
 
     @Test
     void updateClip_promotesExistingAiSuggestedLinkWhenTagKeptInNewList() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).username("alice").build();
         Tag tag = Tag.builder().id(20L).name("AI").owner(user).usedByClips(true).build();
         SourceClip clip = SourceClip.builder().id(1L).sourceType(SourceClip.SourceType.WEBPAGE)
@@ -164,7 +168,7 @@ class SourceClipServiceTest {
 
     @Test
     void updateClip_demotesManualAiLinkInsteadOfDeletingWhenTagRemovedFromNewList() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).username("alice").build();
         Tag tag = Tag.builder().id(30L).name("AI").owner(user).usedByClips(true).build();
         SourceClip clip = SourceClip.builder().id(1L).sourceType(SourceClip.SourceType.WEBPAGE)
@@ -187,7 +191,7 @@ class SourceClipServiceTest {
 
     @Test
     void updateClip_deletesManualOnlyLinkWhenTagRemovedFromNewList() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).username("alice").build();
         Tag tag = Tag.builder().id(40L).name("AI").owner(user).usedByClips(true).build();
         SourceClip clip = SourceClip.builder().id(1L).sourceType(SourceClip.SourceType.WEBPAGE)
@@ -210,7 +214,7 @@ class SourceClipServiceTest {
 
     @Test
     void addTag_createsManuallyAddedLinkAndMarksTagUsedByClips() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
         Tag tag = Tag.builder().id(5L).owner(user).usedByClips(false).build();
@@ -230,7 +234,7 @@ class SourceClipServiceTest {
 
     @Test
     void addTag_reactivatesExistingAiSuggestedLinkAsManuallyAdded() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
         Tag tag = Tag.builder().id(5L).owner(user).usedByClips(true).build();
@@ -251,7 +255,7 @@ class SourceClipServiceTest {
 
     @Test
     void addTag_throwsWhenClipNotOwnedByUser() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         User otherUser = User.builder().id(2L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(otherUser).build();
@@ -264,7 +268,7 @@ class SourceClipServiceTest {
 
     @Test
     void removeTag_throwsWhenClipNotOwnedByUser() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         User otherUser = User.builder().id(2L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(otherUser).build();
@@ -277,7 +281,7 @@ class SourceClipServiceTest {
 
     @Test
     void removeTag_deletesLinkWhenNotAiSuggested() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
         Tag tag = Tag.builder().id(5L).owner(user).usedByClips(true).build();
@@ -302,7 +306,7 @@ class SourceClipServiceTest {
 
     @Test
     void removeTag_keepsUsedByClipsTrueWhenTagStillLinkedElsewhere() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
         Tag tag = Tag.builder().id(5L).owner(user).usedByClips(true).build();
@@ -325,7 +329,7 @@ class SourceClipServiceTest {
 
     @Test
     void removeTag_keepsRowButClearsManuallyAddedWhenAiSuggested() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
         Tag tag = Tag.builder().id(5L).owner(user).build();
@@ -347,7 +351,7 @@ class SourceClipServiceTest {
 
     @Test
     void updateClip_throwsWhenClipNotOwnedByUser() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         User otherUser = User.builder().id(2L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(otherUser).build();
@@ -360,7 +364,7 @@ class SourceClipServiceTest {
 
     @Test
     void updateClip_throwsWhenTagIdBelongsToDifferentUser() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         User otherUser = User.builder().id(2L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
@@ -377,7 +381,7 @@ class SourceClipServiceTest {
 
     @Test
     void createClip_throwsWhenTagIdBelongsToDifferentUser() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         User otherUser = User.builder().id(2L).build();
         Tag otherUsersTag = Tag.builder().id(50L).owner(otherUser).build();
@@ -392,7 +396,7 @@ class SourceClipServiceTest {
 
     @Test
     void deleteClip_deletesClipTagLinksBeforeDeletingClip() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         SourceClip clip = SourceClip.builder().id(10L).owner(user).build();
         Tag tag = Tag.builder().id(5L).owner(user).usedByClips(true).build();
@@ -411,7 +415,7 @@ class SourceClipServiceTest {
 
     @Test
     void listClips_filtersByTagIdWhenProvided() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         Pageable pageable = PageRequest.of(0, 20);
@@ -427,7 +431,7 @@ class SourceClipServiceTest {
 
     @Test
     void listClips_filtersByAnyMatchingTagWhenMultipleTagIdsProvided() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         Pageable pageable = PageRequest.of(0, 20);
@@ -441,7 +445,7 @@ class SourceClipServiceTest {
 
     @Test
     void listClips_ignoresEmptyTagIdList() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         Pageable pageable = PageRequest.of(0, 20);
@@ -455,7 +459,7 @@ class SourceClipServiceTest {
 
     @Test
     void listClips_usesNoTagsQueryWhenUntaggedRequested() {
-        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository);
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
         User user = User.builder().id(1L).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         Pageable pageable = PageRequest.of(0, 20);
@@ -467,5 +471,69 @@ class SourceClipServiceTest {
 
         verify(clipRepository).searchByOwnerAndTypeWithNoTags(user, null, null, pageable);
         verify(clipRepository, never()).searchByOwnerAndTypeAndTags(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void createClip_triggersReindexWithSavedClipId() {
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
+        User user = User.builder().id(1L).build();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(clipRepository.save(any())).thenAnswer(inv -> {
+            SourceClip clip = inv.getArgument(0);
+            clip.setId(88L);
+            return clip;
+        });
+
+        SourceClipRequest request = new SourceClipRequest();
+        request.setSourceType(SourceClip.SourceType.WEBPAGE);
+        request.setTitle("标题");
+        request.setContent("内容");
+
+        service.createClip(request, "alice");
+
+        verify(contentIndexingService).reindexClip(88L);
+    }
+
+    @Test
+    void updateClip_triggersReindexWithClipId() {
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
+        User user = User.builder().id(1L).build();
+        SourceClip clip = SourceClip.builder().id(5L).owner(user).sourceType(SourceClip.SourceType.WEBPAGE).build();
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(clipRepository.findById(5L)).thenReturn(Optional.of(clip));
+        when(clipRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SourceClipRequest request = new SourceClipRequest();
+        request.setSourceType(SourceClip.SourceType.WEBPAGE);
+        request.setTitle("新标题");
+        request.setContent("新内容");
+
+        service.updateClip(5L, request, "alice");
+
+        verify(contentIndexingService).reindexClip(5L);
+    }
+
+    @Test
+    void deleteClip_cleansUpChunksBeforeDeletingClip() {
+        service = new SourceClipService(clipRepository, userRepository, tagRepository, clipTagLinkRepository, contentIndexingService);
+        User user = User.builder().id(1L).build();
+        SourceClip clip = SourceClip.builder().id(6L).owner(user).sourceType(SourceClip.SourceType.WEBPAGE).build();
+        Tag tag = Tag.builder().id(7L).owner(user).usedByClips(true).build();
+        ClipTagLink link = ClipTagLink.builder().id(1L).clip(clip).tag(tag).build();
+        when(clipRepository.findById(6L)).thenReturn(Optional.of(clip));
+        when(clipTagLinkRepository.findByClip(clip)).thenReturn(List.of(link));
+        when(clipTagLinkRepository.existsByTag(tag)).thenReturn(false);
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.deleteClip(6L, "alice");
+
+        verify(contentIndexingService).deleteChunksFor(ContentChunk.SourceType.CLIP, 6L);
+
+        // 顺序契约：分块必须先于 clip 实体清理，因为没有外键 ON DELETE CASCADE，
+        // 一旦顺序被意外调换，chunk 会短暂引用一个已删除的 clip id。
+        InOrder inOrder = inOrder(contentIndexingService, clipTagLinkRepository, clipRepository);
+        inOrder.verify(contentIndexingService).deleteChunksFor(ContentChunk.SourceType.CLIP, 6L);
+        inOrder.verify(clipTagLinkRepository).deleteAll(List.of(link));
+        inOrder.verify(clipRepository).delete(clip);
     }
 }

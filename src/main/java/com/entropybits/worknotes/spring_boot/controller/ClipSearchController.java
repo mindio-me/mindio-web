@@ -26,15 +26,16 @@ public class ClipSearchController {
 
     @GetMapping("/messages")
     public ResponseEntity<List<ClipSearchMessageResponse>> listMessages(
+            @RequestParam Long noteId,
             @AuthenticationPrincipal UserDetails user) {
-        return ResponseEntity.ok(clipSearchService.listHistory(user.getUsername()));
+        return ResponseEntity.ok(clipSearchService.listHistory(user.getUsername(), noteId));
     }
 
     @PostMapping("/messages")
     public ResponseEntity<List<ClipSearchMessageResponse>> sendMessage(
             @Valid @RequestBody ClipSearchMessageRequest request,
             @AuthenticationPrincipal UserDetails user) {
-        return ResponseEntity.ok(clipSearchService.sendMessage(user.getUsername(), request.getContent()));
+        return ResponseEntity.ok(clipSearchService.sendMessage(user.getUsername(), request.getContent(), request.getNoteId()));
     }
 
     @PostMapping("/messages/{messageId}/results/{resultIndex}/save")

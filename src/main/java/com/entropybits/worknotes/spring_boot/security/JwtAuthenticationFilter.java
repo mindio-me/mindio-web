@@ -37,6 +37,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtUtil jwtUtil;
     private final CustomUserDetailsService userDetailsService;
 
+    // OncePerRequestFilter默认跳过异步派发（ASYNC dispatch），但全局AI助手的SseEmitter流式接口
+    // 在流结束时会触发一次异步派发来收尾HTTP响应，如果这个过滤器不参与，那次派发里的
+    // SecurityContext就是匿名的，会被鉴权规则拒绝——且这时响应体已经在输出了，会报
+    // "response already committed"。所以这里必须显式参与异步派发。
+    @Override
+    protected boolean shouldNotFilterAsyncDispatch() {
+        return false;
+    }
+
     @Override
     protected void doFilterInternal(
             @NonNull HttpServletRequest request,
@@ -91,6 +100,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                path.startsWith("/v1/notes/public") ||
                path.startsWith("/v1/projects/public") ||
                path.startsWith("/v1/projects/featured") ||
+               path.startsWith("/v1/services") ||
                path.startsWith("/v1/resources") ||
                path.startsWith("/v1/profiles/") ||
                path.startsWith("/uploads/") ||

@@ -26,11 +26,9 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "feishu_image_mappings", indexes = {
     @Index(name = "idx_snapshot_id", columnList = "snapshot_id"),
-    @Index(name = "idx_note_id", columnList = "note_id"),
-    @Index(name = "idx_document_id", columnList = "document_id"),
-    @Index(name = "idx_user_id", columnList = "user_id"),
-    // 注意：idx_file_token 使用前缀索引（191字符），在迁移脚本 V5 中定义
-    // 这里不定义，避免 Hibernate 自动创建完整字段索引导致错误
+    @Index(name = "idx_fim_note_id", columnList = "note_id"),
+    @Index(name = "idx_fim_document_id", columnList = "document_id"),
+    @Index(name = "idx_fim_user_id", columnList = "user_id"),
     @Index(name = "idx_download_status", columnList = "download_status")
 }, uniqueConstraints = {
     @UniqueConstraint(name = "uk_file_token", columnNames = "file_token")

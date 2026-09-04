@@ -29,25 +29,26 @@ class ClipSearchControllerTest {
             org.springframework.security.core.userdetails.User.withUsername("alice").password("x").authorities("USER").build();
 
     @Test
-    void listMessages_delegatesToServiceWithUsername() {
+    void listMessages_delegatesToServiceWithUsernameAndNoteId() {
         ClipSearchController controller = new ClipSearchController(clipSearchService);
         List<ClipSearchMessageResponse> history = List.of(ClipSearchMessageResponse.builder().id(1L).build());
-        when(clipSearchService.listHistory("alice")).thenReturn(history);
+        when(clipSearchService.listHistory("alice", 10L)).thenReturn(history);
 
-        ResponseEntity<List<ClipSearchMessageResponse>> response = controller.listMessages(principal);
+        ResponseEntity<List<ClipSearchMessageResponse>> response = controller.listMessages(10L, principal);
 
         assertThat(response.getBody()).isEqualTo(history);
     }
 
     @Test
-    void sendMessage_delegatesToServiceWithContentAndUsername() {
+    void sendMessage_delegatesToServiceWithContentNoteIdAndUsername() {
         ClipSearchController controller = new ClipSearchController(clipSearchService);
         ClipSearchMessageRequest request = new ClipSearchMessageRequest();
         request.setContent("帮我找找AI监管的报道");
+        request.setNoteId(10L);
         List<ClipSearchMessageResponse> reply = List.of(
                 ClipSearchMessageResponse.builder().id(1L).role("USER").build(),
                 ClipSearchMessageResponse.builder().id(2L).role("ASSISTANT").build());
-        when(clipSearchService.sendMessage("alice", "帮我找找AI监管的报道")).thenReturn(reply);
+        when(clipSearchService.sendMessage("alice", "帮我找找AI监管的报道", 10L)).thenReturn(reply);
 
         ResponseEntity<List<ClipSearchMessageResponse>> response = controller.sendMessage(request, principal);
 

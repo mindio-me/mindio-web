@@ -27,5 +27,9 @@ public class AiProperties {
         private String baseUrl;
         /** Chat Completions 路径，默认 /v1/chat/completions，豆包等特殊服务商可覆盖 */
         private String chatPath = "/v1/chat/completions";
+        /** Embeddings 模型名，只有配了 embedding 能力的 provider（目前只有 doubao）需要填 */
+        private String embeddingModel;
+        /** Embeddings 接口路径，默认 /v1/embeddings，豆包等特殊服务商可覆盖 */
+        private String embeddingPath = "/v1/embeddings";
     }
 }

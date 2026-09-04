@@ -16,6 +16,8 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -42,6 +44,7 @@ public class BookmarkAgentService {
     private final AiTranslationService openAiService;
     private final AiTranslationService deepseekService;
     private final AiTranslationService doubaoService;
+    private final ContentIndexingService contentIndexingService;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
 
@@ -61,7 +64,8 @@ public class BookmarkAgentService {
             @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
             @Qualifier("openAiTranslationService") AiTranslationService openAiService,
             @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
-            @Qualifier("doubaoTranslationService") AiTranslationService doubaoService) {
+            @Qualifier("doubaoTranslationService") AiTranslationService doubaoService,
+            ContentIndexingService contentIndexingService) {
         this.jobRepository = jobRepository;
         this.clipRepository = clipRepository;
         this.noteRepository = noteRepository;
@@ -74,6 +78,7 @@ public class BookmarkAgentService {
         this.openAiService = openAiService;
         this.deepseekService = deepseekService;
         this.doubaoService = doubaoService;
+        this.contentIndexingService = contentIndexingService;
     }
 
     /** 把 clips 按每批 size 条切分，用于分批调用 classifyTopics */
@@ -135,6 +140,9 @@ public class BookmarkAgentService {
     public Note replaceGeneratedNote(User owner, Note.GeneratedType type, String title, String markdownContent,
                                       List<SourceClip> refClips) {
         noteRepository.findByOwnerAndGeneratedType(owner, type).ifPresent(old -> {
+            // 必须先清掉旧笔记的语义索引分块再删笔记，否则 content_chunks 里会留下孤儿行，
+            // 而 RetrievalService 不校验来源笔记是否还存在，已删除内容会被无限期当作 RAG 上下文召回
+            contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, old.getId());
             noteRepository.delete(old);
             noteRepository.flush();
         });
@@ -146,6 +154,7 @@ public class BookmarkAgentService {
                 .owner(owner)
                 .generatedType(type)
                 .build());
+        reindexNoteAfterCommit(note.getId());
 
         int order = 0;
         for (SourceClip clip : refClips) {
@@ -156,6 +165,25 @@ public class BookmarkAgentService {
                     .build());
         }
         return note;
+    }
+
+    /**
+     * 把异步重索引推迟到当前事务真正提交之后再触发。
+     * reindexNote 是 @Async + @Transactional：它跑在另一个线程、另一个连接、另一个事务里，
+     * 看不到 replaceGeneratedNote 还没提交的新笔记行，直接内联调用会静默不索引。
+     * 没有事务上下文时（如单元测试直接 new 出服务）回退到立即调用。
+     */
+    private void reindexNoteAfterCommit(Long noteId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    contentIndexingService.reindexNote(noteId);
+                }
+            });
+        } else {
+            contentIndexingService.reindexNote(noteId);
+        }
     }
 
     /** 把收藏列表拼成 markdown 链接列表，每条一行，供 runCluster/runTimeline 拼进生成结果 */

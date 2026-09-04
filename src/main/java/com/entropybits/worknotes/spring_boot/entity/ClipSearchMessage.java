@@ -32,6 +32,11 @@ public class ClipSearchMessage {
     @JsonIgnore
     private User owner;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "note_id")
+    @JsonIgnore
+    private Note note;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role;

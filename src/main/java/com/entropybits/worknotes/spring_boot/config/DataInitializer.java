@@ -6,9 +6,11 @@
 package com.entropybits.worknotes.spring_boot.config;
 
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NewsSourceConfig;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
+import com.entropybits.worknotes.spring_boot.repository.NewsSourceConfigRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -34,9 +37,44 @@ public class DataInitializer {
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
     private final TagRepository tagRepository;
+    private final NewsSourceConfigRepository newsSourceConfigRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Bean
+    CommandLineRunner syncNewsSources() {
+        return args -> {
+            upsertSource("weibo_hot", "微博热搜", "Weibo Hot Search", "zh", true, 1);
+            upsertSource("baidu_hot", "百度热搜", "Baidu Hot Search", "zh", true, 2);
+            upsertSource("bilibili_hot", "哔哩哔哩热门", "Bilibili Popular", "zh", true, 3);
+            upsertSource("ai_news", "AI资讯", "AI News", "zh", true, 4);
+            upsertSource("hacker_news", "Hacker News Top 10", "Hacker News Top 10", "en", true, 5);
+            upsertSource("google_news", "谷歌新闻", "Google News", "en", true, 6);
+            upsertSource("bing_news", "必应新闻", "Bing News", "en", true, 7);
+            upsertSource("tech_news", "10大科技新闻", "Top Tech News", "en", true, 8);
+
+            newsSourceConfigRepository.findBySourceKey("zhihu_hot").ifPresent(source -> {
+                source.setEnabled(false);
+                source.setCategory("hidden");
+                source.setLastFetchStatus(null);
+                source.setLastFetchError(null);
+                newsSourceConfigRepository.save(source);
+            });
+        };
+    }
+
+    private void upsertSource(String key, String nameZh, String nameEn, String category, boolean enabled, int sortOrder) {
+        NewsSourceConfig src = newsSourceConfigRepository.findBySourceKey(key)
+                .orElseGet(() -> NewsSourceConfig.builder().sourceKey(key).build());
+        src.setNameZh(nameZh);
+        src.setNameEn(nameEn);
+        src.setCategory(category);
+        if (src.getEnabled() == null) src.setEnabled(enabled);
+        src.setSortOrder(sortOrder);
+        newsSourceConfigRepository.save(src);
+    }
+
+    @Bean
+    @Profile("dev")
     CommandLineRunner initData() {
         return args -> {
             // 检查是否已有数据

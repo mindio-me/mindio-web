@@ -26,6 +26,11 @@ import java.util.Set;
 public interface NoteRepository extends JpaRepository<Note, Long> {
 
     /**
+     * 查找用户的所有笔记（不分页，用于存量回填索引）
+     */
+    List<Note> findByOwner(User owner);
+
+    /**
      * 查找用户的所有笔记（分页）
      */
     Page<Note> findByOwner(User owner, Pageable pageable);

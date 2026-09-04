@@ -8,10 +8,18 @@ spring:
 
   # 数据库配置 (MySQL)
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/mindio_app?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/worknotes?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 默认/dev profile 禁用 Flyway：db/migration/ 下现在有 h2/ 和 mysql/ 两个子目录，
+  # Spring Boot 默认的 Flyway 自动配置会递归扫描 classpath:db/migration，同时看到两份
+  # V1，报 "Found more than one migration with version 1"。desktop/prod profile 各自的
+  # application-{profile}.yml 会把这里的 false 覆盖为 true，并指定
+  # locations: classpath:db/migration/{vendor}。
+  flyway:
+    enabled: false
 
   # JPA/Hibernate 配置
   jpa:
@@ -130,6 +138,8 @@ ai:
     model: ${AI_DOUBAO_MODEL:doubao-seed-2-0-pro-260215}
     base-url: https://ark.cn-beijing.volces.com
     chat-path: /api/v3/chat/completions
+    embedding-model: ${AI_DOUBAO_EMBEDDING_MODEL:doubao-embedding-text-240715}
+    embedding-path: /api/v3/embeddings
 
 # 收藏页 AI 联网搜索的搜索后端
 search:

@@ -1,12 +1,12 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: mindio-app-mysql
+    container_name: worknotes-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: mindio_app
-      MYSQL_USER: mindio
-      MYSQL_PASSWORD: mindio123
+      MYSQL_DATABASE: worknotes
+      MYSQL_USER: worknotes
+      MYSQL_PASSWORD: worknotes123
     ports:
       - "3306:3306"
     volumes:

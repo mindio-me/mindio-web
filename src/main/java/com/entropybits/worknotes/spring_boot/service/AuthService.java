@@ -21,6 +21,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 /**
  * 认证服务
  */
@@ -134,5 +136,50 @@ public class AuthService {
         // 更新密码
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+    }
+
+    /**
+     * 桌面端静默会话
+     * 桌面版每台机器的本地数据库最多只有一个用户（许可证持有人），
+     * 已有则直接签发新 token，没有则用激活邮箱创建后再签发，
+     * 全程不经过用户名/密码登录页
+     */
+    @Transactional
+    public AuthResponse desktopSession(String email) {
+        User user = userRepository.findFirstByOrderByIdAsc()
+                .orElseGet(() -> createDesktopUser(email));
+
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username(user.getUsername())
+                .password(user.getPassword())
+                .authorities("ROLE_USER")
+                .build();
+
+        String token = jwtUtil.generateToken(userDetails);
+
+        return new AuthResponse(
+                token,
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole()
+        );
+    }
+
+    private User createDesktopUser(String email) {
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("首次创建桌面本地账号需要激活邮箱");
+        }
+
+        String username = email.length() <= 50 ? email : email.substring(0, 50);
+
+        User user = User.builder()
+                .username(username)
+                .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                .email(email)
+                .role("USER")
+                .build();
+
+        return userRepository.save(user);
     }
 }
