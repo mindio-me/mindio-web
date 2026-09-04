@@ -55,6 +55,7 @@ public class GlobalChatService {
     private final ChatService openAiChatService;
     private final ChatService deepseekChatService;
     private final ChatService doubaoChatService;
+    private final AgentServiceClient agentServiceClient;
     private final ObjectMapper objectMapper;
 
     public GlobalChatService(AiChatMessageRepository chatMessageRepository,
@@ -68,6 +69,7 @@ public class GlobalChatService {
                               @Qualifier("openAiChatService") ChatService openAiChatService,
                               @Qualifier("deepseekChatService") ChatService deepseekChatService,
                               @Qualifier("doubaoChatService") ChatService doubaoChatService,
+                              AgentServiceClient agentServiceClient,
                               ObjectMapper objectMapper) {
         this.chatMessageRepository = chatMessageRepository;
         this.userRepository = userRepository;
@@ -80,6 +82,7 @@ public class GlobalChatService {
         this.openAiChatService = openAiChatService;
         this.deepseekChatService = deepseekChatService;
         this.doubaoChatService = doubaoChatService;
+        this.agentServiceClient = agentServiceClient;
         this.objectMapper = objectMapper;
     }
 
@@ -97,22 +100,14 @@ public class GlobalChatService {
             )
     );
 
-    // agentic版本：不再固定每轮自动检索，而是把检索包装成一个工具，由大模型自己判断
-    // 要不要调用、调用几次（硬顶3次），并把整个过程通过SSE实时推给前端。
+    // agent推理逻辑整体搬到独立的Python/LangGraph服务（AgentServiceClient），这里只做：
+    // 持久化用户消息 -> 调用Agent服务并把事件原样转发给前端 -> 持久化最终回复。
+    // conversationId 目前等同于username（延续"单一连续会话"的既有决定）。
     public void sendMessageStream(String username, String content, Long currentNoteId,
                                    List<AttachmentPayload> attachments, SseEmitter emitter) {
         java.util.concurrent.atomic.AtomicBoolean disconnected = new java.util.concurrent.atomic.AtomicBoolean(false);
         try {
             User user = getUser(username);
-
-            List<AiChatMessage> priorHistory = new ArrayList<>(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user));
-            Collections.reverse(priorHistory);
-            List<ChatService.ChatTurn> modelHistory = new ArrayList<>(toModelHistory(priorHistory));
-
-            List<ChatService.Attachment> chatAttachments = attachments == null ? List.of() : attachments.stream()
-                    .map(a -> new ChatService.Attachment(a.type(), a.mimeType(), a.base64Data()))
-                    .toList();
-            modelHistory.add(new ChatService.ChatTurn("user", content, chatAttachments));
 
             List<ChatAttachmentRef> attachmentRefs = attachments == null ? List.of() : attachments.stream()
                     .map(a -> new ChatAttachmentRef(a.type(), a.url(), a.fileName()))
@@ -124,94 +119,61 @@ public class GlobalChatService {
             sendEvent(emitter, ChatStreamEvent.userMessage(toResponse(userMessage)), disconnected);
 
             Note currentNote = loadOwnedNoteOrNull(currentNoteId, user);
-            StringBuilder systemPromptBuilder = new StringBuilder(SYSTEM_PROMPT);
-            if (currentNote != null) {
-                systemPromptBuilder.append("\n\n【当前正在编辑的笔记】\n标题：").append(currentNote.getTitle())
-                        .append("\n正文：\n").append(currentNoteBodyText(currentNote));
-            }
+            String currentNoteContext = currentNote == null ? null
+                    : "标题：" + currentNote.getTitle() + "\n正文：\n" + currentNoteBodyText(currentNote);
 
-            List<ChatCitation> allCitations = new ArrayList<>();
-            Map<String, String> titleCache = new LinkedHashMap<>();
             StringBuilder finalReplyText = new StringBuilder();
-            boolean chatSucceeded = false;
+            List<ChatCitation>[] resolvedCitations = new List[]{List.of()};
+            boolean[] chatSucceeded = {false};
 
             try {
-                for (int attempt = 0; attempt <= MAX_TOOL_CALLS; attempt++) {
-                    List<ChatService.ToolDefinition> toolsForThisAttempt =
-                            attempt < MAX_TOOL_CALLS ? List.of(SEARCH_WORKSPACE_TOOL) : List.of();
-
-                    java.util.concurrent.atomic.AtomicReference<ChatService.ToolCall> toolCallHolder =
-                            new java.util.concurrent.atomic.AtomicReference<>();
-
-                    resolveChatService().chatStream(systemPromptBuilder.toString(), modelHistory, toolsForThisAttempt,
-                            new ChatService.StreamListener() {
-                                @Override
-                                public void onTextDelta(String delta) {
-                                    finalReplyText.append(delta);
-                                    sendEvent(emitter, ChatStreamEvent.textDelta(delta), disconnected);
-                                }
-
-                                @Override
-                                public void onToolCallStart(ChatService.ToolCall call) {
-                                    toolCallHolder.set(call);
-                                    Object query = call.input().get("query");
-                                    sendEvent(emitter, ChatStreamEvent.toolCall(query == null ? "" : query.toString()), disconnected);
-                                }
-
-                                @Override
-                                public void onDone() {
-                                }
-                            });
-
-                    ChatService.ToolCall toolCall = toolCallHolder.get();
-                    if (toolCall == null) {
-                        chatSucceeded = true;
-                        break;
-                    }
-
-                    if (attempt == 0 && !chatAttachments.isEmpty()) {
-                        // 工具调用意味着这轮对话还要至少再请求模型一次；附件底图已经在第一次
-                        // 请求里让模型"看过"了，后续几次重复调用不需要再重发一遍原始数据
-                        // （省流量，也省每次都要重新计费的多模态输入token）。
-                        modelHistory.set(modelHistory.size() - 1,
-                                new ChatService.ChatTurn("user", nonBlankOrPlaceholder(content)));
-                    }
-
-                    Object queryObj = toolCall.input().get("query");
-                    String query = queryObj == null ? "" : queryObj.toString();
-                    try {
-                        List<RetrievedChunk> retrieved = retrievalService.retrieve(user, query, RETRIEVAL_TOP_K);
-                        for (RetrievedChunk chunk : retrieved) {
-                            String key = titleKey(chunk.sourceType(), chunk.sourceId());
-                            String title = titleCache.computeIfAbsent(key, k -> lookupTitle(chunk.sourceType(), chunk.sourceId()));
-                            allCitations.add(new ChatCitation(chunk.sourceType().name(), chunk.sourceId(), title));
-                        }
-                        systemPromptBuilder.append("\n\n【工具调用结果：search_workspace(\"").append(query).append("\")】\n");
-                        if (retrieved.isEmpty()) {
-                            systemPromptBuilder.append("没有搜索到相关内容。");
-                        } else {
-                            for (RetrievedChunk chunk : retrieved) {
-                                systemPromptBuilder.append("- ").append(chunk.chunkText()).append("\n");
+                agentServiceClient.streamChat(username, content, username, currentNoteContext, attachments,
+                        new AgentServiceClient.StreamListener() {
+                            @Override
+                            public void onTextDelta(String text) {
+                                finalReplyText.append(text);
+                                sendEvent(emitter, ChatStreamEvent.textDelta(text), disconnected);
                             }
-                        }
-                    } catch (Exception e) {
-                        log.warn("workspace search tool failed for user {}, continuing without results", username, e);
-                        systemPromptBuilder.append("\n\n【工具调用结果：search_workspace(\"").append(query)
-                                .append("\")】\n检索失败，请基于已有信息回答。");
-                    }
-                }
+
+                            @Override
+                            public void onToolCall(String query) {
+                                sendEvent(emitter, ChatStreamEvent.toolCall(query == null ? "" : query), disconnected);
+                            }
+
+                            @Override
+                            public void onDone(String finalContent, List<ChatCitation> citations) {
+                                // Agent服务已经给出权威的最终文本（不是靠拼接text_delta），
+                                // 用它覆盖，避免因为某个provider不支持逐token流式而拼不出完整内容。
+                                finalReplyText.setLength(0);
+                                finalReplyText.append(finalContent);
+                                resolvedCitations[0] = resolveCitationTitles(citations);
+                                chatSucceeded[0] = true;
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                // 保留已经流出去的部分文本（用户已经在界面上看到了），只在后面
+                                // 追加一句提示，而不是整段替换掉——和迁移前"生成中途失败"的
+                                // 行为保持一致。
+                                if (finalReplyText.length() == 0) {
+                                    finalReplyText.append(message);
+                                } else {
+                                    finalReplyText.append("\n\n（生成中断，请重新提问）");
+                                }
+                            }
+                        });
             } catch (Exception e) {
-                log.error("global chat pipeline failed for user {}", username, e);
-                String interruption = finalReplyText.length() > 0
-                        ? "\n\n（生成中断，请重新提问）"
-                        : "抱歉，这次没能回复，换个说法试试？";
-                finalReplyText.append(interruption);
-                sendEvent(emitter, ChatStreamEvent.textDelta(interruption), disconnected);
+                log.error("agent service call failed for user {}", username, e);
+                if (finalReplyText.length() == 0) {
+                    finalReplyText.append("抱歉，这次没能回复，换个说法试试？");
+                } else {
+                    finalReplyText.append("\n\n（生成中断，请重新提问）");
+                }
             }
 
             String reply = finalReplyText.length() > 0 ? finalReplyText.toString() : "抱歉，这次没能回复，换个说法试试？";
-            List<ChatCitation> dedupedCitations = dedupeCitations(allCitations);
-            String citationsJson = chatSucceeded && !dedupedCitations.isEmpty() ? writeJson(dedupedCitations) : null;
+            String citationsJson = chatSucceeded[0] && !resolvedCitations[0].isEmpty()
+                    ? writeJson(resolvedCitations[0]) : null;
 
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
                     .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply).citationsJson(citationsJson).build());
@@ -226,6 +188,19 @@ public class GlobalChatService {
             sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
             emitter.completeWithError(e);
         }
+    }
+
+    // Agent服务只知道sourceType/sourceId，人类可读的标题按ID反查（复用现有lookupTitle逻辑）。
+    private List<ChatCitation> resolveCitationTitles(List<ChatCitation> citations) {
+        Map<String, String> titleCache = new LinkedHashMap<>();
+        return citations.stream()
+                .map(c -> {
+                    ContentChunk.SourceType sourceType = ContentChunk.SourceType.valueOf(c.sourceType());
+                    String key = titleKey(sourceType, c.sourceId());
+                    String title = titleCache.computeIfAbsent(key, k -> lookupTitle(sourceType, c.sourceId()));
+                    return new ChatCitation(c.sourceType(), c.sourceId(), title);
+                })
+                .toList();
     }
 
     private List<ChatCitation> dedupeCitations(List<ChatCitation> citations) {

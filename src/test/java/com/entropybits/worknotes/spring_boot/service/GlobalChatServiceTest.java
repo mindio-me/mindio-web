@@ -6,10 +6,10 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
 import com.entropybits.worknotes.spring_boot.ai.service.ChatService;
+import com.entropybits.worknotes.spring_boot.dto.ChatCitation;
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChatStreamEvent;
 import com.entropybits.worknotes.spring_boot.entity.AiChatMessage;
-import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
@@ -25,16 +25,17 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+/**
+ * GlobalChatService 现在只做"持久化用户消息 -> 调用AgentServiceClient并转发事件 ->
+ * 持久化最终回复"，agent推理循环本身已经搬到独立的Python/LangGraph服务，所以这里
+ * mock的是 AgentServiceClient，不再是四个 ChatService provider bean。
+ */
 @ExtendWith(MockitoExtension.class)
 class GlobalChatServiceTest {
 
@@ -49,6 +50,7 @@ class GlobalChatServiceTest {
     @Mock ChatService openAiChatService;
     @Mock ChatService deepseekChatService;
     @Mock ChatService doubaoChatService;
+    @Mock AgentServiceClient agentServiceClient;
 
     private GlobalChatService service;
     private final User user = User.builder().id(1L).username("alice").build();
@@ -57,8 +59,8 @@ class GlobalChatServiceTest {
     void setUp() {
         service = new GlobalChatService(chatMessageRepository, userRepository, noteRepository, sourceClipRepository,
                 retrievalService, chunkingService, aiProperties, anthropicChatService, openAiChatService, deepseekChatService,
-                doubaoChatService, new ObjectMapper());
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+                doubaoChatService, agentServiceClient, new ObjectMapper());
+        lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         // lenient：listHistory 这类只读方法不会调用 save，避免 Mockito 严格桩报 UnnecessaryStubbing
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> {
             AiChatMessage m = inv.getArgument(0);
@@ -69,21 +71,18 @@ class GlobalChatServiceTest {
 
     @Test
     void listHistory_returnsChronologicalOrderTruncatedToLimit() {
-        // 按真实时间顺序构造（index 0 最早，index 4 最新）
         List<AiChatMessage> chronological = new java.util.ArrayList<>();
         for (int i = 0; i < 5; i++) {
             chronological.add(AiChatMessage.builder().owner(user)
                     .role(i % 2 == 0 ? AiChatMessage.Role.USER : AiChatMessage.Role.ASSISTANT)
                     .content("历史消息" + i).build());
         }
-        // findTop50ByOwnerOrderByCreatedAtDesc 真实返回的是按时间倒序（最新的在前）
         List<AiChatMessage> descendingOrder = new java.util.ArrayList<>(chronological);
         java.util.Collections.reverse(descendingOrder);
         when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(descendingOrder);
 
         List<ChatMessageResponse> result = service.listHistory("alice", 3);
 
-        // 期望：恢复为时间正序，且只保留最近 3 条（历史消息2/3/4），而不是最早的3条或倒序排列
         assertThat(result).extracting(ChatMessageResponse::getContent)
                 .containsExactly("历史消息2", "历史消息3", "历史消息4");
     }
@@ -117,15 +116,13 @@ class GlobalChatServiceTest {
     }
 
     @Test
-    void sendMessageStream_answersDirectlyWithoutToolCallWhenNotNeeded() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
+    void sendMessageStream_persistsAndForwardsPlainTextReply() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
             listener.onTextDelta("你好呀");
-            listener.onDone();
+            listener.onDone("你好呀", List.of());
             return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         SseEmitter emitter = captureEmitter(recorder);
@@ -136,140 +133,102 @@ class GlobalChatServiceTest {
                 .containsExactly("user_message", "text_delta", "done");
         assertThat(recorder.events.get(1).text()).isEqualTo("你好呀");
         assertThat(recorder.events.get(2).content()).isEqualTo("你好呀");
-        verify(retrievalService, org.mockito.Mockito.never()).retrieve(any(), anyString(), anyInt());
     }
 
     @Test
-    void sendMessageStream_callsSearchToolThenAnswersWithCitations() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-        Note relatedNote = Note.builder().id(7L).owner(user).title("相关笔记").build();
-        when(noteRepository.findById(7L)).thenReturn(Optional.of(relatedNote));
-        when(retrievalService.retrieve(eq(user), eq("用户增长"), eq(5))).thenReturn(
-                List.of(new RetrievedChunk(ContentChunk.SourceType.NOTE, 7L, "片段正文", 0.9)));
+    void sendMessageStream_passesConversationIdEqualToUsernameAndCurrentNoteContext() throws Exception {
+        Note currentNote = Note.builder().id(9L).owner(user).title("我的笔记").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
+        when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文内容"));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onDone("好的", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onToolCallStart(new ChatService.ToolCall("call_1", "search_workspace", Map.of("query", "用户增长")));
-            listener.onDone();
+        service.sendMessageStream("alice", "问题", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        verify(agentServiceClient).streamChat(
+                eq("alice"), eq("问题"), eq("alice"),
+                argThat(ctx -> ctx != null && ctx.contains("我的笔记") && ctx.contains("正文内容")),
+                any(), any());
+    }
+
+    @Test
+    void sendMessageStream_forwardsToolCallEventFromAgentService() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onToolCall("用户增长");
+            listener.onDone("根据笔记回答", List.of());
             return null;
-        }).doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("根据你的笔记，核心观点是留存优先");
-            listener.onDone();
-            return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
-
-        service.sendMessageStream("alice", "帮我看看用户增长的笔记", null, List.of(), emitter);
+        service.sendMessageStream("alice", "帮我看看笔记", null, List.of(), captureEmitter(recorder));
 
         assertThat(recorder.events).extracting(ChatStreamEvent::type)
-                .containsExactly("user_message", "tool_call", "text_delta", "done");
+                .containsExactly("user_message", "tool_call", "done");
         assertThat(recorder.events.get(1).query()).isEqualTo("用户增长");
-        ChatStreamEvent done = recorder.events.get(3);
-        assertThat(done.content()).isEqualTo("根据你的笔记，核心观点是留存优先");
+    }
+
+    @Test
+    void sendMessageStream_resolvesCitationTitlesBySourceTypeAndId() throws Exception {
+        Note relatedNote = Note.builder().id(7L).owner(user).title("相关笔记").build();
+        when(noteRepository.findById(7L)).thenReturn(Optional.of(relatedNote));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onDone("根据你的笔记，核心观点是留存优先",
+                    List.of(new ChatCitation("NOTE", 7L, null)));
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "帮我看看用户增长的笔记", null, List.of(), captureEmitter(recorder));
+
+        ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.citations()).hasSize(1);
         assertThat(done.citations().get(0).title()).isEqualTo("相关笔记");
     }
 
     @Test
-    void sendMessageStream_forcesTextOnlyAnswerAfterThreeToolCalls() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-        when(retrievalService.retrieve(any(), anyString(), anyInt())).thenReturn(List.of());
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onToolCallStart(new ChatService.ToolCall("call_x", "search_workspace", Map.of("query", "继续搜")));
-            listener.onDone();
+    void sendMessageStream_preservesPartialTextWhenAgentServiceReportsErrorMidStream() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onTextDelta("这是已经生成了一半的");
+            listener.onError("下游模型报错了");
             return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
-
-        service.sendMessageStream("alice", "一直搜不到就一直搜", null, List.of(), emitter);
-
-        // 最多3次工具调用 + 第4次(index=3)强制不带tools只能给文字——但因为mock每次都返回工具调用，
-        // 第4次调用listener依然会触发onToolCallStart，只是这次传的tools列表是空的（用ArgumentCaptor验证）。
-        org.mockito.ArgumentCaptor<List> toolsCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(anthropicChatService, org.mockito.Mockito.times(4))
-                .chatStream(anyString(), any(), toolsCaptor.capture(), any());
-        List<List> allToolLists = toolsCaptor.getAllValues();
-        assertThat(allToolLists.get(0)).hasSize(1);
-        assertThat(allToolLists.get(1)).hasSize(1);
-        assertThat(allToolLists.get(2)).hasSize(1);
-        assertThat(allToolLists.get(3)).isEmpty();
-    }
-
-    @Test
-    void sendMessageStream_continuesWhenSearchToolThrows() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-        when(retrievalService.retrieve(any(), anyString(), anyInt())).thenThrow(new RuntimeException("向量库挂了"));
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onToolCallStart(new ChatService.ToolCall("call_1", "search_workspace", Map.of("query", "问题")));
-            listener.onDone();
-            return null;
-        }).doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("虽然搜索失败，但我可以基于已有信息回答");
-            listener.onDone();
-            return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
-
-        RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
-
-        service.sendMessageStream("alice", "问个问题", null, List.of(), emitter);
+        service.sendMessageStream("alice", "问个问题", null, List.of(), captureEmitter(recorder));
 
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.type()).isEqualTo("done");
-        assertThat(done.content()).isEqualTo("虽然搜索失败，但我可以基于已有信息回答");
+        assertThat(done.content()).contains("这是已经生成了一半的");
+        assertThat(done.content()).contains("生成中断");
     }
 
     @Test
-    void sendMessageStream_includesCurrentUserMessageInHistoryPassedToProvider() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of(
-                AiChatMessage.builder().owner(user).role(AiChatMessage.Role.ASSISTANT).content("上一轮回答").build(),
-                AiChatMessage.builder().owner(user).role(AiChatMessage.Role.USER).content("上一轮问题").build()));
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("收到");
-            listener.onDone();
-            return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
+    void sendMessageStream_fallsBackToGenericMessageWhenAgentServiceUnreachable() throws Exception {
+        doThrow(new RuntimeException("connection refused"))
+                .when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
+        service.sendMessageStream("alice", "你好", null, List.of(), captureEmitter(recorder));
 
-        service.sendMessageStream("alice", "这一轮的新问题", null, List.of(), emitter);
-
-        org.mockito.ArgumentCaptor<List<ChatService.ChatTurn>> historyCaptor = org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(anthropicChatService).chatStream(anyString(), historyCaptor.capture(), any(), any());
-        List<ChatService.ChatTurn> history = historyCaptor.getValue();
-        assertThat(history).extracting(ChatService.ChatTurn::content)
-                .containsExactly("上一轮问题", "上一轮回答", "这一轮的新问题");
-        assertThat(history.get(history.size() - 1).role()).isEqualTo("user");
+        ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
+        assertThat(done.type()).isEqualTo("done");
+        assertThat(done.content()).isEqualTo("抱歉，这次没能回复，换个说法试试？");
     }
 
     @Test
     void sendMessageStream_stillPersistsAssistantMessageWhenClientDisconnectsMidStream() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
             listener.onTextDelta("回复的第一部分");
-            listener.onDone();
+            listener.onDone("回复的第一部分", List.of());
             return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
         SseEmitter emitter = org.mockito.Mockito.mock(SseEmitter.class);
         org.mockito.Mockito.doThrow(new java.io.IOException("client gone"))
@@ -285,90 +244,25 @@ class GlobalChatServiceTest {
     }
 
     @Test
-    void sendMessageStream_streamsNarrationTextBeforeToolCallEvent() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-        when(retrievalService.retrieve(any(), anyString(), anyInt())).thenReturn(List.of());
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("我先搜一下");
-            listener.onToolCallStart(new ChatService.ToolCall("call_1", "search_workspace", Map.of("query", "笔记")));
-            listener.onDone();
+    void sendMessageStream_passesAttachmentsThroughToAgentService() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onDone("这张图是一只猫", List.of());
             return null;
-        }).doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("找到了相关内容");
-            listener.onDone();
-            return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
-
-        RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
-
-        service.sendMessageStream("alice", "帮我搜一下", null, List.of(), emitter);
-
-        assertThat(recorder.events).extracting(ChatStreamEvent::type)
-                .containsExactly("user_message", "text_delta", "tool_call", "text_delta", "done");
-        assertThat(recorder.events.get(1).text()).isEqualTo("我先搜一下");
-        assertThat(recorder.events.get(4).content()).isEqualTo("我先搜一下找到了相关内容");
-    }
-
-    @Test
-    void sendMessageStream_preservesPartialTextWhenGenerationFailsMidStream() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("这是已经生成了一半的");
-            throw new RuntimeException("模拟生成中途失败");
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
-
-        RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
-
-        service.sendMessageStream("alice", "问个问题", null, List.of(), emitter);
-
-        ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
-        assertThat(done.type()).isEqualTo("done");
-        assertThat(done.content()).contains("这是已经生成了一半的");
-        assertThat(done.content()).contains("生成中断");
-    }
-
-    @Test
-    void sendMessageStream_attachesImageOnlyToCurrentTurnNotHistory() throws Exception {
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(List.of());
-
-        org.mockito.Mockito.doAnswer(inv -> {
-            ChatService.StreamListener listener = inv.getArgument(3);
-            listener.onTextDelta("这张图是一只猫");
-            listener.onDone();
-            return null;
-        }).when(anthropicChatService).chatStream(anyString(), any(), any(), any());
-
-        RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
         List<com.entropybits.worknotes.spring_boot.dto.AttachmentPayload> attachments = List.of(
                 new com.entropybits.worknotes.spring_boot.dto.AttachmentPayload(
                         "image", "image/png", "aGVsbG8=", "https://cdn.example.com/a.png", "a.png"));
 
-        service.sendMessageStream("alice", "这是什么", null, attachments, emitter);
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "这是什么", null, attachments, captureEmitter(recorder));
 
-        org.mockito.ArgumentCaptor<List<ChatService.ChatTurn>> historyCaptor =
-                org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(anthropicChatService).chatStream(anyString(), historyCaptor.capture(), any(), any());
-        ChatService.ChatTurn lastTurn = historyCaptor.getValue().get(historyCaptor.getValue().size() - 1);
-        assertThat(lastTurn.attachments()).hasSize(1);
-        assertThat(lastTurn.attachments().get(0).base64Data()).isEqualTo("aGVsbG8=");
+        verify(agentServiceClient).streamChat(eq("alice"), eq("这是什么"), eq("alice"), any(), eq(attachments), any());
 
-        // user_message 事件里应该带着落库的附件引用（ChatAttachmentRef 本身就不含base64字段，
-        // 所以这里天然验证了"不含原始数据，只有引用"）
+        // user_message 事件里应该带着落库的附件引用（ChatAttachmentRef 本身就不含base64字段）
         assertThat(recorder.events.get(0).attachments()).hasSize(1);
         assertThat(recorder.events.get(0).attachments().get(0).url()).isEqualTo("https://cdn.example.com/a.png");
         assertThat(recorder.events.get(0).attachments().get(0).fileName()).isEqualTo("a.png");
     }
-
 }
