@@ -7,6 +7,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.dto.NoteClipLinkRequest;
 import com.entropybits.worknotes.spring_boot.dto.NoteClipRefResponse;
+import com.entropybits.worknotes.spring_boot.dto.NoteReferenceItem;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.NoteClipRef;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
@@ -90,6 +91,23 @@ public class NoteClipRefService {
     public int countClipsForNote(Long noteId) {
         Note note = findNote(noteId);
         return refRepository.countByNote(note);
+    }
+
+    private static final int REFERENCE_CONTENT_CHAR_CAP = 4000;
+
+    @Transactional(readOnly = true)
+    public List<NoteReferenceItem> getFullContentForNote(Long noteId) {
+        Note note = findNote(noteId);
+        return refRepository.findByNoteOrderBySortOrderAsc(note).stream()
+                .map(ref -> {
+                    SourceClip clip = ref.getClip();
+                    String content = clip.getContent() == null ? "" : clip.getContent();
+                    if (content.length() > REFERENCE_CONTENT_CHAR_CAP) {
+                        content = content.substring(0, REFERENCE_CONTENT_CHAR_CAP) + "…（内容过长，已截断）";
+                    }
+                    return new NoteReferenceItem(clip.getTitle(), content);
+                })
+                .toList();
     }
 
     private Note findNote(Long id) {
