@@ -141,6 +141,11 @@ ai:
     embedding-model: ${AI_DOUBAO_EMBEDDING_MODEL:doubao-embedding-text-240715}
     embedding-path: /api/v3/embeddings
 
+# 独立Python/LangGraph Agent服务：/internal/** 这几个接口只允许带正确共享密钥的请求访问，
+# 见 InternalServiceAuthFilter。生产环境必须通过 AGENT_INTERNAL_TOKEN 覆盖成一个随机值。
+agent:
+  internal-token: ${AGENT_INTERNAL_TOKEN:dev-only-internal-token-change-in-production}
+
 # 收藏页 AI 联网搜索的搜索后端
 search:
   tavily:

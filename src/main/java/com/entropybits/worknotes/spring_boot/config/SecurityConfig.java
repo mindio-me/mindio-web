@@ -6,6 +6,7 @@
 package com.entropybits.worknotes.spring_boot.config;
 
 import com.entropybits.worknotes.spring_boot.security.CustomUserDetailsService;
+import com.entropybits.worknotes.spring_boot.security.InternalServiceAuthFilter;
 import com.entropybits.worknotes.spring_boot.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,6 +45,7 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final InternalServiceAuthFilter internalServiceAuthFilter;
     private final CustomUserDetailsService userDetailsService;
 
     @Value("${worknotes.frontend.base-url:http://localhost:10822}")
@@ -109,6 +111,9 @@ public class SecurityConfig {
                         .requestMatchers("/h2-console/**").permitAll()
                         // 允许 Actuator 健康检查（可选）
                         .requestMatchers("/actuator/health").permitAll()
+                        // /internal/** 是给独立Agent服务回调用的内部接口，不走JWT——鉴权
+                        // 由 InternalServiceAuthFilter 负责校验共享密钥，这里只是放行给它处理
+                        .requestMatchers("/internal/**").permitAll()
                         // 允许访问 Swagger 文档
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
                         // 其他所有请求都需要认证
@@ -124,7 +129,9 @@ public class SecurityConfig {
                 .authenticationProvider(authenticationProvider())
 
                 // 添加 JWT 过滤器
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                // 添加内部服务鉴权过滤器（只对 /internal/** 生效，见该过滤器实现）
+                .addFilterBefore(internalServiceAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
