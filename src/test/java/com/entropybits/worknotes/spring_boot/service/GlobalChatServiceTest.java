@@ -29,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * GlobalChatService 现在只做"持久化用户消息 -> 调用AgentServiceClient并转发事件 ->
@@ -188,7 +189,7 @@ class GlobalChatServiceTest {
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(5);
             listener.onDone("根据你的笔记，核心观点是留存优先",
-                    List.of(new ChatCitation("NOTE", 7L, null)));
+                    List.of(new ChatCitation("NOTE", 7L, null, null)));
             return null;
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
 
@@ -198,6 +199,24 @@ class GlobalChatServiceTest {
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.citations()).hasSize(1);
         assertThat(done.citations().get(0).title()).isEqualTo("相关笔记");
+    }
+
+    @Test
+    void sendMessageStream_passesThroughWebCitationsWithoutLookup() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onDone("参考了一篇网文",
+                    List.of(new ChatCitation("WEB", null, "示例标题", "https://example.com/a")));
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "帮我查点资料", null, List.of(), captureEmitter(recorder));
+
+        ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
+        assertThat(done.citations()).hasSize(1);
+        assertThat(done.citations().get(0).title()).isEqualTo("示例标题");
+        verifyNoInteractions(noteRepository, sourceClipRepository);
     }
 
     @Test

@@ -126,9 +126,16 @@ public class AgentServiceClient {
         for (Object item : list) {
             Map<String, Object> m = (Map<String, Object>) item;
             String sourceType = (String) m.get("sourceType");
-            Number sourceId = (Number) m.get("sourceId");
-            if (sourceType == null || sourceId == null) continue;
-            citations.add(new ChatCitation(sourceType, sourceId.longValue(), null));
+            if (sourceType == null) continue;
+            if ("WEB".equals(sourceType)) {
+                String sourceUrl = (String) m.get("sourceUrl");
+                if (sourceUrl == null) continue;
+                citations.add(new ChatCitation(sourceType, null, (String) m.get("title"), sourceUrl));
+            } else {
+                Number sourceId = (Number) m.get("sourceId");
+                if (sourceId == null) continue;
+                citations.add(new ChatCitation(sourceType, sourceId.longValue(), null, null));
+            }
         }
         return citations;
     }

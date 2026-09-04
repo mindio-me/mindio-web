@@ -4,4 +4,4 @@
  */
 package com.entropybits.worknotes.spring_boot.dto;
 
-public record ChatCitation(String sourceType, Long sourceId, String title) {}
+public record ChatCitation(String sourceType, Long sourceId, String title, String sourceUrl) {}

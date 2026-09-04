@@ -156,10 +156,13 @@ public class GlobalChatService {
         Map<String, String> titleCache = new LinkedHashMap<>();
         return citations.stream()
                 .map(c -> {
+                    if ("WEB".equals(c.sourceType())) {
+                        return c; // Python已经给好了title，网络资料不需要反查
+                    }
                     ContentChunk.SourceType sourceType = ContentChunk.SourceType.valueOf(c.sourceType());
                     String key = titleKey(sourceType, c.sourceId());
                     String title = titleCache.computeIfAbsent(key, k -> lookupTitle(sourceType, c.sourceId()));
-                    return new ChatCitation(c.sourceType(), c.sourceId(), title);
+                    return new ChatCitation(c.sourceType(), c.sourceId(), title, c.sourceUrl());
                 })
                 .toList();
     }

@@ -131,6 +131,21 @@ class AgentServiceClientTest {
     }
 
     @Test
+    void streamChat_parsesWebCitationWithoutSourceId() throws Exception {
+        setUp(200, "{\"type\":\"done\",\"content\":\"参考网上资料\",\"citations\":"
+                + "[{\"sourceType\":\"WEB\",\"sourceUrl\":\"https://example.com/a\",\"title\":\"示例文章\"}]}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "问题", "alice", null, List.of(), listener);
+
+        assertThat(listener.doneCitations).hasSize(1);
+        assertThat(listener.doneCitations.get(0).sourceType()).isEqualTo("WEB");
+        assertThat(listener.doneCitations.get(0).sourceId()).isNull();
+        assertThat(listener.doneCitations.get(0).sourceUrl()).isEqualTo("https://example.com/a");
+        assertThat(listener.doneCitations.get(0).title()).isEqualTo("示例文章");
+    }
+
+    @Test
     void streamChat_throwsOnHttpErrorStatus() throws Exception {
         setUp(500, "internal server error");
 
