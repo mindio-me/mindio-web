@@ -83,7 +83,7 @@ class AgentServiceClientTest {
         setUp(200, ndjson);
         RecordingListener listener = new RecordingListener();
 
-        client.streamChat("alice", "帮我查一下", "alice", null, List.of(), listener);
+        client.streamChat("alice", "帮我查一下", "alice", null, List.of(), null, listener);
 
         assertThat(listener.textDeltas).containsExactly("你好，", "根据笔记");
         assertThat(listener.toolCalls).containsExactly("用户增长");
@@ -99,7 +99,7 @@ class AgentServiceClientTest {
         setUp(200, "{\"type\":\"error\",\"content\":\"下游模型报错了\"}\n");
         RecordingListener listener = new RecordingListener();
 
-        client.streamChat("alice", "问题", "alice", null, List.of(), listener);
+        client.streamChat("alice", "问题", "alice", null, List.of(), null, listener);
 
         assertThat(listener.errorMessage).isEqualTo("下游模型报错了");
     }
@@ -108,7 +108,7 @@ class AgentServiceClientTest {
     void streamChat_sendsInternalTokenHeaderAndRequestBody() throws Exception {
         setUp(200, "{\"type\":\"done\",\"content\":\"ok\",\"citations\":[]}\n");
 
-        client.streamChat("alice", "你好", "alice", "笔记正文", List.of(), new RecordingListener());
+        client.streamChat("alice", "你好", "alice", "笔记正文", List.of(), null, new RecordingListener());
 
         assertThat(lastAuthHeader).isEqualTo("test-internal-token");
         @SuppressWarnings("unchecked")
@@ -123,7 +123,7 @@ class AgentServiceClientTest {
     void streamChat_omitsCurrentNoteContextWhenNull() throws Exception {
         setUp(200, "{\"type\":\"done\",\"content\":\"ok\",\"citations\":[]}\n");
 
-        client.streamChat("alice", "你好", "alice", null, List.of(), new RecordingListener());
+        client.streamChat("alice", "你好", "alice", null, List.of(), null, new RecordingListener());
 
         @SuppressWarnings("unchecked")
         Map<String, Object> body = objectMapper.readValue(lastRequestBody, Map.class);
@@ -136,7 +136,7 @@ class AgentServiceClientTest {
                 + "[{\"sourceType\":\"WEB\",\"sourceUrl\":\"https://example.com/a\",\"title\":\"示例文章\"}]}\n");
         RecordingListener listener = new RecordingListener();
 
-        client.streamChat("alice", "问题", "alice", null, List.of(), listener);
+        client.streamChat("alice", "问题", "alice", null, List.of(), null, listener);
 
         assertThat(listener.doneCitations).hasSize(1);
         assertThat(listener.doneCitations.get(0).sourceType()).isEqualTo("WEB");
@@ -146,10 +146,32 @@ class AgentServiceClientTest {
     }
 
     @Test
+    void streamChat_sendsCurrentNoteIdWhenProvided() throws Exception {
+        setUp(200, "{\"type\":\"done\",\"content\":\"ok\",\"citations\":[]}\n");
+
+        client.streamChat("alice", "你好", "alice", null, List.of(), 9L, new RecordingListener());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = objectMapper.readValue(lastRequestBody, Map.class);
+        assertThat(body.get("currentNoteId")).isEqualTo(9);
+    }
+
+    @Test
+    void streamChat_omitsCurrentNoteIdWhenNull() throws Exception {
+        setUp(200, "{\"type\":\"done\",\"content\":\"ok\",\"citations\":[]}\n");
+
+        client.streamChat("alice", "你好", "alice", null, List.of(), null, new RecordingListener());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = objectMapper.readValue(lastRequestBody, Map.class);
+        assertThat(body).doesNotContainKey("currentNoteId");
+    }
+
+    @Test
     void streamChat_throwsOnHttpErrorStatus() throws Exception {
         setUp(500, "internal server error");
 
-        assertThatThrownBy(() -> client.streamChat("alice", "你好", "alice", null, List.of(), new RecordingListener()))
+        assertThatThrownBy(() -> client.streamChat("alice", "你好", "alice", null, List.of(), null, new RecordingListener()))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("500");
     }

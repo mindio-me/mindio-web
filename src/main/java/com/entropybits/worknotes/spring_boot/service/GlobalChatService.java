@@ -88,6 +88,7 @@ public class GlobalChatService {
 
             try {
                 agentServiceClient.streamChat(username, content, username, currentNoteContext, attachments,
+                        currentNoteId,
                         new AgentServiceClient.StreamListener() {
                             @Override
                             public void onTextDelta(String text) {

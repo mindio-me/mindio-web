@@ -111,11 +111,11 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_persistsAndForwardsPlainTextReply() throws Exception {
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onTextDelta("你好呀");
             listener.onDone("你好呀", List.of());
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         SseEmitter emitter = captureEmitter(recorder);
@@ -134,17 +134,17 @@ class GlobalChatServiceTest {
         when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
         when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文内容"));
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onDone("好的", List.of());
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         service.sendMessageStream("alice", "问题", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
 
         verify(agentServiceClient).streamChat(
                 eq("alice"), eq("问题"), eq("alice"),
                 argThat(ctx -> ctx != null && ctx.contains("我的笔记") && ctx.contains("正文内容")),
-                any(), any());
+                any(), any(), any());
     }
 
     @Test
@@ -153,10 +153,10 @@ class GlobalChatServiceTest {
         when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
         when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文"));
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onDone("好的", List.of());
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         service.sendMessageStream("alice", "问题", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
 
@@ -168,11 +168,11 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_forwardsToolCallEventFromAgentService() throws Exception {
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onToolCall("用户增长");
             listener.onDone("根据笔记回答", List.of());
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         service.sendMessageStream("alice", "帮我看看笔记", null, List.of(), captureEmitter(recorder));
@@ -187,11 +187,11 @@ class GlobalChatServiceTest {
         Note relatedNote = Note.builder().id(7L).owner(user).title("相关笔记").build();
         when(noteRepository.findById(7L)).thenReturn(Optional.of(relatedNote));
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onDone("根据你的笔记，核心观点是留存优先",
                     List.of(new ChatCitation("NOTE", 7L, null, null)));
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         service.sendMessageStream("alice", "帮我看看用户增长的笔记", null, List.of(), captureEmitter(recorder));
@@ -204,11 +204,11 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_passesThroughWebCitationsWithoutLookup() throws Exception {
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onDone("参考了一篇网文",
                     List.of(new ChatCitation("WEB", null, "示例标题", "https://example.com/a")));
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         service.sendMessageStream("alice", "帮我查点资料", null, List.of(), captureEmitter(recorder));
@@ -222,11 +222,11 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_preservesPartialTextWhenAgentServiceReportsErrorMidStream() throws Exception {
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onTextDelta("这是已经生成了一半的");
             listener.onError("下游模型报错了");
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         service.sendMessageStream("alice", "问个问题", null, List.of(), captureEmitter(recorder));
@@ -240,7 +240,7 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_fallsBackToGenericMessageWhenAgentServiceUnreachable() throws Exception {
         doThrow(new RuntimeException("connection refused"))
-                .when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+                .when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         service.sendMessageStream("alice", "你好", null, List.of(), captureEmitter(recorder));
@@ -253,11 +253,11 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_stillPersistsAssistantMessageWhenClientDisconnectsMidStream() throws Exception {
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onTextDelta("回复的第一部分");
             listener.onDone("回复的第一部分", List.of());
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         SseEmitter emitter = org.mockito.Mockito.mock(SseEmitter.class);
         org.mockito.Mockito.doThrow(new java.io.IOException("client gone"))
@@ -275,10 +275,10 @@ class GlobalChatServiceTest {
     @Test
     void sendMessageStream_passesAttachmentsThroughToAgentService() throws Exception {
         doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
             listener.onDone("这张图是一只猫", List.of());
             return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         List<com.entropybits.worknotes.spring_boot.dto.AttachmentPayload> attachments = List.of(
                 new com.entropybits.worknotes.spring_boot.dto.AttachmentPayload(
@@ -287,7 +287,7 @@ class GlobalChatServiceTest {
         RecordingEmitterListener recorder = new RecordingEmitterListener();
         service.sendMessageStream("alice", "这是什么", null, attachments, captureEmitter(recorder));
 
-        verify(agentServiceClient).streamChat(eq("alice"), eq("这是什么"), eq("alice"), any(), eq(attachments), any());
+        verify(agentServiceClient).streamChat(eq("alice"), eq("这是什么"), eq("alice"), any(), eq(attachments), any(), any());
 
         // user_message 事件里应该带着落库的附件引用（ChatAttachmentRef 本身就不含base64字段）
         assertThat(recorder.events.get(0).attachments()).hasSize(1);
