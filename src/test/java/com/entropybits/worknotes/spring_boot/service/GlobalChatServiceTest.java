@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -143,6 +144,24 @@ class GlobalChatServiceTest {
                 eq("alice"), eq("问题"), eq("alice"),
                 argThat(ctx -> ctx != null && ctx.contains("我的笔记") && ctx.contains("正文内容")),
                 any(), any());
+    }
+
+    @Test
+    void sendMessageStream_persistsCurrentNoteIdOnBothMessages() throws Exception {
+        Note currentNote = Note.builder().id(9L).owner(user).title("我的笔记").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
+        when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文"));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(5);
+            listener.onDone("好的", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any());
+
+        service.sendMessageStream("alice", "问题", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        ArgumentCaptor<AiChatMessage> captor = ArgumentCaptor.forClass(AiChatMessage.class);
+        verify(chatMessageRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(AiChatMessage::getNoteId).containsExactly(9L, 9L);
     }
 
     @Test

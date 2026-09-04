@@ -4,18 +4,21 @@
  */
 package com.entropybits.worknotes.spring_boot.controller;
 
+import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
 import com.entropybits.worknotes.spring_boot.dto.SendChatMessageRequest;
 import com.entropybits.worknotes.spring_boot.service.GlobalChatService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,5 +57,17 @@ class GlobalChatControllerTest {
         controller.listMessages(50, principal);
 
         org.mockito.Mockito.verify(chatService).listHistory("alice", 50);
+    }
+
+    @Test
+    void getMessagesForNote_delegatesToServiceWithNoteId() {
+        GlobalChatController controller = new GlobalChatController(chatService);
+        when(principal.getUsername()).thenReturn("alice");
+        when(chatService.getMessagesForNote("alice", 9L)).thenReturn(List.of());
+
+        ResponseEntity<List<ChatMessageResponse>> response = controller.getMessagesForNote(9L, principal);
+
+        assertThat(response.getBody()).isEmpty();
+        verify(chatService).getMessagesForNote("alice", 9L);
     }
 }

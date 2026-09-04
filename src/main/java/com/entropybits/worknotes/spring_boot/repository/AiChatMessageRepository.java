@@ -12,4 +12,6 @@ import java.util.List;
 
 public interface AiChatMessageRepository extends JpaRepository<AiChatMessage, Long> {
     List<AiChatMessage> findTop50ByOwnerOrderByCreatedAtDesc(User owner);
+
+    List<AiChatMessage> findByOwnerAndNoteIdOrderByCreatedAtAsc(User owner, Long noteId);
 }

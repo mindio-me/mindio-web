@@ -45,6 +45,8 @@ public class AiChatMessage {
     @Column(columnDefinition = "TEXT")
     private String attachmentsJson;
 
+    private Long noteId;
+
     @Column(nullable = false)
     private Instant createdAt;
 

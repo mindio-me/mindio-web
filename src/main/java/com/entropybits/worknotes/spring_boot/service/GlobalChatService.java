@@ -74,7 +74,8 @@ public class GlobalChatService {
             String attachmentsJson = attachmentRefs.isEmpty() ? null : writeJson(attachmentRefs);
 
             AiChatMessage userMessage = chatMessageRepository.save(AiChatMessage.builder()
-                    .owner(user).role(AiChatMessage.Role.USER).content(content).attachmentsJson(attachmentsJson).build());
+                    .owner(user).role(AiChatMessage.Role.USER).content(content)
+                    .attachmentsJson(attachmentsJson).noteId(currentNoteId).build());
             sendEvent(emitter, ChatStreamEvent.userMessage(toResponse(userMessage)), disconnected);
 
             Note currentNote = loadOwnedNoteOrNull(currentNoteId, user);
@@ -135,7 +136,8 @@ public class GlobalChatService {
                     ? writeJson(resolvedCitations[0]) : null;
 
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
-                    .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply).citationsJson(citationsJson).build());
+                    .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply)
+                    .citationsJson(citationsJson).noteId(currentNoteId).build());
 
             sendEvent(emitter, ChatStreamEvent.done(toResponse(assistantMessage)), disconnected);
             // 无论disconnected与否都调用：Spring对已经complete/error过的emitter再次complete()是安全的no-op，
@@ -181,6 +183,12 @@ public class GlobalChatService {
             messages = messages.subList(messages.size() - safeLimit, messages.size());
         }
         return messages.stream().map(this::toResponse).toList();
+    }
+
+    public List<ChatMessageResponse> getMessagesForNote(String username, Long noteId) {
+        User user = getUser(username);
+        return chatMessageRepository.findByOwnerAndNoteIdOrderByCreatedAtAsc(user, noteId)
+                .stream().map(this::toResponse).toList();
     }
 
     private Note loadOwnedNoteOrNull(Long noteId, User user) {

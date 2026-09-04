@@ -32,6 +32,13 @@ public class GlobalChatController {
         return ResponseEntity.ok(chatService.listHistory(user.getUsername(), limit));
     }
 
+    @GetMapping("/notes/{noteId}/messages")
+    public ResponseEntity<List<ChatMessageResponse>> getMessagesForNote(
+            @PathVariable Long noteId,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(chatService.getMessagesForNote(user.getUsername(), noteId));
+    }
+
     @PostMapping(value = "/messages", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessage(
             @Valid @RequestBody SendChatMessageRequest request,
