@@ -4,8 +4,6 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
-import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
-import com.entropybits.worknotes.spring_boot.ai.service.ChatService;
 import com.entropybits.worknotes.spring_boot.dto.AttachmentPayload;
 import com.entropybits.worknotes.spring_boot.dto.ChatAttachmentRef;
 import com.entropybits.worknotes.spring_boot.dto.ChatCitation;
@@ -24,7 +22,6 @@ import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -38,23 +35,11 @@ import java.util.Map;
 @Service
 public class GlobalChatService {
 
-    private static final int RETRIEVAL_TOP_K = 5;
-    private static final int HISTORY_TURNS_FOR_MODEL = 10;
-    private static final String SYSTEM_PROMPT =
-            "你是这款笔记应用内置的AI助手，可以自由对话、协助写作和总结。" +
-            "如果下面提供了笔记/收藏的相关内容，可以参考它们来回答，但不要虚构未提供的内容。";
-
     private final AiChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
     private final SourceClipRepository sourceClipRepository;
-    private final RetrievalService retrievalService;
     private final ContentChunkingService chunkingService;
-    private final AiProperties aiProperties;
-    private final ChatService anthropicChatService;
-    private final ChatService openAiChatService;
-    private final ChatService deepseekChatService;
-    private final ChatService doubaoChatService;
     private final AgentServiceClient agentServiceClient;
     private final ObjectMapper objectMapper;
 
@@ -62,43 +47,17 @@ public class GlobalChatService {
                               UserRepository userRepository,
                               NoteRepository noteRepository,
                               SourceClipRepository sourceClipRepository,
-                              RetrievalService retrievalService,
                               ContentChunkingService chunkingService,
-                              AiProperties aiProperties,
-                              @Qualifier("anthropicChatService") ChatService anthropicChatService,
-                              @Qualifier("openAiChatService") ChatService openAiChatService,
-                              @Qualifier("deepseekChatService") ChatService deepseekChatService,
-                              @Qualifier("doubaoChatService") ChatService doubaoChatService,
                               AgentServiceClient agentServiceClient,
                               ObjectMapper objectMapper) {
         this.chatMessageRepository = chatMessageRepository;
         this.userRepository = userRepository;
         this.noteRepository = noteRepository;
         this.sourceClipRepository = sourceClipRepository;
-        this.retrievalService = retrievalService;
         this.chunkingService = chunkingService;
-        this.aiProperties = aiProperties;
-        this.anthropicChatService = anthropicChatService;
-        this.openAiChatService = openAiChatService;
-        this.deepseekChatService = deepseekChatService;
-        this.doubaoChatService = doubaoChatService;
         this.agentServiceClient = agentServiceClient;
         this.objectMapper = objectMapper;
     }
-
-    private static final int MAX_TOOL_CALLS = 3;
-    private static final ChatService.ToolDefinition SEARCH_WORKSPACE_TOOL = new ChatService.ToolDefinition(
-            "search_workspace",
-            "在用户的笔记和收藏里做语义搜索，返回最相关的片段。当用户的问题可能需要参考他们自己写过的笔记或"
-                    + "收藏过的内容时调用；如果只是常规聊天或问题已经能从当前对话/当前笔记回答，不需要调用。",
-            Map.of(
-                    "type", "object",
-                    "properties", Map.of(
-                            "query", Map.of("type", "string", "description", "搜索关键词或问题，用于语义检索")
-                    ),
-                    "required", List.of("query")
-            )
-    );
 
     // agent推理逻辑整体搬到独立的Python/LangGraph服务（AgentServiceClient），这里只做：
     // 持久化用户消息 -> 调用Agent服务并把事件原样转发给前端 -> 持久化最终回复。
@@ -203,14 +162,6 @@ public class GlobalChatService {
                 .toList();
     }
 
-    private List<ChatCitation> dedupeCitations(List<ChatCitation> citations) {
-        Map<String, ChatCitation> deduped = new LinkedHashMap<>();
-        for (ChatCitation c : citations) {
-            deduped.putIfAbsent(c.sourceType() + ":" + c.sourceId(), c);
-        }
-        return List.copyOf(deduped.values());
-    }
-
     private void sendEvent(SseEmitter emitter, ChatStreamEvent event, java.util.concurrent.atomic.AtomicBoolean disconnected) {
         if (disconnected.get()) return;
         try {
@@ -230,22 +181,6 @@ public class GlobalChatService {
             messages = messages.subList(messages.size() - safeLimit, messages.size());
         }
         return messages.stream().map(this::toResponse).toList();
-    }
-
-    private List<ChatService.ChatTurn> toModelHistory(List<AiChatMessage> history) {
-        int fromIndex = Math.max(0, history.size() - HISTORY_TURNS_FOR_MODEL * 2);
-        return history.subList(fromIndex, history.size()).stream()
-                .map(m -> new ChatService.ChatTurn(
-                        m.getRole() == AiChatMessage.Role.USER ? "user" : "assistant",
-                        nonBlankOrPlaceholder(m.getContent())))
-                .toList();
-    }
-
-    // 附件在当前轮之外不重放（避免重复传底图），历史里那一轮的content可能是空字符串
-    // （只发了图/文档、没打字）。空字符串作为纯文本轮次传给Anthropic等厂商会被拒绝
-    // （要求content非空），所以历史回放时用占位符顶上。
-    private String nonBlankOrPlaceholder(String content) {
-        return (content == null || content.isBlank()) ? "（发送了图片/文档）" : content;
     }
 
     private Note loadOwnedNoteOrNull(Long noteId, User user) {
@@ -275,15 +210,6 @@ public class GlobalChatService {
             return noteRepository.findById(sourceId).map(Note::getTitle).orElse("（已删除的笔记）");
         }
         return sourceClipRepository.findById(sourceId).map(SourceClip::getTitle).orElse("（已删除的收藏）");
-    }
-
-    private ChatService resolveChatService() {
-        return switch (aiProperties.getProvider().toLowerCase()) {
-            case "openai" -> openAiChatService;
-            case "deepseek" -> deepseekChatService;
-            case "doubao" -> doubaoChatService;
-            default -> anthropicChatService;
-        };
     }
 
     private ChatMessageResponse toResponse(AiChatMessage m) {

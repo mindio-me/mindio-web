@@ -4,8 +4,6 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
-import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
-import com.entropybits.worknotes.spring_boot.ai.service.ChatService;
 import com.entropybits.worknotes.spring_boot.dto.ChatCitation;
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChatStreamEvent;
@@ -43,13 +41,7 @@ class GlobalChatServiceTest {
     @Mock UserRepository userRepository;
     @Mock NoteRepository noteRepository;
     @Mock SourceClipRepository sourceClipRepository;
-    @Mock RetrievalService retrievalService;
     @Mock ContentChunkingService chunkingService;
-    @Mock AiProperties aiProperties;
-    @Mock ChatService anthropicChatService;
-    @Mock ChatService openAiChatService;
-    @Mock ChatService deepseekChatService;
-    @Mock ChatService doubaoChatService;
     @Mock AgentServiceClient agentServiceClient;
 
     private GlobalChatService service;
@@ -58,8 +50,7 @@ class GlobalChatServiceTest {
     @BeforeEach
     void setUp() {
         service = new GlobalChatService(chatMessageRepository, userRepository, noteRepository, sourceClipRepository,
-                retrievalService, chunkingService, aiProperties, anthropicChatService, openAiChatService, deepseekChatService,
-                doubaoChatService, agentServiceClient, new ObjectMapper());
+                chunkingService, agentServiceClient, new ObjectMapper());
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         // lenient：listHistory 这类只读方法不会调用 save，避免 Mockito 严格桩报 UnnecessaryStubbing
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> {
