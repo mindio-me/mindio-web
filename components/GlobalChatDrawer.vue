@@ -323,6 +323,10 @@ export default {
       return renderMarkdown(text, { axiosBaseURL: this.$axios.defaults.baseURL })
     },
     onCitationClick(citation) {
+      if (citation.sourceType === 'WEB') {
+        window.open(citation.sourceUrl, '_blank', 'noopener')
+        return
+      }
       this.open = false
       if (citation.sourceType === 'NOTE') {
         this.$router.push(`/workspace/notes/${citation.sourceId}/edit`).catch(() => {})

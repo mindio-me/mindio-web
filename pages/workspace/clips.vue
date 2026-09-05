@@ -159,64 +159,14 @@
         <i class="el-icon-time"></i>
       </button>
       <aside class="clips-rail clips-right-rail" :class="{ 'is-open': rightRailOpen }">
-        <div v-if="!showAiSearchChatbox">
-          <div class="rail-section-title">{{ $t('workspace.clips.recentClips') }}</div>
-          <ul class="recent-list">
-            <li v-for="clip in recentClips" :key="clip.id" class="recent-item" @click="openDetail(clip)">
-              <div class="recent-title">{{ clip.title }}</div>
-              <div class="recent-meta">{{ formatRelativeTime(clip.lastAccessedAt || clip.createdAt) }}</div>
-            </li>
-            <li v-if="recentClips.length === 0" class="tag-tile-empty">{{ $t('workspace.clips.noRecentClips') }}</li>
-          </ul>
-        </div>
-        <!-- AI 网络搜索 chatbox：专题研究功能重新设计前先隐藏，逻辑保留 -->
-        <div v-else>
-        <div class="rail-section-title">{{ $t('workspace.clips.aiSearchTitle') }}</div>
-        <div class="ai-search-chat">
-          <div class="ai-search-messages" ref="aiSearchMessages">
-            <div
-              v-for="msg in aiSearchMessages"
-              :key="msg.id"
-              class="ai-search-msg"
-              :class="msg.role === 'USER' ? 'is-user' : 'is-assistant'"
-            >
-              <div class="ai-search-bubble">{{ msg.content }}</div>
-              <div v-if="msg.results && msg.results.length" class="ai-search-results">
-                <div v-for="(r, idx) in msg.results" :key="idx" class="ai-search-result-card">
-                  <a :href="r.url" target="_blank" rel="noopener" class="ai-search-result-title">{{ r.title }}</a>
-                  <div class="ai-search-result-excerpt">{{ r.excerpt }}</div>
-                  <el-button
-                    size="mini"
-                    :type="r.sourceClipId ? 'info' : 'primary'"
-                    :disabled="!!r.sourceClipId || savingResult === (msg.id + '-' + idx)"
-                    :loading="savingResult === (msg.id + '-' + idx)"
-                    @click="saveAiSearchResult(msg, idx)"
-                  >{{ r.sourceClipId ? $t('workspace.clips.aiSearchSaved') : $t('workspace.clips.aiSearchSave') }}</el-button>
-                </div>
-              </div>
-            </div>
-            <div v-if="aiSearchLoading" class="ai-search-msg is-assistant">
-              <div class="ai-search-bubble ai-search-typing">{{ $t('workspace.clips.aiSearchThinking') }}</div>
-            </div>
-          </div>
-          <div class="ai-search-input-row">
-            <el-input
-              v-model="aiSearchInput"
-              type="textarea"
-              :rows="2"
-              :placeholder="$t('workspace.clips.aiSearchPlaceholder')"
-              :disabled="aiSearchLoading"
-              @keydown.enter.native.exact.prevent="sendAiSearchMessage"
-            />
-            <el-button
-              type="primary"
-              size="small"
-              :disabled="!aiSearchInput.trim() || aiSearchLoading"
-              @click="sendAiSearchMessage"
-            >{{ $t('workspace.clips.aiSearchSend') }}</el-button>
-          </div>
-        </div>
-        </div>
+        <div class="rail-section-title">{{ $t('workspace.clips.recentClips') }}</div>
+        <ul class="recent-list">
+          <li v-for="clip in recentClips" :key="clip.id" class="recent-item" @click="openDetail(clip)">
+            <div class="recent-title">{{ clip.title }}</div>
+            <div class="recent-meta">{{ formatRelativeTime(clip.lastAccessedAt || clip.createdAt) }}</div>
+          </li>
+          <li v-if="recentClips.length === 0" class="tag-tile-empty">{{ $t('workspace.clips.noRecentClips') }}</li>
+        </ul>
       </aside>
     </div>
 
@@ -428,12 +378,6 @@ export default {
       generateInFlight: { CLUSTER: false, TIMELINE: false },
       allClipTags: [],
       recentClips: [],
-      // 专题研究功能重新设计前，先隐藏 chatbox 显示"最近访问"；chatbox 逻辑保留，改回 true 即可恢复显示
-      showAiSearchChatbox: false,
-      aiSearchMessages: [],
-      aiSearchInput: '',
-      aiSearchLoading: false,
-      savingResult: null,
       tagManagerVisible: false,
       tagManagerClip: null,
       newClipTagName: '',
@@ -450,10 +394,18 @@ export default {
         || this.selectedClip.extractionStatus === 'FAILED'
     },
   },
+  watch: {
+    '$route.query.highlightId'(value) {
+      if (value) this.openHighlightedClip(Number(value))
+    }
+  },
   async created() {
     await this.loadClips()
     if (this.$route.query.linkTo) {
       this.linkNoteId = this.$route.query.linkTo
+    }
+    if (this.$route.query.highlightId) {
+      this.openHighlightedClip(Number(this.$route.query.highlightId))
     }
     this.refreshAgentJob('CLUSTER')
     this.refreshAgentJob('TIMELINE')
@@ -461,7 +413,6 @@ export default {
     this.loadClipTags()
     this.loadUntaggedCount()
     this.loadRecentClips()
-    if (this.showAiSearchChatbox) this.loadAiSearchHistory()
   },
   mounted() {
     this.$nuxt.$on('workspace:create:clips', this.openCreate)
@@ -519,46 +470,6 @@ export default {
         // 静默失败：不影响主流程，只影响"未分类"方块的计数展示
       }
     },
-    async loadAiSearchHistory() {
-      try {
-        const res = await this.$clipSearchService.getMessages()
-        this.aiSearchMessages = (res || []).map(m => ({ ...m, results: m.results || [] }))
-        this.$nextTick(this.scrollAiSearchToBottom)
-      } catch (e) {
-        // 历史加载失败不阻塞收藏夹主流程，静默忽略
-      }
-    },
-    async sendAiSearchMessage() {
-      const content = this.aiSearchInput.trim()
-      if (!content || this.aiSearchLoading) return
-      this.aiSearchInput = ''
-      this.aiSearchLoading = true
-      try {
-        const res = await this.$clipSearchService.sendMessage(content)
-        this.aiSearchMessages.push(...(res || []).map(m => ({ ...m, results: m.results || [] })))
-        this.$nextTick(this.scrollAiSearchToBottom)
-      } catch (e) {
-        this.$message.error(this.$t('workspace.clips.aiSearchFailed'))
-      } finally {
-        this.aiSearchLoading = false
-      }
-    },
-    async saveAiSearchResult(msg, idx) {
-      const key = msg.id + '-' + idx
-      this.savingResult = key
-      try {
-        const res = await this.$clipSearchService.saveResult(msg.id, idx)
-        this.$set(msg.results[idx], 'sourceClipId', res.sourceClipId)
-      } catch (e) {
-        this.$message.error(this.$t('workspace.clips.aiSearchSaveFailed'))
-      } finally {
-        this.savingResult = null
-      }
-    },
-    scrollAiSearchToBottom() {
-      const el = this.$refs.aiSearchMessages
-      if (el) el.scrollTop = el.scrollHeight
-    },
     openCreate() {
       this.$refs.createDialog.open()
     },
@@ -604,6 +515,14 @@ export default {
         if (e !== 'cancel' && e !== 'close') {
           this.$message.error('保存失败')
         }
+      }
+    },
+    async openHighlightedClip(id) {
+      try {
+        const clip = await this.$clipService.getClipById(id, { suppressErrorToast: true })
+        if (clip) this.openDetail(clip)
+      } catch (e) {
+        // 深链目标不存在或加载失败时静默忽略，不影响收藏页正常使用
       }
     },
     async openDetail(clip) {
@@ -939,34 +858,6 @@ export default {
   position: sticky;
   top: 8px;
 }
-.ai-search-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.ai-search-messages { flex: 1; overflow-y: auto; padding-right: 4px; }
-.ai-search-msg { margin-bottom: 12px; display: flex; flex-direction: column; }
-.ai-search-msg.is-user { align-items: flex-end; }
-.ai-search-msg.is-assistant { align-items: flex-start; }
-.ai-search-bubble {
-  max-width: 90%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-search-msg.is-user .ai-search-bubble { background: #409eff; color: #fff; }
-.ai-search-msg.is-assistant .ai-search-bubble { background: var(--card-bg-color, #f4f4f5); color: #303133; }
-.ai-search-typing { opacity: .6; }
-.ai-search-results { margin-top: 6px; width: 100%; display: flex; flex-direction: column; gap: 8px; }
-.ai-search-result-card {
-  border: 1px solid var(--border-color, #e4e7ed);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-.ai-search-result-title { font-size: 13px; font-weight: 600; color: #409eff; text-decoration: none; display: block; margin-bottom: 4px; }
-.ai-search-result-excerpt { font-size: 12px; color: #909399; margin-bottom: 6px; line-height: 1.5; }
-.ai-search-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
-.ai-search-input-row .el-textarea { flex: 1; }
-
 .clips-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
 .agent-generate-group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 10px; }
 .agent-progress { width: 100%; }
