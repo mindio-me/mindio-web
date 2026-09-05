@@ -73,12 +73,17 @@ public class GlobalChatService {
                     .toList();
             String attachmentsJson = attachmentRefs.isEmpty() ? null : writeJson(attachmentRefs);
 
+            Note currentNote = loadOwnedNoteOrNull(currentNoteId, user);
+            // currentNoteId本身不代表调用者拥有这条笔记（可能是别人的笔记ID、已删除的ID，或压根没传）。
+            // 下游（agent服务的note-references工具、持久化的消息记录）一旦拿到这个ID就会按它去查内容，
+            // 所以只有在currentNote非空（即真正属于user）时才允许把ID继续往下传，否则一律传null。
+            Long ownedNoteId = currentNote == null ? null : currentNoteId;
+
             AiChatMessage userMessage = chatMessageRepository.save(AiChatMessage.builder()
                     .owner(user).role(AiChatMessage.Role.USER).content(content)
-                    .attachmentsJson(attachmentsJson).noteId(currentNoteId).build());
+                    .attachmentsJson(attachmentsJson).noteId(ownedNoteId).build());
             sendEvent(emitter, ChatStreamEvent.userMessage(toResponse(userMessage)), disconnected);
 
-            Note currentNote = loadOwnedNoteOrNull(currentNoteId, user);
             String currentNoteContext = currentNote == null ? null
                     : "标题：" + currentNote.getTitle() + "\n正文：\n" + currentNoteBodyText(currentNote);
 
@@ -88,7 +93,7 @@ public class GlobalChatService {
 
             try {
                 agentServiceClient.streamChat(username, content, username, currentNoteContext, attachments,
-                        currentNoteId,
+                        ownedNoteId,
                         new AgentServiceClient.StreamListener() {
                             @Override
                             public void onTextDelta(String text) {
@@ -138,7 +143,7 @@ public class GlobalChatService {
 
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
                     .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply)
-                    .citationsJson(citationsJson).noteId(currentNoteId).build());
+                    .citationsJson(citationsJson).noteId(ownedNoteId).build());
 
             sendEvent(emitter, ChatStreamEvent.done(toResponse(assistantMessage)), disconnected);
             // 无论disconnected与否都调用：Spring对已经complete/error过的emitter再次complete()是安全的no-op，
@@ -153,6 +158,7 @@ public class GlobalChatService {
     }
 
     // Agent服务只知道sourceType/sourceId，人类可读的标题按ID反查（复用现有lookupTitle逻辑）。
+    // WEB类型是例外——Python已经直接给出title，不需要反查，见下面的WEB分支。
     private List<ChatCitation> resolveCitationTitles(List<ChatCitation> citations) {
         Map<String, String> titleCache = new LinkedHashMap<>();
         return citations.stream()

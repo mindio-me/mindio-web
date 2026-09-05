@@ -166,6 +166,28 @@ class GlobalChatServiceTest {
     }
 
     @Test
+    void sendMessageStream_neverThreadsUnownedNoteIdToAgentServiceOrPersistedMessages() throws Exception {
+        // 9L是真实存在的笔记，但属于别人（bob），不是调用者alice——不能因为ID合法就当成alice拥有。
+        User bob = User.builder().id(2L).username("bob").build();
+        Note othersNote = Note.builder().id(9L).owner(bob).title("别人的笔记").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(othersNote));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("好的", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        service.sendMessageStream("alice", "关联的资料", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        verify(agentServiceClient).streamChat(
+                eq("alice"), eq("关联的资料"), eq("alice"), any(), any(), isNull(), any());
+
+        ArgumentCaptor<AiChatMessage> captor = ArgumentCaptor.forClass(AiChatMessage.class);
+        verify(chatMessageRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(AiChatMessage::getNoteId).containsExactly(null, null);
+    }
+
+    @Test
     void sendMessageStream_forwardsToolCallEventFromAgentService() throws Exception {
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(6);
