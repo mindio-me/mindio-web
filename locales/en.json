@@ -739,6 +739,27 @@
       "aiSearchFailed": "Failed to send, please retry",
       "aiSearchSaveFailed": "Failed to save, please retry"
     },
+    "chat": {
+      "title": "AI Assistant",
+      "placeholder": "Ask anything, or chat about your notes…",
+      "send": "Send",
+      "emptyState": "What's on your mind? I can also dig through your notes.",
+      "sendFailed": "Failed to send, please retry",
+      "connectionLost": "Connection lost, reply may be incomplete",
+      "historyLoadFailed": "Failed to load chat history",
+      "retry": "Retry",
+      "currentNoteHint": "Current note automatically linked",
+      "searching": "Searching \"{query}\"…",
+      "attachImage": "Upload image",
+      "attachDocument": "Upload document",
+      "attachmentTooLarge": "Attachments must be under 10MB",
+      "attachmentUploadFailed": "Failed to upload attachment, please retry",
+      "removeAttachment": "Remove",
+      "voiceInput": "Voice input",
+      "linkToNote": "Link to this note",
+      "linkToNoteSuccess": "Linked to this note",
+      "linkToNoteFailed": "Failed to link, please retry"
+    },
     "bookmarkImport": {
       "title": "Import Bookmarks",
       "uploadTip": "Upload the bookmark HTML file exported from your browser (Chrome/Edge: Bookmark Manager → Export Bookmarks)",

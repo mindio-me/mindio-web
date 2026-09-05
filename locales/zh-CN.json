@@ -739,6 +739,27 @@
       "aiSearchFailed": "发送失败，请重试",
       "aiSearchSaveFailed": "收藏失败，请重试"
     },
+    "chat": {
+      "title": "AI 助手",
+      "placeholder": "问点什么，或者聊聊你的笔记…",
+      "send": "发送",
+      "emptyState": "有什么想聊的，或者想让我帮你翻翻笔记？",
+      "sendFailed": "发送失败，请重试",
+      "connectionLost": "连接中断，回复可能不完整",
+      "historyLoadFailed": "历史记录加载失败",
+      "retry": "重试",
+      "currentNoteHint": "已自动关联当前笔记",
+      "searching": "正在搜索「{query}」…",
+      "attachImage": "上传图片",
+      "attachDocument": "上传文档",
+      "attachmentTooLarge": "附件不能超过10MB",
+      "attachmentUploadFailed": "附件上传失败，请重试",
+      "removeAttachment": "移除",
+      "voiceInput": "语音输入",
+      "linkToNote": "关联到本笔记",
+      "linkToNoteSuccess": "已关联到本笔记",
+      "linkToNoteFailed": "关联失败，请重试"
+    },
     "bookmarkImport": {
       "title": "导入收藏夹",
       "uploadTip": "上传浏览器导出的书签 HTML 文件（Chrome/Edge：书签管理器 → 导出书签）",

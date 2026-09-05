@@ -82,6 +82,10 @@ class ClipService extends ApiService {
     return this.post(`/v1/notes/${noteId}/clips/${clipId}`, { userNote, sortOrder })
   }
 
+  linkClipFromUrl(noteId, { url, titleHint } = {}) {
+    return this.post(`/v1/notes/${noteId}/clips/from-url`, { url, titleHint })
+  }
+
   unlinkClipFromNote(noteId, clipId) {
     return this.delete(`/v1/notes/${noteId}/clips/${clipId}`)
   }
