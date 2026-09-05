@@ -729,15 +729,7 @@
       "timeJustNow": "刚刚",
       "timeMinutesAgo": "{n}分钟前",
       "timeHoursAgo": "{n}小时前",
-      "timeDaysAgo": "{n}天前",
-      "aiSearchTitle": "AI 搜索",
-      "aiSearchPlaceholder": "描述你想找的内容，比如「帮我整理关于XX事件的深度报道」",
-      "aiSearchSend": "发送",
-      "aiSearchThinking": "正在搜索整理…",
-      "aiSearchSave": "收藏",
-      "aiSearchSaved": "已收藏",
-      "aiSearchFailed": "发送失败，请重试",
-      "aiSearchSaveFailed": "收藏失败，请重试"
+      "timeDaysAgo": "{n}天前"
     },
     "chat": {
       "title": "AI 助手",

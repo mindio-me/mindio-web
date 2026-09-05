@@ -729,15 +729,7 @@
       "timeJustNow": "Just now",
       "timeMinutesAgo": "{n}m ago",
       "timeHoursAgo": "{n}h ago",
-      "timeDaysAgo": "{n}d ago",
-      "aiSearchTitle": "AI Search",
-      "aiSearchPlaceholder": "Describe what you're looking for, e.g. \"find in-depth coverage of XYZ\"",
-      "aiSearchSend": "Send",
-      "aiSearchThinking": "Searching…",
-      "aiSearchSave": "Save",
-      "aiSearchSaved": "Saved",
-      "aiSearchFailed": "Failed to send, please retry",
-      "aiSearchSaveFailed": "Failed to save, please retry"
+      "timeDaysAgo": "{n}d ago"
     },
     "chat": {
       "title": "AI Assistant",
