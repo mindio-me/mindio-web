@@ -24,6 +24,13 @@ class NoteService extends ApiService {
   }
 
   /**
+   * 获取这篇笔记下发生过的AI助手对话
+   */
+  getChatMessagesForNote(noteId) {
+    return this.get(`/v1/chat/notes/${noteId}/messages`)
+  }
+
+  /**
    * 创建新笔记
    */
   createNote(data) {

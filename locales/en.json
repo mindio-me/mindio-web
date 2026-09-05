@@ -731,6 +731,10 @@
       "timeHoursAgo": "{n}h ago",
       "timeDaysAgo": "{n}d ago"
     },
+    "noteDetail": {
+      "relatedConversations": "Related conversations",
+      "relatedConversationsEmpty": "No related conversations yet"
+    },
     "chat": {
       "title": "AI Assistant",
       "placeholder": "Ask anything, or chat about your notes…",

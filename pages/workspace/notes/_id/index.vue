@@ -48,6 +48,12 @@
               参考素材<span v-if="clipCount > 0"> ({{ clipCount }})</span>
             </el-button>
             <el-button
+              icon="el-icon-chat-line-round"
+              @click="loadRelatedConversations"
+            >
+              {{ $t('workspace.noteDetail.relatedConversations') }}
+            </el-button>
+            <el-button
               type="primary"
               icon="el-icon-edit"
               @click="editNote"
@@ -392,6 +398,24 @@
         </el-empty>
       </div>
     </el-card>
+
+    <el-dialog
+      :title="$t('workspace.noteDetail.relatedConversations')"
+      :visible.sync="relatedConversationsVisible"
+      width="600px"
+      :append-to-body="true"
+    >
+      <div v-if="relatedConversationsLoading" v-loading="true" style="height: 100px;"></div>
+      <div v-else-if="relatedConversations.length === 0">
+        {{ $t('workspace.noteDetail.relatedConversationsEmpty') }}
+      </div>
+      <div v-else class="related-conversation-list">
+        <div v-for="msg in relatedConversations" :key="msg.id" class="related-conversation-item">
+          <strong>{{ msg.role === 'USER' ? '我' : 'AI' }}：</strong>
+          <span>{{ msg.content }}</span>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -425,6 +449,9 @@ export default {
       avatarUrl: null,
       projects: [],
       clipCount: 0,
+      relatedConversationsVisible: false,
+      relatedConversationsLoading: false,
+      relatedConversations: [],
     }
   },
   async mounted() {
@@ -511,6 +538,17 @@ export default {
         this.clipCount = res || 0
       } catch (e) {
         // 静默失败
+      }
+    },
+    async loadRelatedConversations() {
+      this.relatedConversationsVisible = true
+      this.relatedConversationsLoading = true
+      try {
+        this.relatedConversations = await this.$noteService.getChatMessagesForNote(this.note.id) || []
+      } catch (e) {
+        this.relatedConversations = []
+      } finally {
+        this.relatedConversationsLoading = false
       }
     },
 
@@ -1399,5 +1437,16 @@ export default {
       }
     }
   }
+}
+
+.related-conversation-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+.related-conversation-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color, #e4e7ed);
+  font-size: 13px;
+  line-height: 1.6;
 }
 </style>

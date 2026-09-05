@@ -731,6 +731,10 @@
       "timeHoursAgo": "{n}小时前",
       "timeDaysAgo": "{n}天前"
     },
+    "noteDetail": {
+      "relatedConversations": "相关对话",
+      "relatedConversationsEmpty": "这篇笔记下还没有相关对话"
+    },
     "chat": {
       "title": "AI 助手",
       "placeholder": "问点什么，或者聊聊你的笔记…",
