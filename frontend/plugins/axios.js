@@ -25,8 +25,11 @@ export default function ({ $axios, redirect, app }) {
     const suppressToast = Boolean(error.config && error.config.suppressErrorToast)
     const code = parseInt(error.response && error.response.status)
     const message = error.response?.data?.message || '请求失败'
+    // 个人主页/博客/项目等公开页面本来就允许匿名访问，页面里那些请求 401 只是"没登录而已"，
+    // 不该被这里强制登出、拽去 /login —— 只有 /workspace 下的页面才真的需要登录态。
+    const requiresAuth = Boolean(app.router && app.router.currentRoute.path.startsWith('/workspace'))
 
-    if (code === 401) {
+    if (code === 401 && requiresAuth) {
       if (app.$license && app.$license.isDesktop) {
         // 桌面版没有用户名密码登录页：许可证仍有效时静默换新 token，
         // 只有换取失败（许可证已失效）才转到邮箱激活页，绝不弹 /login
@@ -39,12 +42,13 @@ export default function ({ $axios, redirect, app }) {
           redirect('/activate')
         }
       } else {
-        // 未授权，跳转到登录页
+        // 未授权，跳转到登录页；走 $auth.redirect 而不是裸 redirect()，
+        // 这样它会把当前路径记进 storage，登录成功后才能跳回来
         app.$auth.logout()
-        redirect('/login')
+        app.$auth.redirect('login')
         app.$message.error('登录已过期，请重新登录')
       }
-    } else if (!suppressToast) {
+    } else if (code !== 401 && !suppressToast) {
       if (code === 403) {
         app.$message.error('无权限访问')
       } else if (code === 404) {

@@ -58,9 +58,9 @@ export default {
   name: 'LoginPage',
   layout: 'blank',
   auth: false,
-  middleware({ app, redirect }) {
+  middleware({ app }) {
     if (app.$auth && app.$auth.loggedIn) {
-      return redirect('/workspace')
+      return app.$auth.redirect('home')
     }
   },
   data() {
@@ -125,7 +125,9 @@ export default {
         if (this.$auth.user && this.$auth.user.mustChangePassword) {
           this.$router.push('/workspace/profile?forcePasswordChange=1')
         } else {
-          this.$router.push('/workspace')
+          // 跳回登录前触发跳转的页面（由 @nuxtjs/auth-next 的 rewriteRedirects 记录），
+          // 没有记录时才退回默认的 /workspace
+          this.$auth.redirect('home')
         }
       } catch (error) {
         this.$message.error(this.$t('login.loginFailed'))
