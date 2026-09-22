@@ -451,6 +451,10 @@ html.theme-dark #__layout {
 .workspace-main  { padding: 12px 14px; overflow-y: auto; position: relative; }
 .workspace-right { padding: 8px 8px 6px; overflow-y: auto; }
 
+// AI 停靠时右栏不加内边距、不滚动，交给 .chat-panel 内部的 flex 列（消息区滚、
+// 输入框钉底）——所有接了 workspaceAiDock mixin 的页面共用这条规则
+.workspace-right--ai { padding: 0; overflow: hidden; }
+
 // 左右栏一键折叠——按钮常驻在 .workspace-main 对应边缘（贴着分隔线原本的位置），
 // 折叠/展开都由它处理（见 components/PanelCollapseToggle.vue）；resizer 本身折叠时
 // 连同栏位一起 v-show 隐藏（沿用 notes/projects 已验证的 rightPanelCollapsed 机制，

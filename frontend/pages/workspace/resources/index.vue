@@ -81,8 +81,9 @@
       <div v-show="!wsIsNarrow && !rightPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('right', $event)"></div>
 
       <!-- ========== 右侧信息 ========== -->
-      <aside v-show="!rightPanelCollapsed" class="workspace-right">
-        <div class="right-panel">
+      <aside v-show="!rightPanelCollapsed" class="workspace-right" :class="{ 'workspace-right--ai': aiPanelActive }">
+        <ChatPanel v-if="aiPanelActive" @close="aiPanelActive = false" />
+        <div class="right-panel" v-if="!aiPanelActive">
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.resources.statsTitle') }}</h3>
             <div class="right-meta-list">
@@ -178,11 +179,12 @@
 
 <script>
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+import workspaceAiDock from '~/mixins/workspaceAiDock'
 
 export default {
   name: 'ResourcesPage',
   layout: 'workspace',
-  mixins: [workspaceLayoutResize],
+  mixins: [workspaceLayoutResize, workspaceAiDock],
   data() {
     return {
       loading: false,

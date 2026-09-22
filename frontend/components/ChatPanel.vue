@@ -187,6 +187,7 @@
 
 <script>
 import { renderMarkdown } from '~/utils/markdown'
+import chatPanelState from '~/utils/chatPanelState'
 
 export default {
   name: 'ChatPanel',
@@ -194,26 +195,10 @@ export default {
     noteId: { type: Number, default: null },
   },
   data() {
-    return {
-      historyLoaded: false,
-      loadingHistory: false,
-      historyError: false,
-      messages: [],
-      input: '',
-      sending: false,
-      searchingQuery: null,
-      liveAssistantText: '',
-      pendingAttachments: [],
-      pendingConfirmations: [],
-      speechSupported: false,
-      recognizing: false,
-      recognition: null,
-      // /workspace/notes 是"列表+右侧预览/编辑"单页模式，切换笔记不改URL，路由识别不到，
-      // 靠 notes/index.vue 广播出来的当前笔记id兜底（见下面的事件监听）。
-      broadcastNoteId: null,
-      linkingCitationKey: null,
-      copiedMessageId: null
-    }
+    // 笔记页停靠 / 其它页面抽屉是两处独立的模板挂载点，共用同一个 Vue.observable 单例
+    // 而不是各自的本地 data——这样不管从哪边打开，看到的都是同一份会话历史和未发送草稿，
+    // 不会因为切 tab 换了挂载点就把状态清空重来
+    return chatPanelState
   },
   computed: {
     currentNoteId() {

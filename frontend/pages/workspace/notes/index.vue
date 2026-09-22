@@ -653,6 +653,7 @@ import { renderMarkdown as renderMd } from '~/utils/markdown'
 import { createEditorImageResizer } from '~/utils/editorjsImageResize'
 import { clipboardMayContainImage, getClipboardImagePayload } from '~/utils/clipboardImage'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+import workspaceAiDock from '~/mixins/workspaceAiDock'
 
 // 左侧笔记列表每批加载的数量（无限滚动的批大小），asyncData 首屏预取和后续
 // loadMoreNotes 都必须用同一个值——否则首屏拿到的 size 和 page=1 时按这个
@@ -663,7 +664,7 @@ export default {
   name: 'WorkspacePage',
   layout: 'workspace',
   inject: ['getTopbarCollapsed'],
-  mixins: [workspaceLayoutResize],
+  mixins: [workspaceLayoutResize, workspaceAiDock],
   components: {
     WechatPublishDialog: () => import('~/components/WechatPublishDialog.vue'),
     TranslationDialog: () => import('~/components/TranslationDialog.vue'),
@@ -734,7 +735,6 @@ export default {
       // 布局控制
       leftPanelCollapsed: false,
       rightPanelCollapsed: false,
-      aiPanelActive: false,
       isFullscreen: false,
 
       // 创建笔记对话框
@@ -837,12 +837,6 @@ export default {
     // 是因为activeNoteId有好几个赋值点，watch能保证全覆盖不遗漏。
     activeNoteId(newId) {
       this.$nuxt.$emit('workspace:current-note-id', newId || null)
-    },
-    aiPanelActive(v) {
-      // 进 AI 模式右栏至少 420；拖过更宽的不动，之后由 mixin 持久化
-      if (v && this.wsRightWidth < 420) {
-        this.wsRightWidth = this._wsClamp(420)
-      }
     }
   },
   created() {
@@ -909,8 +903,6 @@ export default {
     }
     // 月グルーピング用に全ノートデータをバックグラウンドでロード
     this.loadNotesDates()
-    // 顶栏 AI 图标：笔记页非窄屏时由本页面接管，切换右栏 chat/大纲
-    this.$nuxt.$on('workspace:chat:toggle', this.onAiToggle)
     // 惰性挂载的 ChatPanel 用握手补拉当前笔记id
     this.$nuxt.$on('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$on('recording:resolve-block', this.onRecordingResolveBlock)
@@ -933,7 +925,6 @@ export default {
     if (this._onTopbarToggle) this.$nuxt.$off('workspace:topbar:toggle', this._onTopbarToggle)
     if (this._onEsc) document.removeEventListener('keydown', this._onEsc)
     if (this._onDateNav) document.removeEventListener('keydown', this._onDateNav)
-    this.$nuxt.$off('workspace:chat:toggle', this.onAiToggle)
     this.$nuxt.$off('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
@@ -953,18 +944,6 @@ export default {
         // 900 只做兜底安全上限，不再是实际生效的那个天花板
         maxWidth: 900,
       }
-    },
-    onAiToggle() {
-      // 窄屏：右栏不可用，放行让事件冒泡到 GlobalChatDrawer 开抽屉
-      if (this.wsIsNarrow) return
-      // 右栏当前收起：一步到位——展开右栏并强制开 AI（否则要点两次）
-      if (this.rightPanelCollapsed) {
-        this.rightPanelCollapsed = false
-        this.aiPanelActive = true
-        return
-      }
-      this.aiPanelActive = !this.aiPanelActive
-      // 关掉 AI 不收右栏：切回大纲/最近笔记/Reddit
     },
     // 惰性挂载的 ChatPanel 会错过挂载前那次 current-note-id 广播，收到请求就回传当前值
     replyCurrentNoteId() {
@@ -2700,13 +2679,6 @@ export default {
 }
 
 .workspace-main { overflow-x: hidden; } // 编辑区禁止横向滚动（原 scoped 行为，框架抽取后单独保留）
-
-// AI 停靠时右栏不加内边距、不滚动，交给 .chat-panel 内部的 flex 列
-// （消息区滚、输入框钉底）
-.workspace-right--ai {
-  padding: 0;
-  overflow: hidden;
-}
 
 .sidebar-view-toggle {
   display: flex;
