@@ -939,10 +939,6 @@ export default {
       return {
         storageKey: 'mindio:workspace:notes:colWidths',
         hasRight: true,
-        // 560 曾是唯一的上限，导致左右栏基本拖不动——真正该拦的是"中间区不能
-        // 被压到 middleMin 以下"（mixin 的 _wsClampSide 已经管），这里放宽到
-        // 900 只做兜底安全上限，不再是实际生效的那个天花板
-        maxWidth: 900,
       }
     },
     // 惰性挂载的 ChatPanel 会错过挂载前那次 current-note-id 广播，收到请求就回传当前值

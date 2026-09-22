@@ -28,7 +28,11 @@ const DEFAULTS = {
   hasLeft: true,
   hasRight: true,
   minWidth: 200,
-  maxWidth: 480,
+  // 480 曾是唯一的上限，导致左右栏基本拖不动——真正该拦的是"中间区不能被压到
+  // middleMin 以下"（下面 _wsClampSide 已经管），这个值只做兜底安全上限，不是
+  // 实际生效的那个天花板，放宽到 900（笔记页最早这么改过，现在提到默认值里，
+  // 所有接了这个 mixin 的页面都受益，不用每个页面自己重复覆盖）
+  maxWidth: 900,
   middleMin: 120, // 拖动时中间内容区允许被压到的最小宽度（防止两栏挤爆布局）
   defaultLeft: 280,
   defaultRight: 260,
