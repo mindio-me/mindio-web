@@ -72,7 +72,13 @@ public class ProfileService {
 
         profile.setFullName(request.getFullName());
         profile.setTitle(request.getTitle());
+        profile.setTitleZh(request.getTitleZh());
         profile.setBio(request.getBio());
+        profile.setBioZh(request.getBioZh());
+        profile.setPhilosophy(request.getPhilosophy());
+        profile.setPhilosophyZh(request.getPhilosophyZh());
+        profile.setAvailabilityStatus(request.getAvailabilityStatus());
+        profile.setAvailabilityStatusZh(request.getAvailabilityStatusZh());
         profile.setAvatarUrl(request.getAvatarUrl());
         profile.setLocation(request.getLocation());
         profile.setWebsite(request.getWebsite());
@@ -83,6 +89,7 @@ public class ProfileService {
         profile.setWechatQrUrl(request.getWechatQrUrl());
         profile.setEmail(request.getEmail());
         profile.setSkills(request.getSkills());
+        profile.setSkillsZh(request.getSkillsZh());
         profile.setExperience(request.getExperience());
         profile.setEducation(request.getEducation());
 

@@ -4,32 +4,7 @@
 -->
 <template>
   <div class="resources-page">
-    <!-- Header -->
-    <header class="page-header">
-      <div class="header-content">
-        <div class="header-left">
-          <div class="logo">
-            <MindioLogo />
-            <span>MindIO</span>
-          </div>
-        </div>
-        <nav class="header-nav">
-          <nuxt-link to="/" class="nav-link" exact-active-class="active" exact>Home</nuxt-link>
-          <nuxt-link to="/notes" class="nav-link" exact-active-class="active">{{ $t('site.nav.blog') }}</nuxt-link>
-          <nuxt-link to="/projects" class="nav-link" exact-active-class="active">Projects</nuxt-link>
-          <nuxt-link to="/contact" class="nav-link" exact-active-class="active">Contact</nuxt-link>
-        </nav>
-        <div class="header-right">
-          <button class="theme-toggle" @click="toggleTheme" :title="isDarkTheme ? '切换到白天模式' : '切换到黑夜模式'">
-            <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-          </button>
-          <div v-if="$auth && $auth.loggedIn" class="user-profile">
-            <img src="/default_user.png" alt="User" class="user-avatar" />
-          </div>
-          <button v-if="$auth && $auth.loggedIn" class="logout-btn" @click="handleLogout">Logout</button>
-        </div>
-      </div>
-    </header>
+    <PublicHeader />
 
     <!-- Hero Section -->
     <!-- <section class="hero-section">
@@ -117,25 +92,7 @@
       </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="page-footer">
-      <div class="footer-container">
-        <div class="footer-left">
-          <p>© 2024 Developer's Name. All rights reserved.</p>
-        </div>
-        <div class="footer-right">
-          <a href="#" class="footer-link">
-            <i class="el-icon-s-promotion"></i>
-          </a>
-          <a href="#" class="footer-link">
-            <i class="el-icon-link"></i>
-          </a>
-          <a href="#" class="footer-link">
-            <i class="el-icon-chat-dot-round"></i>
-          </a>
-        </div>
-      </div>
-    </footer>
+    <PublicFooter :owner-profile="ownerProfile" />
   </div>
 </template>
 
@@ -150,7 +107,7 @@ export default {
   },
   data() {
     return {
-      isDarkTheme: false,
+      ownerProfile: null,
       resources: [],
       loading: false,
       searchQuery: '',
@@ -295,11 +252,10 @@ export default {
   },
 
   async mounted() {
-    if (process.client) {
-      const root = document.documentElement;
-      this.isDarkTheme = root.classList.contains('theme-dark');
-    }
     await this.loadResources();
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {}
   },
 
   methods: {
@@ -320,21 +276,6 @@ export default {
     clearFilters() {
       this.searchQuery = '';
       this.selectedCategory = 'all';
-    },
-
-    toggleTheme() {
-      if (this.$root.$options.app && this.$root.$options.app.themeToggle) {
-        this.isDarkTheme = this.$root.$options.app.themeToggle();
-      } else if (process.client) {
-        const root = document.documentElement;
-        const isDark = root.classList.toggle('theme-dark');
-        window.localStorage.setItem('worknotes-theme', isDark ? 'dark' : 'light');
-        this.isDarkTheme = isDark;
-      }
-    },
-
-    handleLogout() {
-      console.log('Logout clicked')
     }
   }
 }
@@ -346,145 +287,6 @@ export default {
   background: var(--bg-color);
   display: flex;
   flex-direction: column;
-}
-
-// Header
-.page-header {
-  background: var(--header-bg);
-  box-shadow: 0 1px 3px var(--shadow-color);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.header-content {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: relative;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  width: 280px;
-  flex-shrink: 0;
-  padding: 0 24px;
-  background: var(--header-bg);
-  border-right: 1px solid var(--border-color);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-color);
-
-  i {
-    font-size: 24px;
-    color: #667eea;
-  }
-}
-
-.header-nav {
-  display: flex;
-  gap: 32px;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.nav-link {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 15px;
-  font-weight: 500;
-  transition: color 0.2s;
-
-  &:hover {
-    color: #667eea;
-  }
-
-  &.active {
-    color: #667eea;
-    position: relative;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -20px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #667eea;
-    }
-  }
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px;
-}
-
-.user-profile {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-}
-
-.logout-btn {
-  padding: 8px 16px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--bg-secondary);
-    border-color: var(--border-color);
-  }
-}
-
-.theme-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-
-  i {
-    font-size: 16px;
-  }
-
-  &:hover {
-    background: rgba(148, 163, 184, 0.08);
-  }
 }
 
 // Hero Section
@@ -799,51 +601,6 @@ export default {
   }
 }
 
-// Footer
-.page-footer {
-  background: #1a202c;
-  padding: 32px 0;
-}
-
-.footer-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.footer-left p {
-  color: #9ca3af;
-  margin: 0;
-  font-size: 14px;
-}
-
-.footer-right {
-  display: flex;
-  gap: 16px;
-}
-
-.footer-link {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #9ca3af;
-  text-decoration: none;
-  transition: color 0.2s;
-
-  i {
-    font-size: 20px;
-  }
-
-  &:hover {
-    color: white;
-  }
-}
-
 // Responsive Design
 @media screen and (max-width: 1400px) {
   .resources-grid {
@@ -858,10 +615,6 @@ export default {
 }
 
 @media screen and (max-width: 1024px) {
-  .header-nav {
-    gap: 24px;
-  }
-
   .hero-title {
     font-size: 36px;
   }
@@ -902,10 +655,6 @@ export default {
 }
 
 @media screen and (max-width: 768px) {
-  .header-nav {
-    display: none;
-  }
-
   .hero-section {
     padding: 40px 0 30px;
   }

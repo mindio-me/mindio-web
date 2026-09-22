@@ -4,7 +4,11 @@
 -->
 <template>
   <div class="local-media-page">
-    <div class="workspace-layout">
+    <div
+      class="workspace-layout workspace-layout--no-right"
+      :class="{ 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
+    >
       <!-- ========== 左侧栏 ========== -->
       <aside class="workspace-sidebar">
         <div class="sidebar-header">
@@ -73,6 +77,8 @@
           </div>
         </div>
       </aside>
+
+      <div v-show="!wsIsNarrow" class="col-resizer" @pointerdown="wsStartResize('left', $event)"></div>
 
       <!-- ========== 主内容区 ========== -->
       <main class="workspace-main">
@@ -347,12 +353,15 @@
 </template>
 
 <script>
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+
 const ALL_DIRECTORIES_ID = 'all'
 
 export default {
   name: 'LocalMediaPage',
   layout: 'workspace',
   middleware: 'auth',
+  mixins: [workspaceLayoutResize],
   data() {
     return {
       directories: [],
@@ -494,6 +503,9 @@ export default {
     }
   },
   methods: {
+    wsLayoutOptions() {
+      return { storageKey: 'mindio:workspace:local-media:colWidths', hasRight: false }
+    },
     async loadDirectories() {
       this.loadingDirs = true
       try {
@@ -964,21 +976,10 @@ export default {
   overflow: hidden;
 }
 
-.workspace-layout {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  height: calc(100vh - 100px);
-  gap: 12px;
-}
-
+// 三栏框架样式见 assets/styles/main.scss；下面只留 local-media 专属覆盖
 .workspace-sidebar {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
   padding: 12px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  overflow-y: auto; // 目录列表随内容滚动（全局默认 overflow:hidden）
 }
 
 .sidebar-header { flex-shrink: 0; }
@@ -1032,10 +1033,6 @@ export default {
 }
 
 .workspace-main {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 16px 20px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -1086,6 +1083,7 @@ export default {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 4px 4px 2px;
 }
 

@@ -13,6 +13,7 @@ import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuDocumentSnapshotRepository;
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuImageMappingRepository;
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuWikiImportMappingRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteImageRefRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.ProjectRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
@@ -73,6 +74,51 @@ class NoteServiceTest {
     }
 
     @Test
+    void rewritesRootRelativeApiUploadUrlWhenPrefixConfigured() {
+        // 新写法：正文里存的是根相对地址 /api/uploads/...，读取时按环境前缀补全。
+        String content = "{\"file\":{\"url\":\"/api/uploads/worknotesimage/public/note/a.png\"}}";
+
+        String result = NoteService.rewriteUploadUrls(content, "https://www.entropybits.com/api");
+
+        assertThat(result).isEqualTo(
+                "{\"file\":{\"url\":\"https://www.entropybits.com/api/uploads/worknotesimage/public/note/a.png\"}}");
+    }
+
+    @Test
+    void leavesExternalImageUrlsUntouched() {
+        // 外部图片没有 /api/uploads/ 段，两趟替换都不该碰它，哪怕它自己路径里带 /uploads/。
+        String content = "![x](https://images.unsplash.com/photo-123/uploads/pic.png) "
+                + "<img src=\"https://cdn.other.com/a.png\">";
+
+        String result = NoteService.rewriteUploadUrls(content, "https://www.entropybits.com/api");
+
+        assertThat(result).isEqualTo(content);
+    }
+
+    @Test
+    void rewriteTargetFallsBackToApiContextPathWhenPrefixBlank() {
+        assertThat(NoteService.resolveRewriteTarget("")).isEqualTo("/api");
+        assertThat(NoteService.resolveRewriteTarget(null)).isEqualTo("/api");
+        assertThat(NoteService.resolveRewriteTarget("  ")).isEqualTo("/api");
+    }
+
+    @Test
+    void rewriteTargetUsesConfiguredPrefixWhenPresent() {
+        assertThat(NoteService.resolveRewriteTarget("https://www.entropybits.com/api"))
+                .isEqualTo("https://www.entropybits.com/api");
+    }
+
+    @Test
+    void normalizesLegacyAbsoluteHostToApiContextPathWhenNoPrefix() {
+        // 老笔记正文里固化了调试环境的绝对地址；未配置前缀时应归一到根相对 /api/uploads/...
+        String content = "![img](http://localhost:8081/api/uploads/worknotesimage/public/a.png)";
+
+        String result = NoteService.rewriteUploadUrls(content, NoteService.resolveRewriteTarget(""));
+
+        assertThat(result).isEqualTo("![img](/api/uploads/worknotesimage/public/a.png)");
+    }
+
+    @Test
     void createNote_marksFetchedTagsAsUsedByNotes() {
         NoteRepository noteRepository = mock(NoteRepository.class);
         UserRepository userRepository = mock(UserRepository.class);
@@ -82,9 +128,10 @@ class NoteServiceTest {
         FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository = mock(FeishuDocumentSnapshotRepository.class);
         FeishuImageMappingRepository feishuImageMappingRepository = mock(FeishuImageMappingRepository.class);
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
+        NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService);
+                contentIndexingService, noteImageRefRepository);
 
         User user = User.builder().id(1L).build();
         Tag tag = Tag.builder().id(5L).owner(user).name("学习").usedByNotes(false).build();
@@ -113,9 +160,10 @@ class NoteServiceTest {
         FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository = mock(FeishuDocumentSnapshotRepository.class);
         FeishuImageMappingRepository feishuImageMappingRepository = mock(FeishuImageMappingRepository.class);
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
+        NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService);
+                contentIndexingService, noteImageRefRepository);
 
         User user = User.builder().id(1L).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
@@ -145,9 +193,10 @@ class NoteServiceTest {
         FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository = mock(FeishuDocumentSnapshotRepository.class);
         FeishuImageMappingRepository feishuImageMappingRepository = mock(FeishuImageMappingRepository.class);
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
+        NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService);
+                contentIndexingService, noteImageRefRepository);
 
         User user = User.builder().id(1L).build();
         Note existingNote = Note.builder().id(42L).owner(user).build();
@@ -175,9 +224,10 @@ class NoteServiceTest {
         FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository = mock(FeishuDocumentSnapshotRepository.class);
         FeishuImageMappingRepository feishuImageMappingRepository = mock(FeishuImageMappingRepository.class);
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
+        NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService);
+                contentIndexingService, noteImageRefRepository);
 
         User user = User.builder().id(1L).build();
         Note existingNote = Note.builder().id(9L).owner(user).build();
@@ -186,8 +236,9 @@ class NoteServiceTest {
 
         service.deleteNote(9L, "alice");
 
-        InOrder inOrder = inOrder(contentIndexingService, noteRepository);
+        InOrder inOrder = inOrder(contentIndexingService, noteImageRefRepository, noteRepository);
         inOrder.verify(contentIndexingService).deleteChunksFor(ContentChunk.SourceType.NOTE, 9L);
+        inOrder.verify(noteImageRefRepository).deleteByNote(existingNote);
         inOrder.verify(noteRepository).delete(existingNote);
     }
 }

@@ -6,10 +6,16 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
+import com.entropybits.worknotes.spring_boot.entity.LocalFileExtraction;
+import com.entropybits.worknotes.spring_boot.entity.LocalMediaFile;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NoteImageRef;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.repository.ContentChunkRepository;
+import com.entropybits.worknotes.spring_boot.repository.LocalFileExtractionRepository;
+import com.entropybits.worknotes.spring_boot.repository.LocalMediaFileRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteImageRefRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,8 +40,12 @@ class ContentIndexingServiceTest {
     @Mock ContentChunkRepository chunkRepository;
     @Mock NoteRepository noteRepository;
     @Mock SourceClipRepository clipRepository;
+    @Mock LocalFileExtractionRepository extractionRepository;
+    @Mock LocalMediaFileRepository localMediaFileRepository;
     @Mock ContentChunkingService chunkingService;
     @Mock EmbeddingService embeddingService;
+    @Mock LocalFileExtractionService extractionService;
+    @Mock NoteImageRefRepository noteImageRefRepository;
 
     private ContentIndexingService service;
     private final User user = User.builder().id(1L).build();
@@ -44,7 +54,8 @@ class ContentIndexingServiceTest {
     @BeforeEach
     void setUp() {
         service = new ContentIndexingService(chunkRepository, noteRepository, clipRepository,
-                chunkingService, embeddingService, objectMapper);
+                chunkingService, embeddingService, objectMapper, extractionRepository, localMediaFileRepository,
+                extractionService, noteImageRefRepository);
     }
 
     @Test
@@ -165,6 +176,44 @@ class ContentIndexingServiceTest {
     }
 
     @Test
+    void reindexNote_replacesImageRefsWithCurrentlyReferencedHashes() throws Exception {
+        Note note = Note.builder().id(15L).owner(user).contentType("richtext")
+                .content("<img src=\"/uploads/a.png\">").build();
+        when(noteRepository.findById(15L)).thenReturn(Optional.of(note));
+        when(chunkingService.chunkNote(note)).thenReturn(List.of("正文"));
+        when(chunkRepository.findBySourceTypeAndSourceIdOrderByChunkIndexAsc(ContentChunk.SourceType.NOTE, 15L))
+                .thenReturn(List.of());
+        when(embeddingService.embed(any())).thenReturn(new float[]{0.1f});
+        when(chunkingService.extractImageUrls(note)).thenReturn(List.of("/uploads/a.png"));
+        when(extractionService.resolveContentHashForImageUrl("/uploads/a.png")).thenReturn("hashA");
+
+        service.reindexNote(15L);
+
+        verify(noteImageRefRepository).deleteByNote(note);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<NoteImageRef>> captor = ArgumentCaptor.forClass(List.class);
+        verify(noteImageRefRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).extracting(NoteImageRef::getContentHash).containsExactly("hashA");
+        assertThat(captor.getValue()).extracting(NoteImageRef::getNote).containsExactly(note);
+    }
+
+    @Test
+    void reindexNote_doesNotSaveImageRefsWhenNoteReferencesNoImages() throws Exception {
+        Note note = Note.builder().id(16L).owner(user).contentType("markdown").content("纯文字笔记").build();
+        when(noteRepository.findById(16L)).thenReturn(Optional.of(note));
+        when(chunkingService.chunkNote(note)).thenReturn(List.of("纯文字笔记"));
+        when(chunkRepository.findBySourceTypeAndSourceIdOrderByChunkIndexAsc(ContentChunk.SourceType.NOTE, 16L))
+                .thenReturn(List.of());
+        when(embeddingService.embed(any())).thenReturn(new float[]{0.1f});
+        when(chunkingService.extractImageUrls(note)).thenReturn(List.of());
+
+        service.reindexNote(16L);
+
+        verify(noteImageRefRepository).deleteByNote(note);
+        verify(noteImageRefRepository, never()).saveAll(any());
+    }
+
+    @Test
     void deleteChunksFor_delegatesToRepository() {
         service.deleteChunksFor(ContentChunk.SourceType.CLIP, 5L);
 
@@ -199,6 +248,54 @@ class ContentIndexingServiceTest {
 
         verifyNoInteractions(chunkingService, embeddingService);
         verify(chunkRepository, never()).save(any());
+    }
+
+    @Test
+    void reindexLocalMediaExtraction_indexesUnderLocalMediaSourceTypeUsingMatchingMediaFileOwner() throws Exception {
+        LocalFileExtraction extraction = LocalFileExtraction.builder()
+                .id(5L).contentHash("hash5").status(LocalFileExtraction.Status.SUCCESS)
+                .extractedText("图片里的文字").build();
+        when(extractionRepository.findById(5L)).thenReturn(Optional.of(extraction));
+        LocalMediaFile mediaFile = LocalMediaFile.builder().owner(user).contentHash("hash5").build();
+        when(localMediaFileRepository.findFirstByContentHash("hash5")).thenReturn(Optional.of(mediaFile));
+        when(chunkingService.chunkPlainText("图片里的文字")).thenReturn(List.of("图片里的文字"));
+        when(chunkRepository.findBySourceTypeAndSourceIdOrderByChunkIndexAsc(ContentChunk.SourceType.LOCAL_MEDIA, 5L))
+                .thenReturn(List.of());
+        when(embeddingService.embed(any())).thenReturn(new float[]{0.1f});
+
+        service.reindexLocalMediaExtraction(5L);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ContentChunk>> captor = ArgumentCaptor.forClass(List.class);
+        verify(chunkRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).hasSize(1);
+        assertThat(captor.getValue().get(0).getSourceType()).isEqualTo(ContentChunk.SourceType.LOCAL_MEDIA);
+        assertThat(captor.getValue().get(0).getOwner()).isEqualTo(user);
+    }
+
+    @Test
+    void reindexLocalMediaExtraction_skipsWhenNoLocalMediaFileMatchesHash() {
+        LocalFileExtraction extraction = LocalFileExtraction.builder()
+                .id(6L).contentHash("hash6").status(LocalFileExtraction.Status.SUCCESS)
+                .extractedText("文字").build();
+        when(extractionRepository.findById(6L)).thenReturn(Optional.of(extraction));
+        when(localMediaFileRepository.findFirstByContentHash("hash6")).thenReturn(Optional.empty());
+
+        service.reindexLocalMediaExtraction(6L);
+
+        verify(chunkRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void reindexLocalMediaExtraction_skipsWhenExtractionNotYetSuccess() {
+        LocalFileExtraction extraction = LocalFileExtraction.builder()
+                .id(7L).contentHash("hash7").status(LocalFileExtraction.Status.PENDING).build();
+        when(extractionRepository.findById(7L)).thenReturn(Optional.of(extraction));
+
+        service.reindexLocalMediaExtraction(7L);
+
+        verify(chunkRepository, never()).saveAll(any());
+        verifyNoInteractions(localMediaFileRepository);
     }
 
     private static String sha256(String text) throws Exception {

@@ -35,22 +35,74 @@
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item :label="$t('workspace.profile.fieldTitle')" prop="title">
+              <el-form-item :label="$t('workspace.profile.fieldTitleEn')" prop="title">
                 <el-input
                   v-model="profileForm.title"
                   :placeholder="$t('workspace.profile.titlePlaceholder')"
                   maxlength="200"
                 />
               </el-form-item>
+              <el-form-item :label="$t('workspace.profile.fieldTitleZh')">
+                <el-input
+                  v-model="profileForm.titleZh"
+                  :placeholder="$t('workspace.profile.titleZhPlaceholder')"
+                  maxlength="200"
+                />
+              </el-form-item>
             </el-col>
           </el-row>
-          <el-form-item :label="$t('workspace.profile.fieldBio')" prop="bio">
+          <el-form-item :label="$t('workspace.profile.fieldAvailabilityStatusEn')">
+            <el-input
+              v-model="profileForm.availabilityStatus"
+              :placeholder="$t('workspace.profile.availabilityStatusPlaceholder')"
+              maxlength="200"
+            />
+          </el-form-item>
+          <el-form-item :label="$t('workspace.profile.fieldAvailabilityStatusZh')">
+            <el-input
+              v-model="profileForm.availabilityStatusZh"
+              :placeholder="$t('workspace.profile.availabilityStatusZhPlaceholder')"
+              maxlength="200"
+            />
+            <p class="hint-text">{{ $t('workspace.profile.availabilityStatusHint') }}</p>
+          </el-form-item>
+          <el-form-item :label="$t('workspace.profile.fieldBioEn')" prop="bio">
             <el-input
               v-model="profileForm.bio"
               type="textarea"
               :rows="4"
               :placeholder="$t('workspace.profile.bioPlaceholder')"
               maxlength="1000"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item :label="$t('workspace.profile.fieldBioZh')">
+            <el-input
+              v-model="profileForm.bioZh"
+              type="textarea"
+              :rows="4"
+              :placeholder="$t('workspace.profile.bioZhPlaceholder')"
+              maxlength="1000"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item :label="$t('workspace.profile.fieldPhilosophyEn')" prop="philosophy">
+            <el-input
+              v-model="profileForm.philosophy"
+              type="textarea"
+              :rows="6"
+              :placeholder="$t('workspace.profile.philosophyPlaceholder')"
+              maxlength="3000"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item :label="$t('workspace.profile.fieldPhilosophyZh')">
+            <el-input
+              v-model="profileForm.philosophyZh"
+              type="textarea"
+              :rows="6"
+              :placeholder="$t('workspace.profile.philosophyZhPlaceholder')"
+              maxlength="3000"
               show-word-limit
             />
           </el-form-item>
@@ -66,7 +118,7 @@
                   </div>
                   <div v-else class="avatar-upload-placeholder" @click="triggerAvatarUpload">
                     <i class="el-icon-plus qr-upload-icon"></i>
-                    <span>{{ $t('workspace.profile.uploadAvatarHint') }}</span>
+                    <span>{{ $t('workspace.profile.uploadHint') }}</span>
                   </div>
                   <input
                     ref="avatarFileInput"
@@ -89,6 +141,49 @@
               </el-form-item>
             </el-col>
           </el-row>
+          <el-form-item :label="$t('workspace.profile.fieldSkillsEn')">
+            <div class="dynamic-tags">
+              <el-tag
+                v-for="(skill, idx) in profileForm.skills"
+                :key="idx"
+                closable
+                size="small"
+                @close="profileForm.skills.splice(idx, 1)"
+              >{{ skill }}</el-tag>
+              <el-input
+                v-if="skillTagInputVisible"
+                ref="skillTagInput"
+                v-model="skillTagInputValue"
+                size="small"
+                class="tag-input"
+                @keyup.enter.native="addSkillTag"
+                @blur="addSkillTag"
+              />
+              <el-button v-else size="small" class="tag-add-btn" @click="showSkillTagInput">{{ $t('workspace.profile.addSkillTag') }}</el-button>
+            </div>
+            <p class="hint-text">{{ $t('workspace.profile.skillsHint') }}</p>
+          </el-form-item>
+          <el-form-item :label="$t('workspace.profile.fieldSkillsZh')">
+            <div class="dynamic-tags">
+              <el-tag
+                v-for="(skill, idx) in profileForm.skillsZh"
+                :key="idx"
+                closable
+                size="small"
+                @close="profileForm.skillsZh.splice(idx, 1)"
+              >{{ skill }}</el-tag>
+              <el-input
+                v-if="skillZhTagInputVisible"
+                ref="skillZhTagInput"
+                v-model="skillZhTagInputValue"
+                size="small"
+                class="tag-input"
+                @keyup.enter.native="addSkillZhTag"
+                @blur="addSkillZhTag"
+              />
+              <el-button v-else size="small" class="tag-add-btn" @click="showSkillZhTagInput">{{ $t('workspace.profile.addSkillTag') }}</el-button>
+            </div>
+          </el-form-item>
         </div>
 
         <!-- 联系方式部分 -->
@@ -146,7 +241,7 @@
                   </div>
                   <div v-else class="qr-upload-placeholder" @click="triggerQrUpload">
                     <i class="el-icon-plus qr-upload-icon"></i>
-                    <span>{{ $t('workspace.profile.uploadQrHint') }}</span>
+                    <span>{{ $t('workspace.profile.uploadHint') }}</span>
                   </div>
                   <input
                     ref="qrFileInput"
@@ -162,11 +257,53 @@
           </el-row>
         </div>
 
+        <!-- 网站设置部分 -->
+        <div class="form-section" v-loading="siteLoading">
+          <h2 class="section-title">{{ $t('workspace.settings.siteInfoTitle') }}</h2>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item :label="$t('workspace.settings.fieldSiteName')">
+                <el-input
+                  v-model="siteForm.siteName"
+                  :placeholder="$t('workspace.settings.siteNamePlaceholder')"
+                  maxlength="100"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="24">
+              <el-form-item :label="$t('workspace.settings.fieldLogo')">
+                <div class="avatar-upload-area">
+                  <div v-if="siteForm.logoUrl" class="avatar-preview">
+                    <img :src="resolveUrl(siteForm.logoUrl)" :alt="$t('workspace.settings.fieldLogo')" class="avatar-preview-img" />
+                    <el-button size="mini" type="text" class="avatar-remove-btn" @click="siteForm.logoUrl = ''">
+                      <i class="el-icon-delete"></i> {{ $t('workspace.profile.removeAvatar') }}
+                    </el-button>
+                  </div>
+                  <div v-else class="avatar-upload-placeholder" @click="triggerLogoUpload">
+                    <i class="el-icon-plus qr-upload-icon"></i>
+                    <span>{{ $t('workspace.profile.uploadHint') }}</span>
+                  </div>
+                  <input
+                    ref="logoFileInput"
+                    type="file"
+                    accept="image/*"
+                    style="display:none"
+                    @change="handleLogoUpload"
+                  />
+                </div>
+                <p class="hint-text">{{ $t('workspace.settings.logoHint') }}</p>
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
         <!-- 其他链接部分 -->
         <div class="form-section">
           <h2 class="section-title">{{ $t('workspace.profile.sectionLinks') }}</h2>
           <el-row :gutter="20">
-            <el-col :span="12">
+            <!-- <el-col :span="12">
               <el-form-item :label="$t('workspace.profile.fieldWebsite')" prop="website">
                 <el-input
                   v-model="profileForm.website"
@@ -174,7 +311,7 @@
                   maxlength="200"
                 />
               </el-form-item>
-            </el-col>
+            </el-col> -->
             <el-col :span="12">
               <el-form-item :label="$t('workspace.profile.fieldGithub')" prop="github">
                 <el-input
@@ -211,14 +348,19 @@
       </div>
     </div>
 
-    <!-- 修改密码弹窗 -->
+    <!-- 修改密码弹窗；forcePasswordChange 时（首次登录用默认密码）不允许关闭，必须改完密码才能继续 -->
     <el-dialog
       :title="$t('workspace.profile.changePassword')"
       :visible.sync="showPasswordDialog"
       width="420px"
       :close-on-click-modal="false"
+      :close-on-press-escape="!forcePasswordChange"
+      :show-close="!forcePasswordChange"
       @closed="resetPasswordForm"
     >
+      <p v-if="forcePasswordChange" class="force-password-change-hint">
+        {{ $t('workspace.profile.forcePasswordChangeHint') }}
+      </p>
       <el-form
         ref="passwordForm"
         :model="passwordForm"
@@ -251,7 +393,7 @@
         </el-form-item>
       </el-form>
       <div slot="footer">
-        <el-button @click="showPasswordDialog = false">{{ $t('common.cancel') }}</el-button>
+        <el-button v-if="!forcePasswordChange" @click="showPasswordDialog = false">{{ $t('common.cancel') }}</el-button>
         <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
           {{ $t('workspace.profile.confirmChange') }}
         </el-button>
@@ -270,6 +412,7 @@ export default {
       loading: false,
       saving: false,
       showPasswordDialog: false,
+      forcePasswordChange: false,
       changingPassword: false,
       profileForm: {
         email: '',
@@ -280,12 +423,30 @@ export default {
         // 个人资料
         fullName: '',
         title: '',
+        titleZh: '',
         bio: '',
+        bioZh: '',
+        philosophy: '',
+        philosophyZh: '',
+        availabilityStatus: '',
+        availabilityStatusZh: '',
+        skills: [],
+        skillsZh: [],
         avatarUrl: '',
         location: '',
         // 其他链接
         website: '',
         github: ''
+      },
+      skillTagInputVisible: false,
+      skillTagInputValue: '',
+      skillZhTagInputVisible: false,
+      skillZhTagInputValue: '',
+      // 网站设置
+      siteLoading: false,
+      siteForm: {
+        siteName: '',
+        logoUrl: ''
       },
       passwordForm: {
         currentPassword: '',
@@ -319,9 +480,53 @@ export default {
     }
   },
   async mounted() {
-    await this.loadProfile()
+    if (this.$route.query.forcePasswordChange) {
+      this.forcePasswordChange = true
+      this.showPasswordDialog = true
+    }
+    await Promise.all([this.loadProfile(), this.loadSiteConfig()])
   },
   methods: {
+    async loadSiteConfig() {
+      this.siteLoading = true
+      try {
+        const resp = await this.$axios.$get('/v1/settings/site')
+        if (resp) {
+          this.siteForm.siteName = resp.siteName || ''
+          this.siteForm.logoUrl = resp.logoUrl || ''
+        }
+      } catch (error) {
+        // 网站信息失败也不阻塞页面
+        this.$message.error(this.$t('workspace.settings.loadSiteInfoFailed'))
+      } finally {
+        this.siteLoading = false
+      }
+    },
+    async saveSiteConfig() {
+      const payload = {
+        siteName: this.siteForm.siteName || '',
+        logoUrl: this.siteForm.logoUrl || ''
+      }
+      await this.$axios.$put('/v1/settings/site', payload)
+    },
+    triggerLogoUpload() {
+      this.$refs.logoFileInput.click()
+    },
+    async handleLogoUpload(event) {
+      const file = event.target.files[0]
+      if (!file) return
+      try {
+        const result = await this.$uploadService.uploadLocal(file, 'profile', 2)
+        // 只保存相对路径，避免写死环境域名
+        const base = this.$axios.defaults.baseURL || ''
+        const url = result.url
+        this.siteForm.logoUrl = base && url.startsWith(base) ? url.slice(base.length) : url
+        this.$message.success(this.$t('workspace.settings.logoUploadSuccess'))
+      } catch (error) {
+        this.$message.error(this.$t('workspace.profile.uploadFailed', { message: error.message || this.$t('workspace.profile.unknownError') }))
+      }
+      event.target.value = ''
+    },
     async loadProfile() {
       this.loading = true
       try {
@@ -335,7 +540,15 @@ export default {
             wechatQrUrl: profile.wechatQrUrl || '',
             fullName: profile.fullName || '',
             title: profile.title || '',
+            titleZh: profile.titleZh || '',
             bio: profile.bio || '',
+            bioZh: profile.bioZh || '',
+            philosophy: profile.philosophy || '',
+            philosophyZh: profile.philosophyZh || '',
+            availabilityStatus: profile.availabilityStatus || '',
+            availabilityStatusZh: profile.availabilityStatusZh || '',
+            skills: profile.skills ? profile.skills.split(',').map(s => s.trim()).filter(Boolean) : [],
+            skillsZh: profile.skillsZh ? profile.skillsZh.split(',').map(s => s.trim()).filter(Boolean) : [],
             avatarUrl: profile.avatarUrl || '',
             location: profile.location || '',
             website: profile.website || '',
@@ -356,7 +569,15 @@ export default {
         }
         this.saving = true
         try {
-          await this.$profileService.updateProfile(this.profileForm)
+          const submitData = {
+            ...this.profileForm,
+            skills: Array.isArray(this.profileForm.skills) ? this.profileForm.skills.join(',') : this.profileForm.skills,
+            skillsZh: Array.isArray(this.profileForm.skillsZh) ? this.profileForm.skillsZh.join(',') : this.profileForm.skillsZh
+          }
+          await Promise.all([
+            this.$profileService.updateProfile(submitData),
+            this.saveSiteConfig()
+          ])
           this.$message.success(this.$t('workspace.profile.saveSuccess'))
           // 可选：刷新页面数据
           await this.loadProfile()
@@ -367,6 +588,38 @@ export default {
           this.saving = false
         }
       })
+    },
+    showSkillTagInput() {
+      this.skillTagInputVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.skillTagInput) {
+          this.$refs.skillTagInput.focus()
+        }
+      })
+    },
+    addSkillTag() {
+      const val = this.skillTagInputValue.trim()
+      if (val && !this.profileForm.skills.includes(val)) {
+        this.profileForm.skills.push(val)
+      }
+      this.skillTagInputVisible = false
+      this.skillTagInputValue = ''
+    },
+    showSkillZhTagInput() {
+      this.skillZhTagInputVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.skillZhTagInput) {
+          this.$refs.skillZhTagInput.focus()
+        }
+      })
+    },
+    addSkillZhTag() {
+      const val = this.skillZhTagInputValue.trim()
+      if (val && !this.profileForm.skillsZh.includes(val)) {
+        this.profileForm.skillsZh.push(val)
+      }
+      this.skillZhTagInputVisible = false
+      this.skillZhTagInputValue = ''
     },
     triggerQrUpload() {
       this.$refs.qrFileInput.click()
@@ -430,6 +683,10 @@ export default {
           await this.$profileService.changePassword(this.passwordForm)
           this.$message.success(this.$t('workspace.profile.passwordChangeSuccess'))
           this.showPasswordDialog = false
+          if (this.forcePasswordChange) {
+            this.forcePasswordChange = false
+            this.$router.replace('/workspace/profile')
+          }
         } catch (error) {
           console.error('修改密码失败:', error)
           const errorMsg = error.response?.data?.message || error.response?.data || this.$t('workspace.profile.passwordChangeFailed')
@@ -564,6 +821,21 @@ export default {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 6px;
+}
+
+.dynamic-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.tag-input {
+  width: 120px;
+}
+
+.tag-add-btn {
+  border-style: dashed;
 }
 
 .qr-upload-area {
@@ -707,6 +979,15 @@ export default {
 .security-desc {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+.force-password-change-hint {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: var(--el-color-warning-light-9, #fdf6ec);
+  color: var(--el-color-warning, #e6a23c);
+  font-size: 13px;
 }
 </style>
 

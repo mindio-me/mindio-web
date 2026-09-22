@@ -51,21 +51,11 @@ public class SecurityConfig {
     @Value("${worknotes.frontend.base-url:http://localhost:10822}")
     private String frontendBaseUrl;
 
-    @Value("${spring.h2.console.enabled:false}")
-    private boolean h2ConsoleEnabled;
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 // 禁用 CSRF（使用 JWT 时不需要）
                 .csrf(AbstractHttpConfigurer::disable)
-
-                // H2 Console 需要 sameOrigin iframe，仅在 desktop profile（h2 console 启用时）放宽
-                .headers(headers -> {
-                    if (h2ConsoleEnabled) {
-                        headers.frameOptions(frame -> frame.sameOrigin());
-                    }
-                })
 
                 // 配置 CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
@@ -81,8 +71,6 @@ public class SecurityConfig {
                         .requestMatchers("OPTIONS").permitAll()
                         // 允许认证接口无需授权
                         .requestMatchers("/v1/auth/**").permitAll()
-                        // Desktop runtime license status is needed before normal product actions.
-                        .requestMatchers("/v1/desktop/license/status").permitAll()
                         // 允许飞书 OAuth 回调（浏览器跳转回调时不带 JWT）
                         .requestMatchers("/v1/integrations/feishu/oauth/callback").permitAll()
                         // 允许微信消息回调（微信服务器直接调用，签名校验在 Controller 内完成）
@@ -97,18 +85,12 @@ public class SecurityConfig {
                         .requestMatchers("/v1/notes/public/**").permitAll()
                         // 允许访问公开项目
                         .requestMatchers("/v1/projects/public", "/v1/projects/featured", "/v1/projects/category/**").permitAll()
-                        // 允许访问服务列表（仅公开列表接口，写操作走同路径的 POST/PUT/DELETE，需要登录）
-                        .requestMatchers(HttpMethod.GET, "/v1/services", "/v1/services/featured", "/v1/services/*").permitAll()
                         // 允许访问成就列表（仅公开列表接口，/my 和 /{id} 都需要登录，故不用通配符）
                         .requestMatchers(HttpMethod.GET, "/v1/achievements").permitAll()
                         // 允许访问资源列表
                         .requestMatchers("/v1/resources", "/v1/resources/category/**", "/v1/resources/*").permitAll()
                         // 允许访问公开个人资料
                         .requestMatchers("/v1/profiles/*").permitAll()
-                        // 允许联系表单提交（公开接口）
-                        .requestMatchers("/v1/contact/**").permitAll()
-                        // 允许 H2 Console（desktop 开发调试用）
-                        .requestMatchers("/h2-console/**").permitAll()
                         // 允许 Actuator 健康检查（可选）
                         .requestMatchers("/actuator/health").permitAll()
                         // /internal/** 是给独立Agent服务回调用的内部接口，不走JWT——鉴权

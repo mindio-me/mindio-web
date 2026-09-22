@@ -27,6 +27,7 @@ public class SourceClipResponse {
     private String title;
     private String content;   // null in list responses
     private String contentFormat;
+    private Integer durationSeconds;
     private String excerpt;
     private Set<ClipTagResponse> tags;
     private LocalDateTime createdAt;
@@ -46,6 +47,7 @@ public class SourceClipResponse {
                 .title(c.getTitle())
                 .contentFormat(c.getContentFormat())
                 .excerpt(c.getExcerpt())
+                .durationSeconds(c.getDurationSeconds())
                 .tags(c.getClipTagLinks().stream()
                         .filter(l -> Boolean.TRUE.equals(l.getManuallyAdded()) || Boolean.TRUE.equals(l.getAiSuggested()))
                         .map(ClipTagResponse::fromEntity)

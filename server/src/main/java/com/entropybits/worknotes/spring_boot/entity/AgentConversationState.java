@@ -35,7 +35,7 @@ public class AgentConversationState {
     @Column(name = "conversation_id", nullable = false, unique = true)
     private String conversationId;
 
-    @Column(name = "state_blob", columnDefinition = "TEXT")
+    @Column(name = "state_blob", columnDefinition = "LONGTEXT")
     private String stateBlob;
 
     @Column(name = "updated_at", nullable = false)

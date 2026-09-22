@@ -4,7 +4,6 @@
  */
 package com.entropybits.worknotes.spring_boot.search;
 
-import com.entropybits.worknotes.spring_boot.news.RssFeedParser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

@@ -4,13 +4,13 @@
 -->
 <template>
   <div class="notes-page">
-    <div 
-      class="workspace-layout" 
-      :class="{ 'right-collapsed': rightPanelCollapsed }"
-      :style="{ height: workspaceHeight }"
+    <div
+      class="workspace-layout"
+      :class="{ 'right-collapsed': rightPanelCollapsed, 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
     >
       <!-- ========== 左侧列表 ========== -->
-      <aside class="workspace-sidebar">
+      <aside v-show="!leftPanelCollapsed" class="workspace-sidebar">
         <!-- 视图模式切换 -->
         <div class="sidebar-view-toggle">
           <button
@@ -104,39 +104,29 @@
               <span class="section-subtitle">{{ $t('workspace.notes.countSuffix', { n: total }) }}</span>
             </div>
             <div v-loading="loading" class="note-list-wrapper">
-              <div v-if="notes.length > 0" class="note-list">
+              <div v-if="notes.length > 0" ref="noteListEl" class="note-list">
                 <div
                   v-for="note in notes"
                   :key="note.id"
                   class="note-list-item"
                   :class="{ active: note.id === activeNoteId }"
+                  :title="noteListItemTooltip(note)"
                   @click="selectNote(note)"
                 >
                   <div class="note-list-title">
                     {{ note.title || $t('workspace.notes.untitledNote') }}
                     <span v-if="note.language === 'en'" class="note-lang-badge">EN</span>
                   </div>
-                  <div class="note-list-meta">
-                    <span class="note-list-time">{{ formatTime(note.createdAt) }}</span>
-                    <span v-if="note.tags && note.tags.length > 0" class="note-list-tag">{{ note.tags[0].name }}</span>
-                  </div>
+                </div>
+                <div ref="loadMoreSentinel" class="note-list-sentinel">
+                  <span v-if="loadingMore" class="note-list-sentinel-text">{{ $t('workspace.notes.loadingMore') }}</span>
+                  <span v-else-if="!hasMoreNotes" class="note-list-sentinel-text">{{ $t('workspace.notes.noMoreNotes') }}</span>
                 </div>
               </div>
               <div v-else-if="!loading" class="sidebar-empty">
                 <p>{{ $t('workspace.notes.noNotes') }}</p>
                 <el-button type="primary" size="mini" @click="showCreateNoteDialog">{{ $t('workspace.notes.createNow') }}</el-button>
               </div>
-            </div>
-            <div v-if="total > pageSize" class="sidebar-pagination">
-              <el-pagination
-                :current-page="page + 1"
-                :page-size="pageSize"
-                :total="total"
-                :pager-count="5"
-                layout="prev, pager, next"
-                small
-                @current-change="handlePageChange"
-              />
             </div>
           </div>
           <!-- 月历视图 -->
@@ -152,8 +142,23 @@
           </div>
       </aside>
 
+      <!-- 左/中 拖拽分隔条 -->
+      <div
+        v-show="!wsIsNarrow && !leftPanelCollapsed"
+        class="col-resizer"
+        @pointerdown="wsStartResize('left', $event)"
+      ></div>
+
       <!-- ========== 中间编辑区 ========== -->
       <main class="workspace-main" :class="{ 'workspace-main--fullscreen': isFullscreen }">
+        <PanelCollapseToggle
+          v-if="!isFullscreen"
+          side="left"
+          :collapsed="leftPanelCollapsed"
+          :expand-title="$t('workspace.notes.expandSidebar')"
+          :collapse-title="$t('workspace.notes.collapseSidebar')"
+          @toggle="leftPanelCollapsed = !leftPanelCollapsed"
+        />
         <!-- 大月カレンダー -->
         <div v-if="showMonthCalendar" key="month-calendar" class="month-calendar-view">
           <div class="month-calendar-header">
@@ -192,12 +197,15 @@
                   </div>
                   <div class="cal-day-notes">
                     <div
-                      v-for="note in dayObj.notes"
+                      v-for="note in dayObj.notes.slice(0, 3)"
                       :key="note.id"
                       class="cal-note-chip"
                       @click="openNoteFromCalendar(note)"
                     >
                       {{ note.title || $t('workspace.notes.untitledNote') }}
+                    </div>
+                    <div v-if="dayObj.notes.length > 3" class="cal-note-more">
+                      {{ $t('workspace.notes.moreNotes', { n: dayObj.notes.length - 3 }) }}
                     </div>
                   </div>
                 </template>
@@ -294,22 +302,12 @@
                   <i v-if="getProjectIcon(activeNote.projectId)" :class="getProjectIcon(activeNote.projectId)" style="margin-right: 4px;"></i>
                   {{ activeNote.projectName }}
                 </el-tag>
-                <el-button size="mini" icon="el-icon-paperclip" @click="goToClips">
-                  {{ $t('workspace.notes.references') }}<span v-if="clipCount > 0"> ({{ clipCount }})</span>
-                </el-button>
-                <el-button v-if="!isEditorjsNote" size="mini" @click="openInEditor">
-                  <i class="el-icon-edit"></i> {{ $t('workspace.notes.openInEditor') }}
-                </el-button>
-                <el-button v-if="!isFullscreen" size="mini" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
-                <el-button v-if="isFullscreen" size="mini" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
-                <button
-                  v-if="!isFullscreen"
-                  class="panel-toggle-btn"
-                  :title="rightPanelCollapsed ? $t('workspace.notes.expandSidebar') : $t('workspace.notes.collapseSidebar')"
-                  @click="rightPanelCollapsed = !rightPanelCollapsed"
-                >
-                  <i :class="rightPanelCollapsed ? 'el-icon-d-arrow-left' : 'el-icon-d-arrow-right'"></i>
-                </button>
+                <el-badge :value="clipCount" :hidden="clipCount === 0">
+                  <el-button size="mini" icon="el-icon-paperclip" :title="$t('workspace.notes.references')" @click="goToClips" />
+                </el-badge>
+                <el-button v-if="!isEditorjsNote" size="mini" icon="el-icon-edit" :title="$t('workspace.notes.openInEditor')" @click="openInEditor" />
+                <el-button v-if="!isFullscreen" size="mini" icon="el-icon-full-screen" :title="$t('workspace.notes.fullscreen')" @click="isFullscreen = true" />
+                <el-button v-if="isFullscreen" size="mini" type="warning" icon="el-icon-close" :title="$t('workspace.notes.exitFullscreen')" @click="isFullscreen = false" />
                 <el-dropdown @command="(cmd) => handleNoteAction(cmd, activeNote)">
                   <el-button size="mini" icon="el-icon-more"></el-button>
                 <el-dropdown-menu slot="dropdown">
@@ -436,10 +434,35 @@
             <i class="el-icon-notebook-2 empty-icon"></i>
             <p class="empty-text">{{ $t('workspace.notes.selectNoteHint') }}</p>
           </div>
+        <PanelCollapseToggle
+          v-if="!isFullscreen"
+          side="right"
+          :collapsed="rightPanelCollapsed"
+          :expand-title="$t('workspace.notes.expandSidebar')"
+          :collapse-title="$t('workspace.notes.collapseSidebar')"
+          @toggle="rightPanelCollapsed = !rightPanelCollapsed"
+        />
       </main>
 
+      <!-- 中/右 拖拽分隔条 -->
+      <div
+        v-show="!wsIsNarrow && !rightPanelCollapsed"
+        class="col-resizer"
+        @pointerdown="wsStartResize('right', $event)"
+      ></div>
+
       <!-- ========== 右侧信息 ========== -->
-      <aside v-show="!rightPanelCollapsed" class="workspace-right">
+      <aside
+        v-show="!rightPanelCollapsed"
+        class="workspace-right"
+        :class="{ 'workspace-right--ai': aiPanelActive }"
+      >
+        <ChatPanel
+          v-if="aiPanelActive"
+          :note-id="activeNote ? Number(activeNote.id) : null"
+          @close="aiPanelActive = false"
+        />
+        <template v-else>
         <!-- 笔记右侧 -->
         <div class="right-panel" v-if="activeNote">
           <div class="right-section">
@@ -493,6 +516,7 @@
             </template>
           </div>
         </div>
+        </template>
 
       </aside>
     </div>
@@ -628,11 +652,18 @@
 import { renderMarkdown as renderMd } from '~/utils/markdown'
 import { createEditorImageResizer } from '~/utils/editorjsImageResize'
 import { clipboardMayContainImage, getClipboardImagePayload } from '~/utils/clipboardImage'
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+
+// 左侧笔记列表每批加载的数量（无限滚动的批大小），asyncData 首屏预取和后续
+// loadMoreNotes 都必须用同一个值——否则首屏拿到的 size 和 page=1 时按这个
+// size 请求的偏移量对不上，会跳过或重复中间那一段笔记
+const NOTES_PAGE_SIZE = 20
 
 export default {
   name: 'WorkspacePage',
   layout: 'workspace',
   inject: ['getTopbarCollapsed'],
+  mixins: [workspaceLayoutResize],
   components: {
     WechatPublishDialog: () => import('~/components/WechatPublishDialog.vue'),
     TranslationDialog: () => import('~/components/TranslationDialog.vue'),
@@ -642,7 +673,7 @@ export default {
     try {
       const [notesRes, recentNotesRes, tagsRes, projectsRes] = await Promise.all([
         $axios.get('/v1/notes', {
-          params: { page: 0, size: 10, sortBy: 'createdAt', direction: 'DESC' }
+          params: { page: 0, size: NOTES_PAGE_SIZE, sortBy: 'createdAt', direction: 'DESC' }
         }),
         $axios.get('/v1/notes', {
           params: { page: 0, size: 5, sortBy: 'modifiedAt', direction: 'DESC' }
@@ -672,7 +703,8 @@ export default {
       selectedProjects: [],
       sortBy: 'createdAt', // 左侧列表按创建时间排序
       page: 0,
-      pageSize: 10,
+      pageSize: NOTES_PAGE_SIZE,
+      loadingMore: false,
       notes: [],
       total: 0,
       recentNotes: [], // 右侧"最近笔记"单独存储，按修改时间排序
@@ -681,8 +713,13 @@ export default {
       activeNoteId: null,
       activeNote: null,
       clipCount: 0,
+      aiSearchMessages: [],
+      aiSearchInput: '',
+      aiSearchLoading: false,
+      savingResult: null,
       outline: [],
       editor: null,
+      editorUndo: null,
       imageResizer: null,
       saveStatus: { icon: 'el-icon-check', text: '' },
       saveTimeout: null,
@@ -695,7 +732,9 @@ export default {
       projectsCollapsed: false,
 
       // 布局控制
+      leftPanelCollapsed: false,
       rightPanelCollapsed: false,
+      aiPanelActive: false,
       isFullscreen: false,
 
       // 创建笔记对话框
@@ -739,17 +778,8 @@ export default {
     }
   },
   computed: {
-    workspaceHeight() {
-      // 根据顶部栏状态动态计算高度
-      // 尝试从父组件获取状态，如果获取不到则使用默认值
-      let topbarCollapsed = false
-      if (this.getTopbarCollapsed) {
-        topbarCollapsed = this.getTopbarCollapsed()
-      } else if (this.$parent && this.$parent.topbarCollapsed !== undefined) {
-        topbarCollapsed = this.$parent.topbarCollapsed
-      }
-      // 隐藏时只保留约 20px 的空间（切换按钮 + padding）
-      return topbarCollapsed ? 'calc(100vh - 20px)' : 'calc(100vh - 110px)'
+    hasMoreNotes() {
+      return this.notes.length < this.total
     },
     isEditorjsNote() {
       return this.activeNote && this.activeNote.contentType === 'editorjs'
@@ -795,11 +825,30 @@ export default {
       return days
     },
   },
+  watch: {
+    // EditorJS 的 i18n 只在 new EditorJS(...) 构造时读一次，切换 App 语言不会让已打开的
+    // 编辑器（工具栏/添加块面板/Convert to 菜单等）跟着热更新，所以这里重建一次编辑器
+    '$i18n.locale'() {
+      if (!this.isEditorjsNote || !this.editor) return
+      this.reinitEditorForLocale()
+    },
+    // 这个页面是"列表+右侧预览/编辑"的单页模式，切换笔记不改变URL，所以全局AI助手没法靠
+    // 路由识别"当前笔记"，改成广播事件让它自己订阅。用watch而不是在每处赋值点手动emit，
+    // 是因为activeNoteId有好几个赋值点，watch能保证全覆盖不遗漏。
+    activeNoteId(newId) {
+      this.$nuxt.$emit('workspace:current-note-id', newId || null)
+    },
+    aiPanelActive(v) {
+      // 进 AI 模式右栏至少 420；拖过更宽的不动，之后由 mixin 持久化
+      if (v && this.wsRightWidth < 420) {
+        this.wsRightWidth = this._wsClamp(420)
+      }
+    }
+  },
   created() {
     if (process.client) {
       this.tagsCollapsed = localStorage.getItem('sidebar_tags_collapsed') === 'true'
       this.projectsCollapsed = localStorage.getItem('sidebar_projects_collapsed') === 'true'
-      this.pageSize = 10 + (this.tagsCollapsed ? 2 : 0) + (this.projectsCollapsed ? 2 : 0)
     }
   },
   mounted() {
@@ -819,6 +868,9 @@ export default {
         }
       })
     }
+    // asyncData 已经预取过首屏笔记时，上面两个分支都不会经过 loadNotes()，
+    // 无限滚动的 IntersectionObserver 要在这里单独补挂一次
+    this.$nextTick(() => this.setupNoteListObserver())
     // 如果 recentNotes 为空，单独加载
     if (!this.recentNotes || this.recentNotes.length === 0) {
       this.loadRecentNotes()
@@ -857,20 +909,78 @@ export default {
     }
     // 月グルーピング用に全ノートデータをバックグラウンドでロード
     this.loadNotesDates()
+    // 顶栏 AI 图标：笔记页非窄屏时由本页面接管，切换右栏 chat/大纲
+    this.$nuxt.$on('workspace:chat:toggle', this.onAiToggle)
+    // 惰性挂载的 ChatPanel 用握手补拉当前笔记id
+    this.$nuxt.$on('workspace:request-current-note-id', this.replyCurrentNoteId)
+    this.$nuxt.$on('recording:resolve-block', this.onRecordingResolveBlock)
+    this.$nuxt.$on('topic-block-updated', this.onTopicBlockUpdated)
+    // 停靠在本页的 ChatPanel 点笔记引用时用：原地切换 activeNoteId，不走路由。
+    // 之前改成 router.push('/workspace/notes?openNoteId=...') 试过，
+    // 结果哪怕是同路由只改query，也会把这个页面整个重新挂载（实测 mounted() 复跑了一遍：
+    // aiPanelActive 等 data() 全部重置成默认值，右栏"弹回"普通侧栏；asyncData/无限滚动
+    // 的笔记列表也跟着重新拉取），观感就是整页刷新。这个页面本来的设计就是"切换笔记不改
+    // URL"（见下面 activeNoteId 那个 watch 的注释），citation 点击也应该走这条路，而不是
+    // 借 URL 绕一圈。
+    this.$nuxt.$on('workspace:open-note-request', this.onOpenNoteRequest)
   },
   beforeDestroy() {
     if (this.saveTimeout) clearTimeout(this.saveTimeout)
     this.destroyEditor()
+    if (this._noteListObserver) this._noteListObserver.disconnect()
     // 移除事件监听器
     this.$nuxt.$off('workspace:create:notes', this.showCreateNoteDialog)
     if (this._onTopbarToggle) this.$nuxt.$off('workspace:topbar:toggle', this._onTopbarToggle)
     if (this._onEsc) document.removeEventListener('keydown', this._onEsc)
     if (this._onDateNav) document.removeEventListener('keydown', this._onDateNav)
+    this.$nuxt.$off('workspace:chat:toggle', this.onAiToggle)
+    this.$nuxt.$off('workspace:request-current-note-id', this.replyCurrentNoteId)
+    this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
+    this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$off('workspace:open-note-request', this.onOpenNoteRequest)
+    // 离开这个页面后，"当前笔记"广播必须清空，否则全局AI助手在其他页面（比如收藏夹）
+    // 会继续误把这里最后打开的笔记当成"当前笔记"
+    this.$nuxt.$emit('workspace:current-note-id', null)
   },
   methods: {
+    // 供 workspaceLayoutResize mixin 读取
+    wsLayoutOptions() {
+      return {
+        storageKey: 'mindio:workspace:notes:colWidths',
+        hasRight: true,
+        // 560 曾是唯一的上限，导致左右栏基本拖不动——真正该拦的是"中间区不能
+        // 被压到 middleMin 以下"（mixin 的 _wsClampSide 已经管），这里放宽到
+        // 900 只做兜底安全上限，不再是实际生效的那个天花板
+        maxWidth: 900,
+      }
+    },
+    onAiToggle() {
+      // 窄屏：右栏不可用，放行让事件冒泡到 GlobalChatDrawer 开抽屉
+      if (this.wsIsNarrow) return
+      // 右栏当前收起：一步到位——展开右栏并强制开 AI（否则要点两次）
+      if (this.rightPanelCollapsed) {
+        this.rightPanelCollapsed = false
+        this.aiPanelActive = true
+        return
+      }
+      this.aiPanelActive = !this.aiPanelActive
+      // 关掉 AI 不收右栏：切回大纲/最近笔记/Reddit
+    },
+    // 惰性挂载的 ChatPanel 会错过挂载前那次 current-note-id 广播，收到请求就回传当前值
+    replyCurrentNoteId() {
+      this.$nuxt.$emit('workspace:current-note-id', this.activeNoteId || null)
+    },
+    // 停靠面板点笔记引用时触发，见 mounted() 里 workspace:open-note-request 的注册注释
+    onOpenNoteRequest(noteId) {
+      const id = Number(noteId)
+      if (Number.isNaN(id)) return
+      this.selectNote({ id })
+    },
     // ========== 笔记方法 ==========
-    async loadNotes() {
-      this.loading = true
+    // append=true 用于无限滚动"加载下一批"，false（默认）是筛选条件变化后的整体刷新
+    async loadNotes({ append = false } = {}) {
+      if (append) this.loadingMore = true
+      else this.loading = true
       try {
         // 左侧列表：按创建时间排序
         const params = { page: this.page, size: this.pageSize, sortBy: 'createdAt', direction: 'DESC' }
@@ -878,16 +988,42 @@ export default {
         if (this.selectedTags.length > 0) params.tagIds = this.selectedTags.join(',')
         if (this.selectedProjects.length > 0) params.projectIds = this.selectedProjects.join(',')
         const { data } = await this.$axios.get('/v1/notes', { params })
-        this.notes = data.content || []
+        this.notes = append ? this.notes.concat(data.content || []) : (data.content || [])
         this.total = data.totalElements || 0
-        
-        // 同时加载右侧"最近笔记"：按修改时间排序
-        await this.loadRecentNotes()
+
+        if (!append) {
+          // 同时加载右侧"最近笔记"：按修改时间排序
+          await this.loadRecentNotes()
+        }
       } catch (error) {
         this.$message.error(this.$t('workspace.notes.loadNotesFailed'))
       } finally {
         this.loading = false
+        this.loadingMore = false
+        this.$nextTick(() => {
+          this.setupNoteListObserver()
+          if (!append && this.$refs.noteListEl) this.$refs.noteListEl.scrollTop = 0
+        })
       }
+    },
+    async loadMoreNotes() {
+      if (this.loading || this.loadingMore || !this.hasMoreNotes) return
+      this.page += 1
+      await this.loadNotes({ append: true })
+    },
+    // 滚动到列表底部时自动加载下一批，取代原来的 el-pagination 页码翻页
+    setupNoteListObserver() {
+      if (this._noteListObserver) {
+        this._noteListObserver.disconnect()
+        this._noteListObserver = null
+      }
+      const root = this.$refs.noteListEl
+      const sentinel = this.$refs.loadMoreSentinel
+      if (!root || !sentinel) return
+      this._noteListObserver = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) this.loadMoreNotes()
+      }, { root, rootMargin: '80px' })
+      this._noteListObserver.observe(sentinel)
     },
     async loadRecentNotes() {
       try {
@@ -904,29 +1040,11 @@ export default {
     handleSearch() { this.page = 0; this.loadNotes() },
     handleTagFilter() { this.page = 0; this.loadNotes() },
     handleProjectFilter() { this.page = 0; this.loadNotes() },
-    handlePageChange(page) { this.page = page - 1; this.loadNotes() },
-    async toggleSidebarSection(section) {
+    toggleSidebarSection(section) {
       const collapsedKey = section === 'tags' ? 'tagsCollapsed' : 'projectsCollapsed'
       const lsKey = section === 'tags' ? 'sidebar_tags_collapsed' : 'sidebar_projects_collapsed'
-      const willCollapse = !this[collapsedKey]
-      this[collapsedKey] = willCollapse
-      localStorage.setItem(lsKey, willCollapse)
-
-      const oldPageSize = this.pageSize
-      const newPageSize = oldPageSize + (willCollapse ? 2 : -2)
-
-      let newPage = 0
-      if (this.activeNoteId) {
-        const indexInPage = this.notes.findIndex(n => n.id === this.activeNoteId)
-        if (indexInPage >= 0) {
-          const globalIndex = this.page * oldPageSize + indexInPage
-          newPage = Math.floor(globalIndex / newPageSize)
-        }
-      }
-
-      this.pageSize = newPageSize
-      this.page = newPage
-      await this.loadNotes()
+      this[collapsedKey] = !this[collapsedKey]
+      localStorage.setItem(lsKey, this[collapsedKey])
     },
     toggleTag(tagId) {
       const index = this.selectedTags.indexOf(tagId)
@@ -1145,6 +1263,8 @@ export default {
         this.$clipService.getNoteClipCount(this.activeNoteId)
           .then(count => { this.clipCount = count })
           .catch(() => { this.clipCount = 0 })
+        this.aiSearchMessages = []
+        this.loadAiSearchHistory()
         this.$wechatService.getLogs(Number(this.activeNoteId))
           .then(logs => { this.wechatPublished = logs.some(l => l.status === 'SUCCESS') })
           .catch(() => { /* 微信未配置时静默忽略 */ })
@@ -1185,16 +1305,25 @@ export default {
         { default: EditorJS }, { default: Header }, { default: List },
         { default: CodeTool }, { default: Delimiter }, { default: Quote },
         { default: Table }, { default: InlineCode }, { default: ImageTool },
-        { default: Marker }, { default: MarkdownBlock },
+        { default: Marker }, { default: Checklist }, { default: Warning }, { default: LinkTool }, { default: AttachesTool }, { default: MarkdownBlock },
         { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool },
-        { default: CodeWrapTune }
+        { default: RecordTool },
+        { default: CodeWrapTune }, { default: Undo },
+        { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }
       ] = await Promise.all([
         import('@editorjs/editorjs'), import('@editorjs/header'), import('@editorjs/list'),
         import('@editorjs/code'), import('@editorjs/delimiter'), import('@editorjs/quote'),
         import('@editorjs/table'), import('@editorjs/inline-code'), import('@editorjs/image'),
-        import('@editorjs/marker'), import('~/utils/editorjs-markdown-block'),
+        import('@editorjs/marker'), import('@editorjs/checklist'), import('@editorjs/warning'),
+        import('@editorjs/link'),
+        import('@editorjs/attaches'),
+        import('~/utils/editorjs-markdown-block'),
         import('~/utils/editorjsVideoTool'), import('~/utils/editorjsEmbedVideoTool'),
-        import('~/utils/editorjsAudioTool'), import('~/utils/editorjsCodeWrapTune')
+        import('~/utils/editorjsAudioTool'),
+        import('~/utils/editorjsRecordTool'),
+        import('~/utils/editorjsCodeWrapTune'),
+        import('editorjs-undo'),
+        import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool')
       ])
       const uploadService = this.$uploadService
       const noteId = this.activeNote ? this.activeNote.id : 0
@@ -1214,6 +1343,7 @@ export default {
           image: {
             class: ImageTool,
             config: {
+              features: { caption: 'optional' },
               uploader: {
                 async uploadByFile(file) {
                   try {
@@ -1234,6 +1364,96 @@ export default {
             }
           },
           marker: { class: Marker },
+          checklist: { class: Checklist, inlineToolbar: true },
+          warning: {
+            class: Warning,
+            inlineToolbar: true,
+            config: {
+              titlePlaceholder: this.$t('workspace.notes.editorWarningTitlePlaceholder'),
+              messagePlaceholder: this.$t('workspace.notes.editorWarningMessagePlaceholder')
+            }
+          },
+          linkTool: {
+            class: LinkTool,
+            config: {
+              endpoint: `${this.$axios?.defaults?.baseURL || ''}/v1/link-preview`,
+              headers: {
+                Authorization: this.$auth?.strategy?.token?.get() || ''
+              }
+            }
+          },
+          attaches: {
+            class: AttachesTool,
+            config: {
+              buttonText: this.$t('workspace.notes.editorAttachButtonText'),
+              errorMessage: this.$t('workspace.notes.editorAttachErrorMessage'),
+              uploader: {
+                async uploadByFile(file) {
+                  try {
+                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
+                    return {
+                      success: 1,
+                      file: {
+                        url: result.url || result.fileUrl || result,
+                        name: result.fileName || file.name,
+                        size: result.fileSize,
+                        extension: result.extName
+                      }
+                    }
+                  } catch (e) {
+                    console.error('文件上传失败:', e)
+                    return { success: 0 }
+                  }
+                }
+              }
+            }
+          },
+          references: {
+            class: ReferencesTool,
+            config: {
+              axiosBaseURL: this.$axios?.defaults?.baseURL || '',
+              getAuthHeader: () => ({ Authorization: this.$auth?.strategy?.token?.get() || '' }),
+              uploader: {
+                async uploadByFile(file) {
+                  try {
+                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
+                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
+                  } catch (e) {
+                    console.error('参考文档上传失败:', e)
+                    return { success: 0 }
+                  }
+                }
+              }
+            }
+          },
+          mediaGallery: {
+            class: GalleryTool,
+            config: {
+              uploader: {
+                async uploadByFile(file) {
+                  try {
+                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
+                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
+                  } catch (e) {
+                    console.error('画廊素材上传失败:', e)
+                    return { success: 0 }
+                  }
+                },
+                async uploadByUrl(url) {
+                  try {
+                    const result = await uploadService.uploadRemote(url, 'note', noteId || 0)
+                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
+                  } catch (e) {
+                    console.error('画廊图片链接抓取失败:', e)
+                    return { success: 0 }
+                  }
+                }
+              }
+            }
+          },
+          timeline: {
+            class: TimelineTool
+          },
           markdown: { class: MarkdownBlock, inlineToolbar: false, config: { axiosBaseURL: this.$axios?.defaults?.baseURL || '' } },
           embed: {
             class: EmbedVideoTool
@@ -1277,6 +1497,12 @@ export default {
                 }
               }
             }
+          },
+          audioRecord: {
+            class: RecordTool,
+            config: {
+              getNoteId: () => (this.activeNote ? this.activeNote.id : null)
+            }
           }
         },
         data: data || undefined,
@@ -1286,7 +1512,10 @@ export default {
           this.debouncedSave()
         },
         // EditorJS 自身有一套独立于 vue-i18n 的内部 i18n 机制（块工具/菜单文案），
-        // 只在中文界面下覆盖成中文；英文界面下不传，落回 EditorJS 自带的英文默认文案
+        // 且这套字典是模块级全局单例（I18n.currentDictionary），只有传入非空 messages 时
+        // 才会调用 setDictionary() 覆盖它——英文分支必须显式传空字典触发重置，
+        // 传 undefined 只会导致沿用上一次（通常是中文）构造过的编辑器留下的全局字典，
+        // 表现上就像英文模式下菜单文案"写死"成中文了一样
         i18n: this.$i18n.locale === 'zh-CN' ? {
           messages: {
             ui: {
@@ -1297,14 +1526,14 @@ export default {
             toolNames: {
               Text: '文本', Heading: '标题', List: '列表', Quote: '引用',
               Code: '代码块', Delimiter: '分割线', Table: '表格', Image: '图片',
-              InlineCode: '行内代码', Marker: '高亮', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', Bold: '加粗', Italic: '斜体', Link: '链接'
+              InlineCode: '行内代码', Marker: '高亮', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
             },
             tools: {
               header: { 'Heading 1': '标题 1', 'Heading 2': '标题 2', 'Heading 3': '标题 3' },
               list: { Ordered: '有序列表', Unordered: '无序列表' },
               quote: { 'Align Left': '左对齐', 'Align Center': '居中' },
               table: { 'With headings': '带表头', 'Without headings': '无表头', 'Add row above': '上方插入行', 'Add row below': '下方插入行', 'Delete row': '删除行', 'Add column to the left': '左侧插入列', 'Add column to the right': '右侧插入列', 'Delete column': '删除列' },
-              image: { Caption: '图片说明', 'Select an Image': '选择图片', 'With border': '带边框', 'Stretch image': '拉伸图片', 'With background': '带背景' }
+              image: { Caption: '图片说明', 'Select an Image': '选择图片', 'With border': '带边框', 'Stretch image': '拉伸图片', 'With background': '带背景', 'With caption': '图片说明' }
             },
             blockTunes: {
               delete: { Delete: '删除', 'Click to delete': '点击确认删除' },
@@ -1312,7 +1541,7 @@ export default {
               moveDown: { 'Move down': '下移' }
             }
           }
-        } : undefined
+        } : { messages: {} }
       })
       await this.editor.isReady
       if (!this.imageResizer) {
@@ -1331,6 +1560,8 @@ export default {
       this.setupImagePaste(uploadService, noteId)
       this.setupHeaderToggleShortcut()
       this.setupListCopyFix()
+      this.editorUndo = new Undo({ editor: this.editor })
+      if (data) this.editorUndo.initialize(data)
       // _editorReady 由 loadActiveNote 在清除 saveTimeout 后设置
     },
 
@@ -1515,10 +1746,26 @@ export default {
         this._listCopyFixHandler()
         this._listCopyFixHandler = null
       }
+      if (this.editorUndo) {
+        // editorjs-undo 把 keydown 监听器挂在容器节点上，靠监听容器的自定义"destroy"事件来
+        // 移除自己——但 EditorJS 自身的 destroy() 从不派发这个事件。这里的容器节点是复用的
+        // （切换笔记只改 id，不重建DOM），不手动补发这个事件，每切换一次笔记就会在同一个节点上
+        // 再叠一份 keydown 监听器，切换几次后按一次 Ctrl+Z 会同时触发多个僵尸实例的处理逻辑。
+        try { this.$refs.editorContainer?.dispatchEvent(new Event('destroy')) } catch (e) { /* ignore */ }
+        this.editorUndo = null
+      }
       if (this.editor) {
         try { this.editor.destroy() } catch (e) { /* ignore */ }
         this.editor = null
       }
+    },
+
+    // 切换 App 语言时重建当前编辑器，让 EditorJS 内部 UI 文案跟着换语言，
+    // 复用 selectNote 里"先存后销毁再从后端重新加载"的同一套流程，避免丢改动
+    async reinitEditorForLocale() {
+      if (this.hasUnsavedChanges && this.editor) await this.saveToBackend()
+      this.destroyEditor()
+      await this.loadActiveNote()
     },
     onTitleInput(value) {
       // 更新标题，保留空格，仅在值为空时使用占位符
@@ -1605,6 +1852,67 @@ export default {
         } finally {
           this.isSaving = false
         }
+      }
+    },
+    /**
+     * 从笔记正文里的"录音"块发起、录完的时候人还停在这篇笔记上——把那个占位块原地换成
+     * 真正的播放器，而不是在末尾追加一个新块。跟 editor.vue 的同名处理是同一套逻辑，
+     * 这两个页面各跑各的 EditorJS 实例，没法共用一份方法实现。
+     */
+    async onRecordingResolveBlock({ noteId, blockId, url, duration }) {
+      if (!this.editor || !this.activeNote || String(this.activeNote.id) !== String(noteId)) return
+      let idx = -1
+      try {
+        idx = this.editor.blocks.getBlockIndex(blockId)
+      } catch (e) {
+        idx = -1
+      }
+      if (idx === undefined || idx < 0) {
+        this.$nuxt.$emit('recording:resolve-block:ack', { noteId, blockId, ok: false })
+        return
+      }
+
+      this.editor.blocks.delete(idx)
+      this.editor.blocks.insert('audioRecord', { url, duration }, {}, idx, true)
+      this.hasUnsavedChanges = true
+      this.updateSaveStatus('saving')
+
+      clearTimeout(this.saveTimeout)
+      let ok = false
+      try {
+        await this.waitForSaveIdle()
+        await this.saveToBackend()
+        ok = !this.hasUnsavedChanges
+      } catch (e) {
+        ok = false
+      }
+      this.$nuxt.$emit('recording:resolve-block:ack', { noteId, blockId, ok })
+    },
+    /**
+     * agent 通过聊天面板确认后往当前笔记的某个专题块追加了一条内容（见spec②），
+     * 用EditorJS官方的blocks.update() API原地合并进当前打开的编辑器，避免随后的
+     * 自动保存拿浏览器本地的旧数据把这条新内容覆盖掉。找不到对应类型的块（比如
+     * 用户在agent写入的同时手动删掉了这个块）就静默忽略——下次重新打开笔记时
+     * 内容已经是服务端最新的，不算错误路径。
+     */
+    onTopicBlockUpdated({ noteId, blockType, items }) {
+      if (!this.editor || !this.activeNote || String(this.activeNote.id) !== String(noteId)) return
+      const blocks = this.editor.blocks
+      for (let i = blocks.getBlocksCount() - 1; i >= 0; i--) {
+        const block = blocks.getBlockByIndex(i)
+        if (block && block.name === blockType) {
+          blocks.update(block.id, { items }).catch((e) => {
+            console.warn('实时合并 agent 写入的新条目失败，下次打开笔记会显示最新内容:', e)
+          })
+          return
+        }
+      }
+    },
+    /** 等当前正在进行的保存结束（最多 ~3s），避免 saveToBackend() 的 isSaving 早退把这次写入静默丢掉 */
+    async waitForSaveIdle(timeoutMs = 3000) {
+      const deadline = Date.now() + timeoutMs
+      while (this.isSaving && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
     },
     async saveTagsAndTitleOnly() {
@@ -1758,6 +2066,49 @@ export default {
     goToClips() {
       if (!this.activeNoteId) return
       this.$router.push(`/workspace/clips?linkTo=${this.activeNoteId}`)
+    },
+    async loadAiSearchHistory() {
+      if (!this.activeNoteId) return
+      const noteId = this.activeNoteId
+      try {
+        const res = await this.$clipSearchService.getMessages(Number(noteId))
+        if (noteId !== this.activeNoteId) return // 切换笔记期间返回的旧请求，丢弃
+        this.aiSearchMessages = (res || []).map(m => ({ ...m, results: m.results || [] }))
+        this.$nextTick(this.scrollAiSearchToBottom)
+      } catch (e) {
+        // 历史加载失败不阻塞主流程，静默忽略
+      }
+    },
+    async sendAiSearchMessage() {
+      const content = this.aiSearchInput.trim()
+      if (!content || this.aiSearchLoading || !this.activeNoteId) return
+      this.aiSearchInput = ''
+      this.aiSearchLoading = true
+      try {
+        const res = await this.$clipSearchService.sendMessage(content, Number(this.activeNoteId))
+        this.aiSearchMessages.push(...(res || []).map(m => ({ ...m, results: m.results || [] })))
+        this.$nextTick(this.scrollAiSearchToBottom)
+      } catch (e) {
+        this.$message.error(this.$t('workspace.clips.aiSearchFailed'))
+      } finally {
+        this.aiSearchLoading = false
+      }
+    },
+    async saveAiSearchResult(msg, idx) {
+      const key = msg.id + '-' + idx
+      this.savingResult = key
+      try {
+        const res = await this.$clipSearchService.saveResult(msg.id, idx)
+        this.$set(msg.results[idx], 'sourceClipId', res.sourceClipId)
+      } catch (e) {
+        this.$message.error(this.$t('workspace.clips.aiSearchSaveFailed'))
+      } finally {
+        this.savingResult = null
+      }
+    },
+    scrollAiSearchToBottom() {
+      const el = this.$refs.aiSearchMessages
+      if (el) el.scrollTop = el.scrollHeight
     },
     openInEditor() {
       if (!this.activeNote || !this.activeNote.id) return
@@ -2196,10 +2547,19 @@ export default {
       }
       return date.toLocaleDateString()
     },
+    // 列表单行展示后，标题/时间/标签折叠进这条 hover tooltip
+    noteListItemTooltip(note) {
+      const title = note.title || this.$t('workspace.notes.untitledNote')
+      const time = this.formatTime(note.createdAt)
+      const tag = note.tags && note.tags.length > 0 ? note.tags[0].name : ''
+      return tag ? `${title} · ${time} · ${tag}` : `${title} · ${time}`
+    },
 
     // ========== 月历相关方法 ==========
     switchToListMode() {
       this.viewMode = 'list'
+      // 从月历切回列表时 v-if 会重新挂载 sentinel/root，得重新挂一次观察器
+      this.$nextTick(() => this.setupNoteListObserver())
     },
     async switchToCalendarMode() {
       this.viewMode = 'calendar'
@@ -2339,27 +2699,13 @@ export default {
   background: transparent;
 }
 
-.workspace-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1.5fr) 260px;
-  gap: 16px;
-  transition: grid-template-columns 0.3s ease, height 0.3s ease;
+.workspace-main { overflow-x: hidden; } // 编辑区禁止横向滚动（原 scoped 行为，框架抽取后单独保留）
 
-  &.right-collapsed {
-    grid-template-columns: 280px minmax(0, 1fr);
-  }
-}
-
-.workspace-sidebar {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden; // 移除侧边栏整体滚动，让笔记列表区域独立滚动
-  height: 100%; // 确保侧边栏占满 grid 容器高度
-  max-height: 100%; // 限制最大高度
+// AI 停靠时右栏不加内边距、不滚动，交给 .chat-panel 内部的 flex 列
+// （消息区滚、输入框钉底）
+.workspace-right--ai {
+  padding: 0;
+  overflow: hidden;
 }
 
 .sidebar-view-toggle {
@@ -2506,7 +2852,6 @@ export default {
 .note-list {
   flex: 1;
   overflow-y: auto; // 垂直滚动
-  overflow-x: auto; // 横向滚动
   padding-right: 4px;
   padding-bottom: 4px;
   min-height: 0; // 允许收缩
@@ -2534,58 +2879,36 @@ export default {
 }
 
 .note-list-item {
-  padding: 8px;
-  // border-radius: 8px;
-          cursor: pointer;
+  padding: 6px 8px;
+  cursor: pointer;
   transition: all 0.15s;
-  margin-bottom: 4px;
-  min-width: fit-content; // 允许内容决定最小宽度
+  margin-bottom: 2px;
   width: 100%; // 默认占满容器宽度
 
   &:hover { background: var(--bg-secondary); }
   &.active {
     background: rgba(102, 126, 234, 0.12);
-    // border: 1px solid #667eea;
   }
 }
 
+// 一行只显示标题，超出截断；时间/标签折叠进 title 属性的 hover tooltip
 .note-list-title {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-color);
-  margin-bottom: 4px;
-  white-space: nowrap; // 不换行
-  overflow-x: auto; // 横向滚动
-  overflow-y: hidden; // 隐藏垂直滚动
-  // 自定义滚动条样式（可选）
-  &::-webkit-scrollbar {
-    height: 4px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 2px;
-          &:hover {
-      background: var(--text-muted);
-    }
-  }
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.note-list-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.note-list-sentinel {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.note-list-sentinel-text {
   font-size: 12px;
   color: var(--text-muted);
-}
-
-.note-list-tag {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--tag-bg);
-  color: var(--tag-color);
 }
 
 .sidebar-empty {
@@ -2597,42 +2920,15 @@ export default {
   .el-button { margin-top: 8px; }
 }
 
-.sidebar-pagination {
-  margin-top: 8px;
-  flex-shrink: 0;
-  display: flex;
-  justify-content: center;
-
-  ::v-deep .el-pagination.el-pagination--small {
-    padding: 0;
-
-    .btn-prev, .btn-next {
-      padding: 0 2px;
-      min-width: 22px;
-    }
-
-    .el-pager {
-      li {
-        min-width: 22px;
-        padding: 0 2px;
-        margin: 0 1px;
-      }
-    }
-  }
-}
-
-.workspace-main {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 16px 20px;
-  overflow-y: auto;
-}
-
 .note-main {
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  // 中间区被拖窄时编辑器内容保持原尺寸、被右栏遮住而非挤变形
+  // （.workspace-main 有 overflow-x: hidden 负责裁切）。取值不宜大，否则
+  // 左右栏几乎没有可拖空间——中间轨道能压到 mixin 的 middleMin(120)。
+  min-width: 380px;
 }
 
 .note-main-header {
@@ -2909,6 +3205,7 @@ export default {
 .note-main-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-right: 4px;
 }
 
@@ -3115,14 +3412,6 @@ export default {
   }
 }
 
-// 右侧面板
-.workspace-right {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  overflow-y: auto;
-}
-
 .right-panel {
   height: 100%;
   display: flex;
@@ -3135,6 +3424,34 @@ export default {
   border-bottom: 1px solid var(--border-color);
   &:last-child { border-bottom: none; }
 }
+
+.ai-search-chat { display: flex; flex-direction: column; }
+.ai-search-messages { max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.ai-search-msg { margin-bottom: 12px; display: flex; flex-direction: column; }
+.ai-search-msg.is-user { align-items: flex-end; }
+.ai-search-msg.is-assistant { align-items: flex-start; }
+.ai-search-bubble {
+  max-width: 92%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-search-msg.is-user .ai-search-bubble { background: #409eff; color: #fff; }
+.ai-search-msg.is-assistant .ai-search-bubble { background: var(--bg-secondary); color: var(--text-color); }
+.ai-search-typing { opacity: .6; }
+.ai-search-results { margin-top: 6px; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.ai-search-result-card {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.ai-search-result-title { font-size: 13px; font-weight: 600; color: #409eff; text-decoration: none; display: block; margin-bottom: 4px; }
+.ai-search-result-excerpt { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; line-height: 1.5; }
+.ai-search-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.ai-search-input-row .el-textarea { flex: 1; }
 
 .right-title {
   font-size: 13px;
@@ -3229,44 +3546,7 @@ export default {
   &:hover { text-decoration: underline; }
 }
 
-@media screen and (max-width: 1024px) {
-  .workspace-layout {
-    grid-template-columns: 260px minmax(0, 1.5fr);
-  }
-  .workspace-right { display: none; }
-}
-
-@media screen and (max-width: 768px) {
-  .workspace-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-}
-
 // 折叠/展开按钮
-.panel-toggle-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: all 0.2s;
-  vertical-align: middle;
-
-  i { font-size: 14px; }
-
-  &:hover {
-    background: var(--bg-secondary);
-    color: var(--text-color);
-  }
-}
-
 // 全屏模式：让 workspace-main 直接覆盖整个视口
 .workspace-main--fullscreen {
   position: fixed !important;
@@ -3320,7 +3600,7 @@ export default {
   justify-content: space-between;
   padding: 12px 20px 10px;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--border-color);
 }
 .month-calendar-left {
   display: flex;
@@ -3329,8 +3609,8 @@ export default {
 }
 .cal-month-title {
   font-size: 20px;
-  font-weight: 400;
-  color: var(--text-color, #e4e4ef);
+  font-weight: 600;
+  color: var(--text-color);
   letter-spacing: -0.2px;
 }
 .cal-nav-group {
@@ -3347,14 +3627,14 @@ export default {
   background: transparent;
   border-radius: 50%;
   cursor: pointer;
-  color: var(--text-secondary, #9999b3);
+  color: var(--text-secondary);
   font-size: 14px;
   transition: background 0.15s;
   outline: none;
 }
 .cal-nav-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-color, #e4e4ef);
+  background: var(--bg-secondary);
+  color: var(--text-color);
 }
 .cal-close-btn {
   display: inline-flex;
@@ -3366,14 +3646,14 @@ export default {
   background: transparent;
   border-radius: 50%;
   cursor: pointer;
-  color: var(--text-secondary, #9999b3);
+  color: var(--text-secondary);
   font-size: 16px;
   transition: background 0.15s;
   outline: none;
 }
 .cal-close-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text-color, #e4e4ef);
+  background: var(--bg-secondary);
+  color: var(--text-color);
 }
 .cal-grid-container {
   flex: 1;
@@ -3385,13 +3665,13 @@ export default {
 .cal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
 .cal-weekday {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted, #585b70);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
   text-align: center;
   padding: 7px 0;
   letter-spacing: 0.5px;
@@ -3404,32 +3684,33 @@ export default {
   grid-auto-rows: 1fr;
   flex: 1;
   min-height: 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.07);
   overflow-y: auto;
 }
 .cal-day {
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  padding: 5px 5px 3px;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 6px 4px;
   overflow: hidden;
   transition: background 0.1s;
+
+  &:nth-child(7n) {
+    border-right: none;
+  }
 }
 .cal-day:hover {
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--bg-secondary);
 }
 .cal-day-empty {
-  border-right: 1px solid rgba(255, 255, 255, 0.07);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(0, 0, 0, 0.08);
-}
-.cal-day-weekend {
-  background: rgba(0, 0, 0, 0.04);
-}
-.cal-day-weekend:hover {
-  background: rgba(255, 255, 255, 0.02);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+
+  &:nth-child(7n) {
+    border-right: none;
+  }
 }
 .cal-day-header {
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
 .cal-day-num {
   display: inline-flex;
@@ -3437,19 +3718,19 @@ export default {
   justify-content: center;
   width: 24px;
   height: 24px;
-  font-size: 12px;
-  color: var(--text-secondary, #9999b3);
+  font-size: 13px;
+  color: var(--text-secondary);
   border-radius: 50%;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1;
 }
 .cal-day-num--today {
-  background: var(--el-color-primary, #6c63ff);
+  background: #667eea;
   color: #fff !important;
   font-weight: 600;
 }
 .cal-day-weekend .cal-day-num {
-  color: #7a7ab0;
+  color: #8b8bc4;
 }
 .cal-day-notes {
   display: flex;
@@ -3458,13 +3739,13 @@ export default {
 }
 .cal-note-chip {
   display: block;
-  font-size: 14px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.4;
   padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(108, 99, 255, 0.15);
+  background: rgba(102, 126, 234, 0.12);
   color: var(--text-color);
-  border-left: 2px solid var(--el-color-primary, #6c63ff);
+  border-left: 2px solid #667eea;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3472,8 +3753,14 @@ export default {
   transition: background 0.12s, color 0.12s;
 }
 .cal-note-chip:hover {
-  background: var(--el-color-primary, #6c63ff);
+  background: #667eea;
   color: #fff;
+}
+.cal-note-more {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 2px 6px;
+  color: var(--text-muted);
 }
 
 /* ===== ブレッドクラム ===== */
@@ -3481,7 +3768,7 @@ export default {
   display: inline-flex;
   align-items: center;
   font-size: 12px;
-  color: var(--el-color-primary, #6c63ff);
+  color: #667eea;
   cursor: pointer;
   margin-bottom: 12px;
   padding: 4px 8px;
@@ -3490,7 +3777,7 @@ export default {
   user-select: none;
 }
 .calendar-breadcrumb:hover {
-  background: rgba(108, 99, 255, 0.1);
+  background: rgba(102, 126, 234, 0.1);
   text-decoration: underline;
 }
 </style>

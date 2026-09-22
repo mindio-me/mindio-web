@@ -50,6 +50,11 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
     Attachment findByAttDir(String attDir);
 
     /**
+     * 根据内容哈希值查询附件
+     */
+    java.util.Optional<Attachment> findFirstByContentHash(String contentHash);
+
+    /**
      * 根据名称查询附件（按创建时间倒序）
      */
     List<Attachment> findByNameOrderByCreateTimeDesc(String name);

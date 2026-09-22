@@ -27,6 +27,7 @@ public class UserResponse {
     private String email;
     private String role;
     private LocalDateTime createdAt;
+    private boolean mustChangePassword;
 
     public static UserResponse fromEntity(User user) {
         return UserResponse.builder()
@@ -35,6 +36,7 @@ public class UserResponse {
                 .email(user.getEmail())
                 .role(user.getRole())
                 .createdAt(user.getCreatedAt())
+                .mustChangePassword(user.isMustChangePassword())
                 .build();
     }
 }

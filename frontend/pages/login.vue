@@ -8,8 +8,8 @@
     <el-card class="login-card">
       <div class="login-header">
         <MindioLogo class="login-logo" />
-        <h2>{{ isLogin ? $t('login.titleLogin') : $t('login.titleRegister') }}</h2>
-        <p>{{ isLogin ? $t('login.welcome') : $t('login.createAccount') }}</p>
+        <h2>{{ $t('login.titleLogin') }}</h2>
+        <p>{{ $t('login.welcome') }}</p>
       </div>
 
       <el-form
@@ -27,31 +27,11 @@
           />
         </el-form-item>
 
-        <el-form-item v-if="!isLogin" prop="email">
-          <el-input
-            v-model="loginForm.email"
-            :placeholder="$t('login.emailPlaceholder')"
-            prefix-icon="el-icon-message"
-            clearable
-          />
-        </el-form-item>
-
         <el-form-item prop="password">
           <el-input
             v-model="loginForm.password"
             type="password"
             :placeholder="$t('login.passwordPlaceholder')"
-            prefix-icon="el-icon-lock"
-            show-password
-            @keyup.enter.native="handleSubmit"
-          />
-        </el-form-item>
-
-        <el-form-item v-if="!isLogin" prop="confirmPassword">
-          <el-input
-            v-model="loginForm.confirmPassword"
-            type="password"
-            :placeholder="$t('login.confirmPasswordPlaceholder')"
             prefix-icon="el-icon-lock"
             show-password
             @keyup.enter.native="handleSubmit"
@@ -65,15 +45,9 @@
             class="submit-btn"
             @click="handleSubmit"
           >
-            {{ isLogin ? $t('login.submitLogin') : $t('login.submitRegister') }}
+            {{ $t('login.submitLogin') }}
           </el-button>
         </el-form-item>
-
-        <div class="login-footer">
-          <el-button type="text" @click="toggleMode">
-            {{ isLogin ? $t('login.noAccount') : $t('login.hasAccount') }}
-          </el-button>
-        </div>
       </el-form>
     </el-card>
   </div>
@@ -86,18 +60,15 @@ export default {
   auth: false,
   middleware({ app, redirect }) {
     if (app.$auth && app.$auth.loggedIn) {
-      return redirect('/notes')
+      return redirect('/workspace')
     }
   },
   data() {
     return {
-      isLogin: true,
       loading: false,
       loginForm: {
         username: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
+        password: ''
       }
     }
   },
@@ -108,14 +79,8 @@ export default {
           { required: true, message: this.$t('login.usernameRequired'), trigger: 'blur' },
           { min: 3, max: 50, message: this.$t('login.usernameLength'), trigger: 'blur' }
         ],
-        email: [
-          { type: 'email', message: this.$t('login.emailFormat'), trigger: 'blur' }
-        ],
         password: [
           { required: true, validator: this.validatePassword, trigger: 'blur' }
-        ],
-        confirmPassword: [
-          { required: true, validator: this.validateConfirmPassword, trigger: 'blur' }
         ]
       }
     }
@@ -134,30 +99,13 @@ export default {
         callback()
       }
     },
-    validateConfirmPassword(_rule, value, callback) {
-      if (!value) {
-        callback(new Error(this.$t('login.confirmPasswordRequired')))
-      } else if (value !== this.loginForm.password) {
-        callback(new Error(this.$t('login.passwordMismatch')))
-      } else {
-        callback()
-      }
-    },
-    toggleMode() {
-      this.isLogin = !this.isLogin
-      this.$refs.loginForm.resetFields()
-    },
     handleSubmit() {
       this.$refs.loginForm.validate(async (valid) => {
         if (!valid) return
 
         this.loading = true
         try {
-          if (this.isLogin) {
-            await this.handleLogin()
-          } else {
-            await this.handleRegister()
-          }
+          await this.handleLogin()
         } catch (error) {
           console.error(error)
         } finally {
@@ -174,27 +122,13 @@ export default {
           }
         })
         this.$message.success(this.$t('login.loginSuccess'))
-        this.$router.push('/')
+        if (this.$auth.user && this.$auth.user.mustChangePassword) {
+          this.$router.push('/workspace/profile?forcePasswordChange=1')
+        } else {
+          this.$router.push('/workspace')
+        }
       } catch (error) {
         this.$message.error(this.$t('login.loginFailed'))
-      }
-    },
-    async handleRegister() {
-      try {
-        const { data } = await this.$axios.post('/v1/auth/register', {
-          username: this.loginForm.username,
-          password: this.loginForm.password,
-          email: this.loginForm.email || null
-        })
-
-        this.$auth.setUserToken(data.token)
-        await this.$auth.fetchUser()
-
-        this.$message.success(this.$t('login.registerSuccess'))
-        this.$router.push('/notes')
-      } catch (error) {
-        const message = error.response?.data?.message || this.$t('login.registerFailed')
-        this.$message.error(message)
       }
     }
   }
@@ -266,11 +200,6 @@ export default {
     .submit-btn {
       width: 100%;
       margin-top: 10px;
-    }
-
-    .login-footer {
-      text-align: center;
-      margin-top: 20px;
     }
   }
 }

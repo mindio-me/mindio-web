@@ -129,6 +129,115 @@ code, .inline-code {
 /* ── 分割线 ── */
 .pdf-delimiter { border: none; border-top: 2px solid #e2e8f0; margin: 1.5em 0; }
 
+/* ── 任务列表 ── */
+.pdf-checklist { list-style: none; padding-left: 0; margin: 0.75em 0; }
+.pdf-checklist-item { margin: 0.3em 0; line-height: 1.7; padding-left: 26px; position: relative; }
+.pdf-checklist-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.35em;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid #a0aec0;
+  border-radius: 3px;
+}
+.pdf-checklist-item--checked { color: #718096; text-decoration: line-through; }
+.pdf-checklist-item--checked::before {
+  background: #667eea;
+  border-color: #667eea;
+}
+.pdf-checklist-item--checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0.55em;
+  width: 6px;
+  height: 3px;
+  border-left: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  transform: rotate(-45deg);
+}
+
+/* ── 附件 ── */
+.pdf-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin: 1em 0;
+  text-decoration: none;
+  color: #1a202c;
+  page-break-inside: avoid;
+}
+.pdf-attach__name { font-weight: 600; font-size: 13px; }
+.pdf-attach__meta { font-size: 11px; color: #a0aec0; }
+
+/* ── 链接预览 ── */
+.pdf-link-tool {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin: 1em 0;
+  text-decoration: none;
+  color: inherit;
+  page-break-inside: avoid;
+  overflow: hidden;
+}
+.pdf-link-tool__image {
+  width: 100px;
+  flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+  background-color: #f1f5f9;
+}
+.pdf-link-tool__content { padding: 10px 14px; min-width: 0; }
+.pdf-link-tool__title { font-weight: 600; font-size: 14px; color: #1a202c; margin-bottom: 4px; }
+.pdf-link-tool__description {
+  font-size: 12px;
+  color: #4a5568;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pdf-link-tool__host { font-size: 11px; color: #a0aec0; }
+
+/* ── 提示框 ── */
+.pdf-warning {
+  border-left: 4px solid #f6ad55;
+  background: #fffaf0;
+  padding: 10px 16px;
+  margin: 1em 0;
+  border-radius: 0 4px 4px 0;
+  page-break-inside: avoid;
+}
+.pdf-warning__title { font-weight: 600; color: #9c4221; margin-bottom: 4px; }
+.pdf-warning__message { color: #4a5568; }
+
+/* ── 参考资料 ── */
+.pdf-references { padding-left: 20px; margin: 1em 0; }
+.pdf-references li { margin: 0.3em 0; }
+.pdf-ref__note { color: #718096; font-size: 0.85em; }
+
+/* ── 媒体画廊 ── */
+.pdf-gallery { display: flex; flex-wrap: wrap; gap: 8px; margin: 1em 0; }
+.pdf-gallery__card { width: 150px; }
+.pdf-gallery__card img { width: 100%; border-radius: 4px; }
+.pdf-gallery__video { width: 100%; height: 100px; border: none; }
+
+/* ── 时间线 ── */
+.pdf-timeline { margin: 1em 0; border-left: 2px solid #e2e8f0; padding-left: 16px; }
+.pdf-timeline__item { margin-bottom: 12px; }
+.pdf-timeline__date { font-size: 0.8em; color: #718096; }
+.pdf-timeline__title { font-weight: 600; }
+.pdf-timeline__link { display: inline; margin-left: 6px; text-decoration: none; font-size: 0.9em; vertical-align: middle; }
+.pdf-timeline__desc { font-size: 0.9em; color: #4a5568; }
+
 /* ── Markdown 块 ── */
 .pdf-markdown h1, .pdf-markdown h2, .pdf-markdown h3, .pdf-markdown h4 {
   font-weight: 600; margin: 1em 0 0.4em; page-break-after: avoid;
@@ -165,6 +274,24 @@ code, .inline-code {
 }
 .pdf-markdown img.md-image { max-width: 100%; height: auto; border-radius: 4px; }
 .pdf-markdown a { color: #409eff; text-decoration: underline; }
+.pdf-markdown table.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+  page-break-inside: avoid;
+  font-size: 13px;
+}
+.pdf-markdown table.md-table th, .pdf-markdown table.md-table td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  text-align: left;
+}
+.pdf-markdown table.md-table th { background: #f1f5f9; font-weight: 600; }
+.pdf-markdown s { color: #718096; }
+.pdf-markdown .contains-task-list { list-style: none; padding-left: 4px; }
+.pdf-markdown .task-list-item { list-style: none; }
+.pdf-markdown .task-list-item > label { display: flex; align-items: flex-start; gap: 6px; }
+.pdf-markdown .task-list-item-checkbox { margin-top: 0.2em; }
 
 /* Mermaid 未渲染时的降级显示 */
 .pdf-markdown .mermaid-block {

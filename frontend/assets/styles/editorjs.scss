@@ -115,6 +115,121 @@
 
   .cdx-marker { background: rgba(245, 235, 111, 0.4); padding: 2px 0; }
 
+  .cdx-checklist {
+    .cdx-checklist__item-text { color: var(--text-color, #333); }
+    .cdx-checklist__item-checkbox-check {
+      border-color: var(--border-color, #c9c9c9);
+      background: var(--card-bg-color, #fff);
+    }
+    .cdx-checklist__item--checked .cdx-checklist__item-checkbox-check {
+      background: #667eea;
+      border-color: #667eea;
+    }
+    .cdx-checklist__item--checked .cdx-checklist__item-checkbox:not(.cdx-checklist__item-checkbox--no-hover):hover .cdx-checklist__item-checkbox-check {
+      background: #5a6fd6;
+      border-color: #5a6fd6;
+    }
+  }
+
+  .cdx-warning {
+    border-left: 4px solid #f6ad55;
+    background: var(--bg-secondary, #fffaf0);
+    border-radius: 0 4px 4px 0;
+    [contentEditable] { color: var(--text-color, #333); }
+    [contentEditable][data-placeholder]:empty::before { color: var(--text-muted, #999); }
+    &__title { font-weight: 600; }
+  }
+
+  .link-tool__content {
+    color: var(--text-color, #333) !important;
+    &--rendered {
+      background: var(--card-bg-color, #fff);
+      border-color: var(--border-color, rgba(201, 201, 204, 0.48));
+    }
+  }
+  .link-tool__title { color: var(--text-color, #333); }
+  .link-tool__description { color: var(--text-secondary, #555); }
+  .link-tool__anchor { color: var(--text-muted, #888) !important; }
+  .link-tool__image { background-color: var(--bg-secondary, #f5f5f5); }
+
+  .cdx-attaches {
+    --color-line: var(--border-color, #eff0f1);
+    --color-bg: var(--card-bg-color, #fff);
+    --color-bg-secondary: var(--bg-secondary, #f8f8f8);
+    --color-bg-secondary--hover: var(--bg-tertiary, #f2f2f2);
+    --color-text-secondary: var(--text-muted, #707684);
+    .cdx-attaches__title { color: var(--text-color, #333); }
+    .cdx-attaches__button { color: var(--text-color, #333); }
+  }
+
+  .cdx-references {
+    &__list { list-style: none; padding-left: 0; margin: 0 0 8px; }
+    &__item { padding: 6px 0; border-bottom: 1px solid var(--border-color, #eee); }
+    &__link { color: var(--text-color, #333); text-decoration: none; font-weight: 500; &:hover { color: #667eea; } }
+    &__note { color: var(--text-muted, #999); font-size: 0.85em; margin-top: 2px; }
+    &__add-btn, &__delete { background: none; border: 1px solid var(--border-color, #ddd); border-radius: 4px; cursor: pointer; color: var(--text-color, #333); }
+    &__form { margin-top: 8px; padding: 10px; border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--bg-secondary, #f8f9fa); }
+    &__input { display: block; width: 100%; margin: 6px 0; padding: 6px 8px; border: 1px solid var(--border-color, #ddd); border-radius: 4px; background: var(--card-bg-color, #fff); color: var(--text-color, #333); }
+    &__result-item { display: block; width: 100%; text-align: left; padding: 6px; border: none; background: none; cursor: pointer; color: var(--text-color, #333); &:hover { background: var(--bg-secondary, #f0f0f0); } }
+  }
+
+  .cdx-gallery {
+    &__grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
+    &__card { position: relative; width: 160px; }
+    &__image, &__video, &__video-facade { width: 100%; border-radius: 6px; }
+    &__video { height: 90px; border: none; }
+    &__video-facade {
+      height: 90px;
+      background-color: #000;
+      background-size: cover;
+      background-position: center;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    &__video-facade__play {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    &__audio { width: 100%; }
+    &__caption { font-size: 0.8em; color: var(--text-muted, #999); text-align: center; }
+    &__delete { position: absolute; top: 2px; right: 2px; background: rgba(0,0,0,0.5); color: #fff; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; }
+    &__toolbar { display: flex; gap: 8px; margin-top: 6px; }
+    &__link-row { display: flex; gap: 6px; margin-top: 6px; width: 100%; }
+    &__link-input { flex: 1; padding: 6px 8px; border: 1px solid var(--border-color, #ddd); border-radius: 4px; background: var(--card-bg-color, #fff); color: var(--text-color, #333); }
+  }
+
+  .cdx-timeline {
+    &__list { list-style: none; padding-left: 16px; border-left: 2px solid var(--border-color, #ddd); margin: 0 0 8px; }
+    &__item { position: relative; padding-bottom: 12px; }
+    &__date { font-size: 0.8em; color: var(--text-muted, #999); }
+    &__title { font-weight: 600; color: var(--text-color, #333); }
+    &__description { font-size: 0.9em; color: var(--text-muted, #999); }
+    &__link { color: var(--text-color, #333); }
+    &__form { margin-top: 8px; padding: 10px; border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--bg-secondary, #f8f9fa); }
+    &__input { display: block; width: 100%; margin: 6px 0; padding: 6px 8px; border: 1px solid var(--border-color, #ddd); border-radius: 4px; background: var(--card-bg-color, #fff); color: var(--text-color, #333); }
+    &__add-btn, &__delete { background: none; border: 1px solid var(--border-color, #ddd); border-radius: 4px; cursor: pointer; color: var(--text-color, #333); }
+  }
+
+  .cdx-block-ui__tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+  .cdx-block-ui__tab {
+    padding: 4px 10px; border: 1px solid var(--border-color, #ddd); border-radius: 4px 4px 0 0;
+    background: var(--bg-secondary, #f0f0f0); color: var(--text-muted, #999); cursor: pointer;
+    &--active { background: var(--card-bg-color, #fff); color: var(--text-color, #333); font-weight: 600; }
+  }
+
+  .cdx-block-ui__btn {
+    background: none; border: 1px solid var(--border-color, #ddd); border-radius: 4px;
+    cursor: pointer; color: var(--text-color, #333); padding: 6px 12px;
+    &:hover { background: var(--bg-secondary, #f0f0f0); }
+  }
+
   .ce-toolbar__plus, .ce-toolbar__settings-btn {
     color: var(--text-muted, #999); background: var(--card-bg-color, #fff);
     border: 1px solid var(--border-color, #e8e8e8);
@@ -153,6 +268,11 @@
 .theme-dark .editorjs-workspace-container {
   .cdx-marker { background: rgba(245, 235, 111, 0.25); }
   .inline-code { color: #f472b6; background: var(--bg-tertiary, #1a2332); }
+
+  .cdx-warning {
+    background: var(--bg-tertiary, #1a2332);
+    border-left-color: #d97706;
+  }
 
   /* 修复深色模式下表格颜色
    * 插件将 --color-background 硬编码为 #f9f9fb（亮色），
@@ -415,25 +535,6 @@
       margin: 1.5em 0;
     }
 
-    table.md-table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 1em 0;
-      font-size: 0.9em;
-      th, td {
-        border: 1px solid var(--border-color, #dcdfe6);
-        padding: 8px 12px;
-        text-align: left;
-        vertical-align: top;
-      }
-      thead th {
-        background: var(--bg-secondary, #f5f7fa);
-        font-weight: 600;
-        color: var(--text-primary, #303133);
-      }
-      tbody tr:nth-child(even) { background: var(--bg-secondary, #fafafa); }
-    }
-
     /* Mermaid 图表块 */
     .mermaid-block {
       text-align: center;
@@ -454,6 +555,54 @@
     background: transparent;
     .cdx-markdown-block__preview { padding: 0; background: transparent; }
   }
+}
+
+/*
+ * GFM 元素通用样式 —— 全局生效，不嵌套在 .cdx-markdown-block__preview 里。
+ * renderMarkdown() 的输出会被好几个页面各自的 scoped 样式渲染（笔记详情页、项目页、
+ * ChatPanel 等），那些页面各自只补了标题/段落/列表/代码块/图片/分割线的样式，没有
+ * 表格/任务列表/删除线这三类。这里用具体的类名/标签选择器直接写成全局规则，让所有
+ * 消费方都能拿到统一的样式，不用逐个页面重复维护一份；已有的 scoped 样式因为带了
+ * Vue 编译出的属性选择器，优先级更高，不会被这里覆盖。
+ */
+table.md-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 0.9em;
+  th, td {
+    border: 1px solid var(--border-color, #dcdfe6);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--bg-secondary, #f5f7fa);
+    font-weight: 600;
+    color: var(--text-primary, #303133);
+  }
+  tbody tr:nth-child(even) { background: var(--bg-secondary, #fafafa); }
+}
+
+/* 删除线 */
+s { color: var(--text-muted, #999); }
+
+/* 任务列表（静态展示，checkbox 禁用不可点击） */
+.contains-task-list {
+  list-style: none;
+  padding-left: 4px;
+}
+.task-list-item {
+  list-style: none;
+}
+.task-list-item > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.task-list-item-checkbox {
+  margin-top: 0.35em;
+  cursor: default;
 }
 
 /* 深色模式 Markdown Block */

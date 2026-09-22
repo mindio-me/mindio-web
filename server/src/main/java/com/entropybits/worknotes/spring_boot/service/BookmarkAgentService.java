@@ -45,6 +45,7 @@ public class BookmarkAgentService {
     private final AiTranslationService deepseekService;
     private final AiTranslationService doubaoService;
     private final ContentIndexingService contentIndexingService;
+    private final NoteImageRefRepository noteImageRefRepository;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
 
@@ -65,7 +66,8 @@ public class BookmarkAgentService {
             @Qualifier("openAiTranslationService") AiTranslationService openAiService,
             @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
             @Qualifier("doubaoTranslationService") AiTranslationService doubaoService,
-            ContentIndexingService contentIndexingService) {
+            ContentIndexingService contentIndexingService,
+            NoteImageRefRepository noteImageRefRepository) {
         this.jobRepository = jobRepository;
         this.clipRepository = clipRepository;
         this.noteRepository = noteRepository;
@@ -79,6 +81,7 @@ public class BookmarkAgentService {
         this.deepseekService = deepseekService;
         this.doubaoService = doubaoService;
         this.contentIndexingService = contentIndexingService;
+        this.noteImageRefRepository = noteImageRefRepository;
     }
 
     /** 把 clips 按每批 size 条切分，用于分批调用 classifyTopics */
@@ -141,8 +144,11 @@ public class BookmarkAgentService {
                                       List<SourceClip> refClips) {
         noteRepository.findByOwnerAndGeneratedType(owner, type).ifPresent(old -> {
             // 必须先清掉旧笔记的语义索引分块再删笔记，否则 content_chunks 里会留下孤儿行，
-            // 而 RetrievalService 不校验来源笔记是否还存在，已删除内容会被无限期当作 RAG 上下文召回
+            // 而 RetrievalService 不校验来源笔记是否还存在，已删除内容会被无限期当作 RAG 上下文召回。
+            // note_image_refs 同理必须先清：外键没有 ON DELETE CASCADE，用户如果手动编辑过
+            // 这篇生成笔记并贴了图，这里不清就会在下面 delete 时直接撞外键约束。
             contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, old.getId());
+            noteImageRefRepository.deleteByNote(old);
             noteRepository.delete(old);
             noteRepository.flush();
         });

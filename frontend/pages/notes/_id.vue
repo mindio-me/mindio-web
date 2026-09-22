@@ -4,41 +4,7 @@
 -->
 <template>
   <div class="article-page">
-    <header class="page-header">
-      <div class="header-content">
-        <div class="header-left">
-          <div class="logo">
-            <MindioLogo />
-            <span>MindIO</span>
-          </div>
-        </div>
-
-        <nav class="header-nav">
-          <nuxt-link to="/" class="nav-link" exact-active-class="active" exact>{{ $t('site.nav.home') }}</nuxt-link>
-          <nuxt-link to="/notes" class="nav-link" exact-active-class="active">{{ $t('site.nav.blog') }}</nuxt-link>
-          <nuxt-link to="/projects" class="nav-link" exact-active-class="active">{{ $t('site.nav.projects') }}</nuxt-link>
-          <nuxt-link to="/contact" class="nav-link" exact-active-class="active">{{ $t('site.nav.contact') }}</nuxt-link>
-        </nav>
-
-        <div class="header-right">
-          <button class="theme-toggle" @click="toggleTheme" :title="isDarkTheme ? $t('topbar.lightMode') : $t('topbar.darkMode')">
-            <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-          </button>
-          <button class="lang-toggle" @click="toggleLang">{{ $t('lang.toggle') }}</button>
-          <button class="menu-toggle" @click="isMobileMenuOpen = !isMobileMenuOpen" aria-label="Menu">
-            <i :class="isMobileMenuOpen ? 'el-icon-close' : 'el-icon-s-operation'"></i>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <div v-if="isMobileMenuOpen" class="mobile-overlay" @click="isMobileMenuOpen = false"></div>
-    <nav v-if="isMobileMenuOpen" class="mobile-menu">
-      <nuxt-link to="/" class="mobile-nav-link" exact-active-class="active" exact @click.native="isMobileMenuOpen = false">{{ $t('site.nav.home') }}</nuxt-link>
-      <nuxt-link to="/notes" class="mobile-nav-link" exact-active-class="active" @click.native="isMobileMenuOpen = false">{{ $t('site.nav.blog') }}</nuxt-link>
-      <nuxt-link to="/projects" class="mobile-nav-link" exact-active-class="active" @click.native="isMobileMenuOpen = false">{{ $t('site.nav.projects') }}</nuxt-link>
-      <nuxt-link to="/contact" class="mobile-nav-link" exact-active-class="active" @click.native="isMobileMenuOpen = false">{{ $t('site.nav.contact') }}</nuxt-link>
-    </nav>
+    <PublicHeader />
 
     <main v-loading="loading" class="article-shell">
       <article v-if="note" class="note-container">
@@ -199,6 +165,8 @@
         </el-empty>
       </div>
     </main>
+
+    <PublicFooter :owner-profile="ownerProfile" />
   </div>
 </template>
 
@@ -217,13 +185,12 @@ export default {
   },
   data() {
     return {
-      isDarkTheme: false,
-      isMobileMenuOpen: false,
       loading: true,
       note: null,
       error: false,
       avatarUrl: null,
-      editorInstance: null
+      editorInstance: null,
+      ownerProfile: null
     }
   },
   computed: {
@@ -235,15 +202,15 @@ export default {
     }
   },
   async mounted() {
-    if (process.client) {
-      this.isDarkTheme = document.documentElement.classList.contains('theme-dark')
-    }
     await this.loadNote()
     // 如果是 EditorJS 笔记，初始化编辑器
     if (this.note && this.note.contentType === 'editorjs') {
       await this.$nextTick()
       await this.initEditorJS()
     }
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {}
   },
   beforeDestroy() {
     // 销毁 EditorJS 实例
@@ -253,20 +220,6 @@ export default {
     }
   },
   methods: {
-    toggleLang() {
-      const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'
-      this.$i18n.setLocale(next)
-    },
-    toggleTheme() {
-      if (this.$root.$options.app && this.$root.$options.app.themeToggle) {
-        this.isDarkTheme = this.$root.$options.app.themeToggle()
-      } else if (process.client) {
-        const root = document.documentElement
-        const isDark = root.classList.toggle('theme-dark')
-        window.localStorage.setItem('worknotes-theme', isDark ? 'dark' : 'light')
-        this.isDarkTheme = isDark
-      }
-    },
     /**
      * 加载笔记详情
      */
@@ -522,7 +475,14 @@ export default {
           { default: Quote },
           { default: Table },
           { default: ImageTool },
-          { default: MarkdownBlock }
+          { default: Checklist },
+          { default: Warning },
+          { default: LinkTool },
+          { default: AttachesTool },
+          { default: MarkdownBlock },
+          { default: ReferencesTool },
+          { default: GalleryTool },
+          { default: TimelineTool }
         ] = await Promise.all([
           import('@editorjs/editorjs'),
           import('@editorjs/header'),
@@ -532,7 +492,14 @@ export default {
           import('@editorjs/quote'),
           import('@editorjs/table'),
           import('@editorjs/image'),
-          import('~/utils/editorjs-markdown-block')
+          import('@editorjs/checklist'),
+          import('@editorjs/warning'),
+          import('@editorjs/link'),
+          import('@editorjs/attaches'),
+          import('~/utils/editorjs-markdown-block'),
+          import('~/utils/editorjsReferencesTool'),
+          import('~/utils/editorjsGalleryTool'),
+          import('~/utils/editorjsTimelineTool')
         ])
 
         // 解析笔记内容
@@ -568,6 +535,17 @@ export default {
             delimiter: Delimiter,
             quote: { class: Quote, inlineToolbar: false },
             table: { class: Table, inlineToolbar: false },
+            checklist: { class: Checklist, inlineToolbar: false },
+            warning: { class: Warning, inlineToolbar: false },
+            linkTool: { class: LinkTool },
+            attaches: {
+              class: AttachesTool,
+              config: {
+                uploader: {
+                  uploadByFile: () => Promise.resolve({ success: 0 })
+                }
+              }
+            },
             image: {
               class: ImageTool,
               config: {
@@ -581,7 +559,10 @@ export default {
               config: {
                 axiosBaseURL: this.$axios?.defaults?.baseURL || ''
               }
-            }
+            },
+            references: { class: ReferencesTool },
+            mediaGallery: { class: GalleryTool },
+            timeline: { class: TimelineTool }
           },
           minHeight: 0
         })
@@ -1376,91 +1357,6 @@ export default {
   color: var(--text-color);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
-  .page-header {
-    background: var(--header-bg);
-    box-shadow: 0 1px 3px var(--shadow-color);
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-
-  .header-content {
-    height: 64px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: relative;
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    width: 280px;
-    flex-shrink: 0;
-    padding: 0 24px;
-    background: var(--header-bg);
-    border-right: 1px solid var(--border-color);
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-color);
-
-    i {
-      font-size: 24px;
-      color: #667eea;
-    }
-  }
-
-  .header-nav {
-    display: flex;
-    align-items: center;
-    gap: 32px;
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 0 24px;
-  }
-
-  .nav-link {
-    color: var(--text-secondary);
-    text-decoration: none;
-    font-size: 15px;
-    font-weight: 500;
-    transition: color 0.2s;
-
-    &:hover,
-    &.active {
-      color: #667eea;
-    }
-
-    &.active {
-      position: relative;
-
-      &::after {
-        content: '';
-        position: absolute;
-        bottom: -20px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: #667eea;
-      }
-    }
-  }
-
-  .theme-toggle,
-  .lang-toggle,
   .icon-btn,
   .text-btn {
     border: 1px solid var(--border-color);
@@ -1470,32 +1366,6 @@ export default {
     cursor: pointer;
   }
 
-  .theme-toggle,
-  .lang-toggle {
-    width: 32px;
-    height: 32px;
-    border-radius: 999px;
-    background: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-
-    i {
-      font-size: 16px;
-    }
-
-    &:hover {
-      background: rgba(148, 163, 184, 0.08);
-    }
-  }
-
-  .lang-toggle {
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .menu-toggle,
   .icon-btn {
     width: 32px;
     height: 32px;
@@ -1503,25 +1373,6 @@ export default {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-  }
-
-  .menu-toggle,
-  .mobile-overlay,
-  .mobile-menu {
-    display: none;
-  }
-
-  .menu-toggle {
-    border-radius: 6px;
-    background: transparent;
-
-    i {
-      font-size: 18px;
-    }
-
-    &:hover {
-      background: var(--bg-secondary);
-    }
   }
 
   .article-shell {
@@ -1906,15 +1757,6 @@ export default {
   }
 }
 
-@media screen and (max-width: 1024px) {
-  .article-page {
-    .header-left {
-      width: auto;
-      border-right: none;
-    }
-  }
-}
-
 @media screen and (max-width: 900px) {
   .article-page {
     .article-topline {
@@ -1930,70 +1772,6 @@ export default {
 @media screen and (max-width: 768px) {
   .article-page {
     overflow-x: hidden;
-
-    .header-nav {
-      display: none;
-    }
-
-    .header-left {
-      padding: 0 20px;
-    }
-
-    .header-right {
-      padding: 0 20px;
-      gap: 8px;
-    }
-
-    .logo span {
-      display: none;
-    }
-
-    .menu-toggle {
-      display: flex;
-    }
-
-    .mobile-overlay {
-      display: block;
-      position: fixed;
-      inset: 0;
-      z-index: 97;
-    }
-
-    .mobile-menu {
-      display: flex;
-      flex-direction: column;
-      position: fixed;
-      top: 64px;
-      left: 0;
-      right: 0;
-      background: var(--header-bg);
-      border-bottom: 1px solid var(--border-color);
-      box-shadow: 0 8px 24px var(--shadow-color);
-      z-index: 98;
-      padding: 8px 0 16px;
-    }
-
-    .mobile-nav-link {
-      display: block;
-      padding: 14px 24px;
-      color: var(--text-secondary);
-      text-decoration: none;
-      font-size: 16px;
-      font-weight: 500;
-      border-left: 3px solid transparent;
-      transition: all 0.15s;
-
-      &:hover {
-        color: #667eea;
-        background: var(--bg-secondary);
-      }
-
-      &.active {
-        color: #667eea;
-        background: rgba(102, 126, 234, 0.08);
-        border-left-color: #667eea;
-      }
-    }
   }
 }
 

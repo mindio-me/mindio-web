@@ -4,7 +4,11 @@
 -->
 ﻿<template>
   <div class="local-docs-page">
-    <div class="workspace-layout" :class="{ 'directory-grid-layout': dirViewMode === 'grid' }">
+    <div
+      class="workspace-layout workspace-layout--no-right"
+      :class="{ 'directory-grid-layout': dirViewMode === 'grid', 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
+    >
       <!-- ========== 左侧栏 ========== -->
       <aside class="workspace-sidebar">
         <div class="sidebar-header">
@@ -102,6 +106,8 @@
           </div>
         </div>
       </aside>
+
+      <div v-show="!wsIsNarrow" class="col-resizer" @pointerdown="wsStartResize('left', $event)"></div>
 
       <!-- ========== 主内容区 ========== -->
       <main ref="mainScroller" class="workspace-main" @scroll.passive="handleMainScroll">
@@ -426,12 +432,15 @@
 </template>
 
 <script>
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+
 const ALL_DIRECTORIES_ID = 'all'
 
 export default {
   name: 'LocalDocsPage',
   layout: 'workspace',
   middleware: 'auth',
+  mixins: [workspaceLayoutResize],
   data() {
     return {
       directories: [],
@@ -540,7 +549,20 @@ export default {
   beforeDestroy() {
     clearTimeout(this.searchTimer)
   },
+  watch: {
+    // 网格视图目录卡片需要更宽的侧栏；进入网格视图时把宽度补到至少 360，
+    // 之后用户仍可自由拖动并持久化
+    dirViewMode: {
+      immediate: true,
+      handler(mode) {
+        if (mode === 'grid' && this.wsLeftWidth < 360) this.wsLeftWidth = 360
+      }
+    }
+  },
   methods: {
+    wsLayoutOptions() {
+      return { storageKey: 'mindio:workspace:local-docs:colWidths', hasRight: false, defaultLeft: 260 }
+    },
     async loadDirectories() {
       this.loadingDirs = true
       try {
@@ -949,27 +971,13 @@ export default {
   overflow: hidden;
 }
 
-.workspace-layout {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  height: calc(100vh - 100px);
-  gap: 12px;
-  transition: grid-template-columns 0.2s ease;
-
-  &.directory-grid-layout {
-    grid-template-columns: 360px minmax(0, 1fr);
-  }
-}
+// 三栏框架样式见 assets/styles/main.scss；网格视图的宽度由 dirViewMode
+// watcher 调 wsLeftWidth 实现（不再靠 &.directory-grid-layout CSS 类）
 
 // 左侧栏
 .workspace-sidebar {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
   padding: 12px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  overflow-y: auto; // 目录列表随内容滚动（全局默认 overflow:hidden）
 }
 
 .sidebar-header {
@@ -1200,10 +1208,6 @@ export default {
 
 // 主内容区
 .workspace-main {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 16px 20px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;

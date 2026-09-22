@@ -1,7 +1,7 @@
 @echo off
 rem =====================================================
 rem Release build with ProGuard obfuscation
-rem Output: target\spring-boot-<version>.jar
+rem Output: target\mindio-server.jar
 rem =====================================================
 
 echo === Building obfuscated release JAR ===
@@ -15,4 +15,4 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo === Build complete ===
-echo Output: target\spring-boot-0.0.1-SNAPSHOT.jar
+echo Output: target\mindio-server.jar

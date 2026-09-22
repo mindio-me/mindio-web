@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -135,5 +136,56 @@ class RetrievalServiceTest {
         // 2. 结果只包含有效chunk，corrupt chunk被静默排除（不是因为阈值过低，而是因为parseEmbedding返回空数组导致相似度0.0）
         assertThat(result).hasSize(1);
         assertThat(result.get(0).sourceId()).isEqualTo(101L);
+    }
+
+    @Test
+    void retrieve_capsChunksPerSourceSoOneDocumentCannotCrowdOutOthers() throws Exception {
+        RetrievalService retrievalService = new RetrievalService(chunkRepository, embeddingService, objectMapper);
+        when(embeddingService.embed("查询问题")).thenReturn(new float[]{1f, 0f});
+        // 文档100有3个分块，分数都很高(1.0/0.95/0.90)；文档200只有1个分块，分数较低但仍过阈值(0.80)。
+        // 不做per-source上限的话，naive top-3会是文档100的三个块，把文档200完全挤出去。
+        when(chunkRepository.findByOwner(user)).thenReturn(List.of(
+                chunkWithEmbedding(1L, ContentChunk.SourceType.NOTE, 100L, new float[]{1f, 0f}),
+                chunkWithEmbedding(2L, ContentChunk.SourceType.NOTE, 100L, new float[]{0.95f, 0.3122f}),
+                chunkWithEmbedding(3L, ContentChunk.SourceType.NOTE, 100L, new float[]{0.90f, 0.4359f}),
+                chunkWithEmbedding(4L, ContentChunk.SourceType.NOTE, 200L, new float[]{0.80f, 0.6f})
+        ));
+
+        List<RetrievedChunk> result = retrievalService.retrieve(user, "查询问题", 3);
+
+        assertThat(result).hasSize(3);
+        // 文档100最多贡献2个分块（上限生效），第3个名额留给文档200，而不是文档100自己的第3块
+        assertThat(result).extracting(RetrievedChunk::sourceId).containsExactly(100L, 100L, 200L);
+    }
+
+    @Test
+    void retrieve_returnsEmptyListForBlankQueryWithoutCallingEmbeddingService() throws Exception {
+        RetrievalService retrievalService = new RetrievalService(chunkRepository, embeddingService, objectMapper);
+
+        assertThat(retrievalService.retrieve(user, null, 5)).isEmpty();
+        assertThat(retrievalService.retrieve(user, "", 5)).isEmpty();
+        assertThat(retrievalService.retrieve(user, "   ", 5)).isEmpty();
+
+        // 空query不应该触发embedding调用（避免向Doubao发送null/空文本导致NPE，见2026-09-18线上事故）
+        verifyNoInteractions(embeddingService, chunkRepository);
+    }
+
+    @Test
+    void retrieve_backfillsWithOverflowWhenOnlyOneRelevantSourceExists() throws Exception {
+        RetrievalService retrievalService = new RetrievalService(chunkRepository, embeddingService, objectMapper);
+        when(embeddingService.embed("查询问题")).thenReturn(new float[]{1f, 0f});
+        // 只有一篇相关文档，且它自己就有4个过阈值的分块。per-source上限是2，但没有别的文档来填
+        // 剩下的名额，不应该因为上限就白白浪费topK名额——多出来的名额要回填同一篇文档的其他分块。
+        when(chunkRepository.findByOwner(user)).thenReturn(List.of(
+                chunkWithEmbedding(1L, ContentChunk.SourceType.NOTE, 100L, new float[]{1f, 0f}),
+                chunkWithEmbedding(2L, ContentChunk.SourceType.NOTE, 100L, new float[]{0.95f, 0.3122f}),
+                chunkWithEmbedding(3L, ContentChunk.SourceType.NOTE, 100L, new float[]{0.90f, 0.4359f}),
+                chunkWithEmbedding(4L, ContentChunk.SourceType.NOTE, 100L, new float[]{0.80f, 0.6f})
+        ));
+
+        List<RetrievedChunk> result = retrievalService.retrieve(user, "查询问题", 4);
+
+        assertThat(result).hasSize(4);
+        assertThat(result).extracting(RetrievedChunk::sourceId).containsOnly(100L);
     }
 }

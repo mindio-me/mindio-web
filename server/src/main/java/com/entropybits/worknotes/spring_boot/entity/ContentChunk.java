@@ -68,5 +68,5 @@ public class ContentChunk {
         updatedAt = Instant.now();
     }
 
-    public enum SourceType { NOTE, CLIP }
+    public enum SourceType { NOTE, CLIP, LOCAL_MEDIA }
 }

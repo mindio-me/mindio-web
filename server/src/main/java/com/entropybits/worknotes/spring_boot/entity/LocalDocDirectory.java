@@ -16,8 +16,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
+// (owner_id, dir_path) 的唯一性由 Flyway 迁移强制：mysql/ 建在生成列 (owner_id,
+// dir_path_hash) 上（dir_path 太长，整列复合唯一索引会超过 InnoDB 3072 字节上限），
+// h2/ 建在 (owner_id, dir_path) 上。这里不再用 @UniqueConstraint 声明，避免 ddl-auto
+// 按整列去重建一个 MySQL 建不出来的索引。
 @Table(name = "local_doc_directories",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"owner_id", "dir_path"}),
     indexes = {
         @Index(name = "idx_ldd_owner", columnList = "owner_id")
     })

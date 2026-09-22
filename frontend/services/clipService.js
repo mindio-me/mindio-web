@@ -21,8 +21,8 @@ class ClipService extends ApiService {
     return this.get(`/v1/clips/recent?limit=${limit}`)
   }
 
-  async getClipById(id) {
-    const clip = await this.get(`/v1/clips/${id}`)
+  async getClipById(id, config = {}) {
+    const clip = await this.get(`/v1/clips/${id}`, config)
     if (clip && clip.content) clip.content = this._fixImageUrls(clip.content)
     return clip
   }

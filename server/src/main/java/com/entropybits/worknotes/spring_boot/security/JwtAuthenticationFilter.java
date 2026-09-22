@@ -100,7 +100,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                path.startsWith("/v1/notes/public") ||
                path.startsWith("/v1/projects/public") ||
                path.startsWith("/v1/projects/featured") ||
-               path.startsWith("/v1/services") ||
                path.startsWith("/v1/resources") ||
                path.startsWith("/v1/profiles/") ||
                path.startsWith("/uploads/") ||

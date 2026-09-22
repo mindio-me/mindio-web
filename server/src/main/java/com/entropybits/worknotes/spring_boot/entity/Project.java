@@ -35,18 +35,33 @@ public class Project {
     @NotBlank(message = "项目名称不能为空")
     @Size(max = 200, message = "项目名称长度不能超过200个字符")
     @Column(nullable = false, length = 200)
-    private String name;
+    private String name; // 项目名称（英文/默认）
+
+    @Column(length = 200)
+    private String nameZh; // 项目名称（中文），公开主页按访客语言选用，留空则回退到 name
 
     @Size(max = 20, message = "项目简称长度不能超过20个字符")
     @Column(length = 20)
     private String shortName; // 项目简称/缩写，如 "WN"、"DC"
 
     @Column(length = 200)
-    private String subtitle; // 项目副标题，如 "SaaS for dance training institutions"
+    private String subtitle; // 项目副标题（英文/默认），如 "SaaS for dance training institutions"
+
+    @Column(length = 200)
+    private String subtitleZh; // 项目副标题（中文），留空则回退到 subtitle
+
+    @Column(length = 300)
+    private String highlightMetric; // 案例卡上的高亮说明句（英文/默认），如 "440+ real notes already managed in daily use"
+
+    @Column(length = 300)
+    private String highlightMetricZh; // 案例卡高亮说明句（中文），留空则回退到 highlightMetric
 
     @NotBlank(message = "项目描述不能为空")
     @Column(nullable = false, length = Integer.MAX_VALUE)
-    private String description;
+    private String description; // 项目描述（英文/默认）
+
+    @Column(length = Integer.MAX_VALUE)
+    private String descriptionZh; // 项目描述（中文），留空则回退到 description
 
     @Column(length = 100)
     private String icon; // 项目图标，Element UI 图标类名
@@ -64,7 +79,10 @@ public class Project {
     private String category; // 项目分类: web, saas, mobile, ai
 
     @Column(length = Integer.MAX_VALUE)
-    private String technologies; // 技术栈，逗号分隔
+    private String technologies; // 技术栈，逗号分隔（英文/默认）
+
+    @Column(length = Integer.MAX_VALUE)
+    private String technologiesZh; // 技术栈，逗号分隔（中文），留空则回退到 technologies
 
     @Column(length = Integer.MAX_VALUE)
     private String content; // 项目正文内容（富文本）

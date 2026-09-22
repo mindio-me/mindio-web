@@ -41,6 +41,7 @@ public class GlobalChatService {
     private final SourceClipRepository sourceClipRepository;
     private final ContentChunkingService chunkingService;
     private final AgentServiceClient agentServiceClient;
+    private final LocalFileExtractionService extractionService;
     private final ObjectMapper objectMapper;
 
     public GlobalChatService(AiChatMessageRepository chatMessageRepository,
@@ -49,6 +50,7 @@ public class GlobalChatService {
                               SourceClipRepository sourceClipRepository,
                               ContentChunkingService chunkingService,
                               AgentServiceClient agentServiceClient,
+                              LocalFileExtractionService extractionService,
                               ObjectMapper objectMapper) {
         this.chatMessageRepository = chatMessageRepository;
         this.userRepository = userRepository;
@@ -56,6 +58,7 @@ public class GlobalChatService {
         this.sourceClipRepository = sourceClipRepository;
         this.chunkingService = chunkingService;
         this.agentServiceClient = agentServiceClient;
+        this.extractionService = extractionService;
         this.objectMapper = objectMapper;
     }
 
@@ -90,6 +93,7 @@ public class GlobalChatService {
             StringBuilder finalReplyText = new StringBuilder();
             List<ChatCitation>[] resolvedCitations = new List[]{List.of()};
             boolean[] chatSucceeded = {false};
+            boolean[] awaitingConfirm = {false};
 
             try {
                 agentServiceClient.streamChat(username, content, username, currentNoteContext, attachments,
@@ -127,6 +131,22 @@ public class GlobalChatService {
                                     finalReplyText.append("\n\n（生成中断，请重新提问）");
                                 }
                             }
+
+                            @Override
+                            public void onConfirmRequest(String proposalId, String blockType, Long noteId, Map<String, Object> preview) {
+                                awaitingConfirm[0] = true;
+                                sendEvent(emitter, ChatStreamEvent.confirmRequest(proposalId, blockType, noteId, preview), disconnected);
+                            }
+
+                            @Override
+                            public void onBlockUpdated(Long noteId, String blockId, String blockType, List<Map<String, Object>> items) {
+                                sendEvent(emitter, ChatStreamEvent.blockUpdated(noteId, blockId, blockType, items), disconnected);
+                            }
+
+                            @Override
+                            public void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data) {
+                                sendEvent(emitter, ChatStreamEvent.mediaBlockUpdated(noteId, blockId, blockType, data), disconnected);
+                            }
                         });
             } catch (Exception e) {
                 log.error("agent service call failed for user {}", username, e);
@@ -135,6 +155,13 @@ public class GlobalChatService {
                 } else {
                     finalReplyText.append("\n\n（生成中断，请重新提问）");
                 }
+            }
+
+            if (awaitingConfirm[0]) {
+                // 等用户在聊天面板确认——这一轮不持久化assistant消息、不发done，
+                // 真正的回复要等 resumeStream 那一轮才会来
+                emitter.complete();
+                return;
             }
 
             String reply = finalReplyText.length() > 0 ? finalReplyText.toString() : "抱歉，这次没能回复，换个说法试试？";
@@ -152,6 +179,90 @@ public class GlobalChatService {
             emitter.complete();
         } catch (Exception e) {
             log.error("unexpected error in sendMessageStream for user {}", username, e);
+            sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
+            emitter.completeWithError(e);
+        }
+    }
+
+    // 已知的小遗留（不是这次要解决的，只是让实现者知情）：resumeStream 持久化的 assistant 消息
+    // 没有设置 noteId（不像 sendMessageStream 那样能拿到 ownedNoteId），所以这条回复不会出现在
+    // "按笔记筛选聊天记录"（getMessagesForNote）的结果里——只影响历史记录筛选，不影响写入流程本身。
+    public void resumeStream(String username, String proposalId, String decision, SseEmitter emitter) {
+        java.util.concurrent.atomic.AtomicBoolean disconnected = new java.util.concurrent.atomic.AtomicBoolean(false);
+        try {
+            User user = getUser(username);
+            StringBuilder finalReplyText = new StringBuilder();
+            List<ChatCitation>[] resolvedCitations = new List[]{List.of()};
+            boolean[] chatSucceeded = {false};
+            boolean[] awaitingConfirm = {false};
+
+            try {
+                agentServiceClient.resumeChat(username, proposalId, decision,
+                        new AgentServiceClient.StreamListener() {
+                            @Override
+                            public void onTextDelta(String text) {
+                                finalReplyText.append(text);
+                                sendEvent(emitter, ChatStreamEvent.textDelta(text), disconnected);
+                            }
+
+                            @Override
+                            public void onToolCall(String query) {
+                                sendEvent(emitter, ChatStreamEvent.toolCall(query == null ? "" : query), disconnected);
+                            }
+
+                            @Override
+                            public void onDone(String finalContent, List<ChatCitation> citations) {
+                                finalReplyText.setLength(0);
+                                finalReplyText.append(finalContent);
+                                resolvedCitations[0] = resolveCitationTitles(citations);
+                                chatSucceeded[0] = true;
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                if (finalReplyText.length() == 0) finalReplyText.append(message);
+                                else finalReplyText.append("\n\n（生成中断，请重新提问）");
+                            }
+
+                            @Override
+                            public void onConfirmRequest(String proposalId2, String blockType, Long noteId, Map<String, Object> preview) {
+                                awaitingConfirm[0] = true;
+                                sendEvent(emitter, ChatStreamEvent.confirmRequest(proposalId2, blockType, noteId, preview), disconnected);
+                            }
+
+                            @Override
+                            public void onBlockUpdated(Long noteId, String blockId, String blockType, List<Map<String, Object>> items) {
+                                sendEvent(emitter, ChatStreamEvent.blockUpdated(noteId, blockId, blockType, items), disconnected);
+                            }
+
+                            @Override
+                            public void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data) {
+                                sendEvent(emitter, ChatStreamEvent.mediaBlockUpdated(noteId, blockId, blockType, data), disconnected);
+                            }
+                        });
+            } catch (Exception e) {
+                log.error("agent service resume call failed for user {}", username, e);
+                if (finalReplyText.length() == 0) finalReplyText.append("抱歉，这次没能回复，换个说法试试？");
+                else finalReplyText.append("\n\n（生成中断，请重新提问）");
+            }
+
+            if (awaitingConfirm[0]) {
+                emitter.complete();
+                return;
+            }
+
+            String reply = finalReplyText.length() > 0 ? finalReplyText.toString() : "抱歉，这次没能回复，换个说法试试？";
+            String citationsJson = chatSucceeded[0] && !resolvedCitations[0].isEmpty()
+                    ? writeJson(resolvedCitations[0]) : null;
+
+            AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
+                    .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply)
+                    .citationsJson(citationsJson).build());
+
+            sendEvent(emitter, ChatStreamEvent.done(toResponse(assistantMessage)), disconnected);
+            emitter.complete();
+        } catch (Exception e) {
+            log.error("unexpected error in resumeStream for user {}", username, e);
             sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
             emitter.completeWithError(e);
         }
@@ -226,6 +337,9 @@ public class GlobalChatService {
     private String lookupTitle(ContentChunk.SourceType sourceType, Long sourceId) {
         if (sourceType == ContentChunk.SourceType.NOTE) {
             return noteRepository.findById(sourceId).map(Note::getTitle).orElse("（已删除的笔记）");
+        }
+        if (sourceType == ContentChunk.SourceType.LOCAL_MEDIA) {
+            return extractionService.findDisplayNameForExtraction(sourceId);
         }
         return sourceClipRepository.findById(sourceId).map(SourceClip::getTitle).orElse("（已删除的收藏）");
     }

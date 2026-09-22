@@ -8,7 +8,7 @@ spring:
 
   # 数据库配置 (MySQL)
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/worknotes?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/mindio_app?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -120,7 +120,7 @@ feishu:
 
 # AI 翻译服务配置
 ai:
-  provider: ${AI_PROVIDER:doubao}   # anthropic | openai | deepseek | doubao
+  provider: ${AI_PROVIDER:deepseek}   # anthropic | openai | deepseek | doubao
   anthropic:
     api-key: ${AI_ANTHROPIC_KEY:}
     model: ${AI_ANTHROPIC_MODEL:claude-opus-4-6}
@@ -138,8 +138,11 @@ ai:
     model: ${AI_DOUBAO_MODEL:doubao-seed-2-0-pro-260215}
     base-url: https://ark.cn-beijing.volces.com
     chat-path: /api/v3/chat/completions
-    embedding-model: ${AI_DOUBAO_EMBEDDING_MODEL:doubao-embedding-text-240715}
-    embedding-path: /api/v3/embeddings
+  # Embedding 独立于 ai.provider 这个聊天模型开关，认证复用 doubao 的 api-key/base-url
+  embedding:
+    #model: ${AI_DOUBAO_EMBEDDING_MODEL:ep-20260917230546-79thz}
+    model: ${AI_DOUBAO_EMBEDDING_MODEL:doubao-embedding-vision-251215}
+    path: /api/v3/embeddings/multimodal
 
 # 独立Python/LangGraph Agent服务：/internal/** 这几个接口只允许带正确共享密钥的请求访问，
 # 见 InternalServiceAuthFilter。生产环境必须通过 AGENT_INTERNAL_TOKEN 覆盖成一个随机值。

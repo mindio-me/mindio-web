@@ -55,6 +55,10 @@
           <i class="el-icon-paperclip"></i>
           <span>素材<span v-if="clipCount > 0"> ({{ clipCount }})</span></span>
         </button>
+        <button v-if="currentNoteId" class="header-btn" @click="aiRailOpen = !aiRailOpen">
+          <i class="el-icon-magic-stick"></i>
+          <span>{{ $t('workspace.clips.aiSearchTitle') }}</span>
+        </button>
         <div class="more-menu-wrapper" ref="moreMenuWrapper">
           <button class="header-btn icon-only" @click="toggleMoreMenu">
             <i class="el-icon-more"></i>
@@ -152,6 +156,55 @@
           <div id="editorjs" ref="editorContainer" class="editorjs-container"></div>
         </div>
       </main>
+
+      <!-- 右侧栏：AI 网络搜索，搜到的资料一键存为本篇笔记的参考素材 -->
+      <aside v-if="currentNoteId" class="ai-rail" :class="{ collapsed: !aiRailOpen }">
+        <div class="rail-section-title">{{ $t('workspace.clips.aiSearchTitle') }}</div>
+        <div class="ai-search-chat">
+          <div class="ai-search-messages" ref="aiSearchMessages">
+            <div
+              v-for="msg in aiSearchMessages"
+              :key="msg.id"
+              class="ai-search-msg"
+              :class="msg.role === 'USER' ? 'is-user' : 'is-assistant'"
+            >
+              <div class="ai-search-bubble">{{ msg.content }}</div>
+              <div v-if="msg.results && msg.results.length" class="ai-search-results">
+                <div v-for="(r, idx) in msg.results" :key="idx" class="ai-search-result-card">
+                  <a :href="r.url" target="_blank" rel="noopener" class="ai-search-result-title">{{ r.title }}</a>
+                  <div class="ai-search-result-excerpt">{{ r.excerpt }}</div>
+                  <el-button
+                    size="mini"
+                    :type="r.sourceClipId ? 'info' : 'primary'"
+                    :disabled="!!r.sourceClipId || savingResult === (msg.id + '-' + idx)"
+                    :loading="savingResult === (msg.id + '-' + idx)"
+                    @click="saveAiSearchResult(msg, idx)"
+                  >{{ r.sourceClipId ? $t('workspace.clips.aiSearchSaved') : $t('workspace.clips.aiSearchSave') }}</el-button>
+                </div>
+              </div>
+            </div>
+            <div v-if="aiSearchLoading" class="ai-search-msg is-assistant">
+              <div class="ai-search-bubble ai-search-typing">{{ $t('workspace.clips.aiSearchThinking') }}</div>
+            </div>
+          </div>
+          <div class="ai-search-input-row">
+            <el-input
+              v-model="aiSearchInput"
+              type="textarea"
+              :rows="2"
+              :placeholder="$t('workspace.clips.aiSearchPlaceholder')"
+              :disabled="aiSearchLoading"
+              @keydown.enter.native.exact.prevent="sendAiSearchMessage"
+            />
+            <el-button
+              type="primary"
+              size="small"
+              :disabled="!aiSearchInput.trim() || aiSearchLoading"
+              @click="sendAiSearchMessage"
+            >{{ $t('workspace.clips.aiSearchSend') }}</el-button>
+          </div>
+        </div>
+      </aside>
     </div>
 
     <!-- Image Lightbox -->
@@ -201,6 +254,7 @@ export default {
       sidebarCollapsed: false,
       isDarkTheme: false,
       editor: null,
+      editorUndo: null,
       imageResizer: null,
       saveStatus: {
         icon: 'el-icon-check',
@@ -218,6 +272,11 @@ export default {
       wechatPublished: false,
       clipCount: 0,
       currentNoteContent: '',
+      aiRailOpen: true,
+      aiSearchMessages: [],
+      aiSearchInput: '',
+      aiSearchLoading: false,
+      savingResult: null,
       documents: [
         { id: 1, name: 'Q&A', isFolder: false },
         { id: 2, name: 'May Development', isFolder: true },
@@ -265,9 +324,17 @@ export default {
     window.addEventListener('beforeunload', this.handleBeforeUnload)
     document.getElementById('editorjs')?.addEventListener('click', this.handleEditorImageClick)
     window.addEventListener('keydown', this.handleLightboxKey)
+    this.$nuxt.$on('recording:insert-block', this.onRecordingInsertBlock)
+    this.$nuxt.$on('recording:resolve-block', this.onRecordingResolveBlock)
+    this.$nuxt.$on('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$on('media-block-updated', this.onMediaBlockUpdated)
   },
 
   beforeDestroy() {
+    this.$nuxt.$off('recording:insert-block', this.onRecordingInsertBlock)
+    this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
+    this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$off('media-block-updated', this.onMediaBlockUpdated)
     document.removeEventListener('click', this.handleClickOutside)
     window.removeEventListener('beforeunload', this.handleBeforeUnload)
     document.getElementById('editorjs')?.removeEventListener('click', this.handleEditorImageClick)
@@ -295,6 +362,12 @@ export default {
       this._listCopyFixHandler()
       this._listCopyFixHandler = null
     }
+    if (this.editorUndo) {
+      // 见 workspace/notes/index.vue destroyEditor() 里的同一条注释：EditorJS 的 destroy()
+      // 从不派发 editorjs-undo 依赖的自定义"destroy"事件，这里手动补发以移除它的 keydown 监听器。
+      try { this.$refs.editorContainer?.dispatchEvent(new Event('destroy')) } catch (e) { /* ignore */ }
+      this.editorUndo = null
+    }
     if (this.editor) {
       this.editor.destroy()
     }
@@ -318,11 +391,20 @@ export default {
         { default: InlineCode },
         { default: ImageTool },
         { default: Marker },
+        { default: Checklist },
+        { default: Warning },
+        { default: LinkTool },
+        { default: AttachesTool },
+        { default: ReferencesTool },
+        { default: GalleryTool },
+        { default: TimelineTool },
         { default: MarkdownBlock },
         { default: VideoTool },
         { default: EmbedVideoTool },
         { default: AudioTool },
-        { default: CodeWrapTune }
+        { default: RecordTool },
+        { default: CodeWrapTune },
+        { default: Undo }
       ] = await Promise.all([
         import('@editorjs/editorjs'),
         import('@editorjs/header'),
@@ -334,11 +416,20 @@ export default {
         import('@editorjs/inline-code'),
         import('@editorjs/image'),
         import('@editorjs/marker'),
+        import('@editorjs/checklist'),
+        import('@editorjs/warning'),
+        import('@editorjs/link'),
+        import('@editorjs/attaches'),
+        import('~/utils/editorjsReferencesTool'),
+        import('~/utils/editorjsGalleryTool'),
+        import('~/utils/editorjsTimelineTool'),
         import('~/utils/editorjs-markdown-block'),
         import('~/utils/editorjsVideoTool'),
         import('~/utils/editorjsEmbedVideoTool'),
         import('~/utils/editorjsAudioTool'),
-        import('~/utils/editorjsCodeWrapTune')
+        import('~/utils/editorjsRecordTool'),
+        import('~/utils/editorjsCodeWrapTune'),
+        import('editorjs-undo')
       ])
 
       const uploadService = this.$uploadService
@@ -402,6 +493,7 @@ export default {
           image: {
             class: ImageTool,
             config: {
+              features: { caption: 'optional' },
               uploader: {
                 async uploadByFile(file) {
                   try {
@@ -437,6 +529,99 @@ export default {
           marker: {
             class: Marker,
             shortcut: 'CMD+SHIFT+M'
+          },
+          checklist: {
+            class: Checklist,
+            inlineToolbar: true
+          },
+          warning: {
+            class: Warning,
+            inlineToolbar: true,
+            config: {
+              titlePlaceholder: '标题',
+              messagePlaceholder: '内容'
+            }
+          },
+          linkTool: {
+            class: LinkTool,
+            config: {
+              endpoint: `${this.$axios?.defaults?.baseURL || ''}/v1/link-preview`,
+              headers: {
+                Authorization: this.$auth?.strategy?.token?.get() || ''
+              }
+            }
+          },
+          attaches: {
+            class: AttachesTool,
+            config: {
+              buttonText: '选择文件上传',
+              errorMessage: '文件上传失败',
+              uploader: {
+                async uploadByFile(file) {
+                  try {
+                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
+                    return {
+                      success: 1,
+                      file: {
+                        url: result.url || result.fileUrl || result,
+                        name: result.fileName || file.name,
+                        size: result.fileSize,
+                        extension: result.extName
+                      }
+                    }
+                  } catch (e) {
+                    console.error('文件上传失败:', e)
+                    return { success: 0 }
+                  }
+                }
+              }
+            }
+          },
+          references: {
+            class: ReferencesTool,
+            config: {
+              axiosBaseURL: this.$axios?.defaults?.baseURL || '',
+              getAuthHeader: () => ({ Authorization: this.$auth?.strategy?.token?.get() || '' }),
+              uploader: {
+                async uploadByFile(file) {
+                  try {
+                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
+                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
+                  } catch (e) {
+                    console.error('参考文档上传失败:', e)
+                    return { success: 0 }
+                  }
+                }
+              }
+            }
+          },
+          mediaGallery: {
+            class: GalleryTool,
+            config: {
+              uploader: {
+                async uploadByFile(file) {
+                  try {
+                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
+                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
+                  } catch (e) {
+                    console.error('画廊素材上传失败:', e)
+                    return { success: 0 }
+                  }
+                },
+                async uploadByUrl(url) {
+                  try {
+                    const result = await uploadService.uploadRemote(url, 'note', noteId || 0)
+                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
+                  } catch (e) {
+                    console.error('画廊图片链接抓取失败:', e)
+                    return { success: 0 }
+                  }
+                }
+              }
+            }
+          },
+          timeline: {
+            class: TimelineTool
           },
           markdown: {
             class: MarkdownBlock,
@@ -497,7 +682,13 @@ export default {
                 }
               }
             }
-          }
+          },
+          audioRecord: {
+            class: RecordTool,
+            config: {
+              getNoteId: () => this.currentNoteId
+            }
+          },
         },
         data: data || undefined,
         onChange: () => {
@@ -536,10 +727,14 @@ export default {
               Image: '图片',
               InlineCode: '行内代码',
               Marker: '高亮',
+              Checklist: '任务列表',
+              Warning: '提示框',
+              Attachment: '附件',
               Markdown: 'Markdown',
               Embed: '嵌入视频1',
               Video: '视频1',
               Audio: '音频',
+              AudioRecord: '录音',
               Bold: '加粗',
               Italic: '斜体',
               Link: '链接'
@@ -573,7 +768,8 @@ export default {
                 'Select an Image': '选择图片',
                 'With border': '带边框',
                 'Stretch image': '拉伸图片',
-                'With background': '带背景'
+                'With background': '带背景',
+                'With caption': '添加图片说明'
               }
             },
             blockTunes: {
@@ -617,6 +813,8 @@ export default {
       this.setupImagePaste(uploadService, noteId)
       this.setupHeaderToggleShortcut()
       this.setupListCopyFix()
+      this.editorUndo = new Undo({ editor: this.editor })
+      if (data) this.editorUndo.initialize(data)
     },
 
     // 整块复制/剪切时，EditorJS 自带的 copySelectedBlocks 用 .textContent 拼接每个 block，
@@ -820,6 +1018,115 @@ export default {
       this.debouncedSave()
     },
 
+    async onRecordingInsertBlock({ noteId, url, duration }) {
+      if (!this.editor || String(this.currentNoteId) !== String(noteId)) return
+      this.editor.blocks.insert('audioRecord', { url, duration })
+      this.hasUnsavedChanges = true
+      this.updateSaveStatus('saving')
+
+      // 录音插入是一次性的离散事件，不像连续击键那样需要合并，所以直接走非防抖的
+      // saveToBackend()：用户完全可能在防抖窗口（2s）内就离开页面，那样 beforeDestroy
+      // 会清掉 saveTimeout，这段录音就永远存不进去了。
+      clearTimeout(this.saveTimeout)
+      let ok = false
+      let error = null
+      try {
+        // saveToBackend() 在已有保存进行中时会直接 return，等它空闲再存，否则这次插入会丢
+        await this.waitForSaveIdle()
+        await this.saveToBackend()
+        // saveToBackend() 自己吞掉异常、只改 saveStatus，所以用 hasUnsavedChanges 判断结果
+        ok = !this.hasUnsavedChanges
+      } catch (e) {
+        error = e
+        ok = false
+      }
+      // 回执给 RecordingCapsule，让它知道该弹"已插入"还是"保存失败"
+      this.$nuxt.$emit('recording:insert-block:ack', { noteId, ok, error })
+    },
+
+    /**
+     * 从笔记正文里的"录音"块发起、录完的时候人还停在这篇笔记上（不管中途有没有切去
+     * 别的笔记又切回来）——把那个占位块原地换成真正的播放器，而不是在末尾追加一个新块。
+     * getBlockIndex 对不存在的 id 会抛，包一层 try/catch：块可能在录音过程中被手动删了，
+     * 这种情况下交回 ok:false，让 RecordingCapsule 走后端兜底路径（那边会退化成追加）。
+     */
+    async onRecordingResolveBlock({ noteId, blockId, url, duration }) {
+      if (!this.editor || String(this.currentNoteId) !== String(noteId)) return
+      let idx = -1
+      try {
+        idx = this.editor.blocks.getBlockIndex(blockId)
+      } catch (e) {
+        idx = -1
+      }
+      if (idx === undefined || idx < 0) {
+        this.$nuxt.$emit('recording:resolve-block:ack', { noteId, blockId, ok: false })
+        return
+      }
+
+      this.editor.blocks.delete(idx)
+      this.editor.blocks.insert('audioRecord', { url, duration }, {}, idx, true)
+      this.hasUnsavedChanges = true
+      this.updateSaveStatus('saving')
+
+      clearTimeout(this.saveTimeout)
+      let ok = false
+      try {
+        await this.waitForSaveIdle()
+        await this.saveToBackend()
+        ok = !this.hasUnsavedChanges
+      } catch (e) {
+        ok = false
+      }
+      this.$nuxt.$emit('recording:resolve-block:ack', { noteId, blockId, ok })
+    },
+
+    /**
+     * agent 通过聊天面板确认后往当前笔记的某个专题块追加了一条内容（见spec②），
+     * 用EditorJS官方的blocks.update() API原地合并进当前打开的编辑器，避免随后的
+     * 自动保存拿浏览器本地的旧数据把这条新内容覆盖掉。找不到对应类型的块（比如
+     * 用户在agent写入的同时手动删掉了这个块）就静默忽略——下次重新打开笔记时
+     * 内容已经是服务端最新的，不算错误路径。
+     */
+    onTopicBlockUpdated({ noteId, blockType, items }) {
+      if (!this.editor || String(this.currentNoteId) !== String(noteId)) return
+      const blocks = this.editor.blocks
+      for (let i = blocks.getBlocksCount() - 1; i >= 0; i--) {
+        const block = blocks.getBlockByIndex(i)
+        if (block && block.name === blockType) {
+          blocks.update(block.id, { items }).catch((e) => {
+            console.warn('实时合并 agent 写入的新条目失败，下次打开笔记会显示最新内容:', e)
+          })
+          return
+        }
+      }
+    },
+
+    /**
+     * agent 通过聊天面板分析完图片/音频后，直接（不经过确认卡片）把 caption/transcript/
+     * summary 写回了笔记，这里按 blockId 精确定位、用 blocks.update() 把服务端返回的
+     * 完整 data 原地合并进当前打开的编辑器——不是 onTopicBlockUpdated 那种按类型找最后
+     * 一个块的模糊匹配，因为图片/音频可能有好几个，必须按 blockId 精确对上。找不到这个
+     * blockId（用户在分析进行时手动删掉了这个块）就静默忽略。
+     */
+    onMediaBlockUpdated({ noteId, blockId, data }) {
+      if (!this.editor || String(this.currentNoteId) !== String(noteId)) return
+      this.editor.blocks.update(blockId, data).catch((e) => {
+        console.warn('实时合并 agent 分析结果失败，下次打开笔记会显示最新内容:', e)
+      })
+    },
+
+    /**
+     * 等待当前正在进行的保存结束（最多 ~3s），避免 saveToBackend() 的 isSaving 早退把
+     * 这次写入静默丢掉。上限刻意留得比 RecordingCapsule 那边 8s 的回执超时小不少，
+     * 好让"等待 + 直存"这一整轮在对方超时之前完成。
+     */
+    async waitForSaveIdle(timeoutMs = 3000) {
+      const deadline = Date.now() + timeoutMs
+      while (this.isSaving && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    },
+
     handleTitleNavigationKeydown(event) {
       const navigationKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']
       if (navigationKeys.includes(event.key)) {
@@ -947,6 +1254,7 @@ export default {
         this.docTitle = note.title
         this.projectId = note.projectId || null
         this.loadClipCount(note.id)
+        this.loadAiSearchHistory()
 
         let editorData = null
 
@@ -1029,6 +1337,47 @@ export default {
       } catch (e) {
         // 静默失败
       }
+    },
+
+    async loadAiSearchHistory() {
+      try {
+        const res = await this.$clipSearchService.getMessages(Number(this.currentNoteId))
+        this.aiSearchMessages = (res || []).map(m => ({ ...m, results: m.results || [] }))
+        this.$nextTick(this.scrollAiSearchToBottom)
+      } catch (e) {
+        // 历史加载失败不阻塞编辑器主流程，静默忽略
+      }
+    },
+    async sendAiSearchMessage() {
+      const content = this.aiSearchInput.trim()
+      if (!content || this.aiSearchLoading || !this.currentNoteId) return
+      this.aiSearchInput = ''
+      this.aiSearchLoading = true
+      try {
+        const res = await this.$clipSearchService.sendMessage(content, Number(this.currentNoteId))
+        this.aiSearchMessages.push(...(res || []).map(m => ({ ...m, results: m.results || [] })))
+        this.$nextTick(this.scrollAiSearchToBottom)
+      } catch (e) {
+        this.$message.error(this.$t('workspace.clips.aiSearchFailed'))
+      } finally {
+        this.aiSearchLoading = false
+      }
+    },
+    async saveAiSearchResult(msg, idx) {
+      const key = msg.id + '-' + idx
+      this.savingResult = key
+      try {
+        const res = await this.$clipSearchService.saveResult(msg.id, idx)
+        this.$set(msg.results[idx], 'sourceClipId', res.sourceClipId)
+      } catch (e) {
+        this.$message.error(this.$t('workspace.clips.aiSearchSaveFailed'))
+      } finally {
+        this.savingResult = null
+      }
+    },
+    scrollAiSearchToBottom() {
+      const el = this.$refs.aiSearchMessages
+      if (el) el.scrollTop = el.scrollHeight
     },
 
     async togglePublic() {
@@ -1421,6 +1770,57 @@ export default {
   height: calc(100vh - 52px);
 }
 
+// 右侧栏：AI 搜索
+.ai-rail {
+  width: 320px;
+  flex: 0 0 auto;
+  border-left: 1px solid var(--border-color, #e8e8e8);
+  background: var(--bg-secondary, #fafafa);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  transition: width 0.3s;
+  overflow: hidden;
+
+  &.collapsed {
+    width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    border-left: none;
+  }
+}
+
+.rail-section-title { font-size: 13px; font-weight: 600; color: var(--text-muted, #666); margin-bottom: 10px; }
+
+.ai-search-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.ai-search-messages { flex: 1; overflow-y: auto; padding-right: 4px; }
+.ai-search-msg { margin-bottom: 12px; display: flex; flex-direction: column; }
+.ai-search-msg.is-user { align-items: flex-end; }
+.ai-search-msg.is-assistant { align-items: flex-start; }
+.ai-search-bubble {
+  max-width: 90%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ai-search-msg.is-user .ai-search-bubble { background: #409eff; color: #fff; }
+.ai-search-msg.is-assistant .ai-search-bubble { background: var(--bg-color, #fff); color: var(--text-color, #333); }
+.ai-search-typing { opacity: .6; }
+.ai-search-results { margin-top: 6px; width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.ai-search-result-card {
+  border: 1px solid var(--border-color, #e8e8e8);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg-color, #fff);
+}
+.ai-search-result-title { font-size: 13px; font-weight: 600; color: #409eff; text-decoration: none; display: block; margin-bottom: 4px; }
+.ai-search-result-excerpt { font-size: 12px; color: var(--text-muted, #999); margin-bottom: 6px; line-height: 1.5; }
+.ai-search-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.ai-search-input-row .el-textarea { flex: 1; }
+
 // Sidebar
 .doc-sidebar {
   width: 240px;
@@ -1698,6 +2098,24 @@ export default {
 
     &.collapsed {
       left: -240px;
+    }
+  }
+
+  .ai-rail {
+    position: fixed;
+    right: 0;
+    top: 52px;
+    height: calc(100vh - 52px);
+    width: 300px;
+    z-index: 50;
+    box-shadow: -4px 0 20px rgba(0,0,0,.12);
+    transition: transform 0.3s;
+
+    &.collapsed {
+      width: 300px;
+      padding: 16px;
+      border-left: 1px solid var(--border-color, #e8e8e8);
+      transform: translateX(100%);
     }
   }
 
@@ -2027,6 +2445,29 @@ export default {
         display: block;
         width: 100%;
         border-radius: 8px;
+      }
+
+      .embed-video-tool__facade {
+        width: 100%;
+        height: 100%;
+        border-radius: 8px;
+        background-color: #000;
+        background-size: cover;
+        background-position: center;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        &__play {
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          background: rgba(0, 0, 0, 0.55);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
       }
 
       .image-resize-handle {

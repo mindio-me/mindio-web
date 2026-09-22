@@ -34,5 +34,7 @@ public class SourceClipRequest {
 
     private String contentFormat; // html | markdown | text
 
+    private Integer durationSeconds;
+
     private List<Long> tagIds;
 }

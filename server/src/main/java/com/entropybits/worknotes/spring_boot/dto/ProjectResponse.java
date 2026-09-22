@@ -18,15 +18,21 @@ public class ProjectResponse {
 
     private Long id;
     private String name;
+    private String nameZh;
     private String shortName; // 项目简称/缩写
     private String subtitle;
+    private String subtitleZh;
+    private String highlightMetric;
+    private String highlightMetricZh;
     private String description;
+    private String descriptionZh;
     private String icon;
     private String imageUrl;
     private String projectUrl;
     private String githubUrl;
     private String category;
     private String technologies;
+    private String technologiesZh;
     private String content; // 项目正文内容（富文本）
     private String contentType; // 内容类型：richtext, markdown等
     private Boolean isPublic;
@@ -40,15 +46,21 @@ public class ProjectResponse {
         ProjectResponse response = new ProjectResponse();
         response.setId(project.getId());
         response.setName(project.getName());
+        response.setNameZh(project.getNameZh());
         response.setShortName(project.getShortName());
         response.setSubtitle(project.getSubtitle());
+        response.setSubtitleZh(project.getSubtitleZh());
+        response.setHighlightMetric(project.getHighlightMetric());
+        response.setHighlightMetricZh(project.getHighlightMetricZh());
         response.setDescription(project.getDescription());
+        response.setDescriptionZh(project.getDescriptionZh());
         response.setIcon(project.getIcon());
         response.setImageUrl(project.getImageUrl());
         response.setProjectUrl(project.getProjectUrl());
         response.setGithubUrl(project.getGithubUrl());
         response.setCategory(project.getCategory());
         response.setTechnologies(project.getTechnologies());
+        response.setTechnologiesZh(project.getTechnologiesZh());
         response.setContent(project.getContent());
         response.setContentType(project.getContentType());
         response.setIsPublic(project.getIsPublic());

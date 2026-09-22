@@ -181,6 +181,13 @@
 	</dependencies>
 
 	<build>
+		<!--
+			固定发布物名：mvn package 直接产出 target/mindio-server.jar（不带版本号），
+			与 mindio-cloud 的 <finalName>mindio-cloud</finalName> 一致，也与 GitHub Release
+			上那份稳定的 mindio-server.jar 同名。版本号只随 <version> 进 MANIFEST.MF；
+			需要发带版本号的 mindio-server-x.y.z.jar 时，发版当次改 <version> 再打包。
+		-->
+		<finalName>mindio-server</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
@@ -202,7 +209,7 @@
 			Release build with ProGuard obfuscation.
 			Usage: .\mvnw.cmd clean package -Prelease -DskipTests
 			   or: build-release.cmd
-			Output: target/spring-boot-<version>.jar  (obfuscated)
+			Output: target/mindio-server.jar  (obfuscated)
 		-->
 		<profile>
 			<id>release</id>

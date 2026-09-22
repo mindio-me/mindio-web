@@ -71,6 +71,12 @@ public class Attachment {
     private Integer imageType = 1;
 
     /**
+     * 图片内容SHA-256（仅图片附件计算，非图片留空）。用于反查LocalFileExtraction的OCR结果。
+     */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
+    /**
      * 资源归属方
      * -1-平台, 其他为用户ID
      */

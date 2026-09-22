@@ -4,8 +4,6 @@
  */
 package com.entropybits.worknotes.spring_boot.search;
 
-import com.entropybits.worknotes.spring_boot.news.NewsItemData;
-import com.entropybits.worknotes.spring_boot.news.RssFeedParser;
 import org.junit.jupiter.api.Test;
 
 import java.net.URLEncoder;

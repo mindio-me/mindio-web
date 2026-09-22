@@ -12,41 +12,6 @@
 
       <el-row :gutter="24">
         <el-col :xs="24" :sm="24" :md="12">
-          <!-- 网站信息 -->
-          <el-card class="settings-card" shadow="never">
-            <div slot="header" class="card-header">
-              <span>{{ $t('workspace.settings.siteInfoTitle') }}</span>
-            </div>
-            <el-form
-              ref="siteFormRef"
-              :model="siteForm"
-              label-position="top"
-              v-loading="siteLoading"
-            >
-              <el-form-item :label="$t('workspace.settings.fieldSiteName')">
-                <el-input
-                  v-model="siteForm.siteName"
-                  :placeholder="$t('workspace.settings.siteNamePlaceholder')"
-                  maxlength="100"
-                />
-              </el-form-item>
-              <el-form-item label="Logo URL">
-                <el-input
-                  v-model="siteForm.logoUrl"
-                  placeholder="https://..."
-                  maxlength="500"
-                />
-              </el-form-item>
-              <div class="form-actions">
-                <el-button type="primary" :loading="siteSaving" @click="saveSiteConfig">
-                  <i class="el-icon-check"></i> {{ $t('workspace.settings.saveSiteInfo') }}
-                </el-button>
-              </div>
-            </el-form>
-          </el-card>
-        </el-col>
-
-        <el-col :xs="24" :sm="24" :md="12">
           <!-- 集成配置：飞书 -->
           <el-card class="settings-card" shadow="never">
             <div slot="header" class="card-header">
@@ -226,13 +191,6 @@ export default {
   middleware: 'auth',
   data() {
     return {
-      // 网站信息
-      siteLoading: false,
-      siteSaving: false,
-      siteForm: {
-        siteName: '',
-        logoUrl: ''
-      },
       // 飞书配置
       feishuLoading: false,
       feishuSaving: false,
@@ -260,7 +218,6 @@ export default {
   },
   async mounted() {
     await Promise.all([
-      this.loadProfileForSite(),
       this.loadFeishuStatus(),
       this.loadWechatBindingStatus()
     ])
@@ -271,36 +228,6 @@ export default {
       const date = new Date(value)
       if (Number.isNaN(date.getTime())) return value
       return date.toLocaleString()
-    },
-    async loadProfileForSite() {
-      this.siteLoading = true
-      try {
-        const resp = await this.$axios.$get('/v1/settings/site')
-        if (resp) {
-          this.siteForm.siteName = resp.siteName || ''
-          this.siteForm.logoUrl = resp.logoUrl || ''
-        }
-      } catch (error) {
-        // 网站信息失败也不阻塞页面
-        this.$message.error(this.$t('workspace.settings.loadSiteInfoFailed'))
-      } finally {
-        this.siteLoading = false
-      }
-    },
-    async saveSiteConfig() {
-      this.siteSaving = true
-      try {
-        const payload = {
-          siteName: this.siteForm.siteName || '',
-          logoUrl: this.siteForm.logoUrl || ''
-        }
-        await this.$axios.$put('/v1/settings/site', payload)
-        this.$message.success(this.$t('workspace.settings.siteInfoSaved'))
-      } catch (error) {
-        this.$message.error(this.$t('workspace.settings.saveSiteInfoFailed', { message: error.response?.data?.message || error.message }))
-      } finally {
-        this.siteSaving = false
-      }
     },
     async loadFeishuStatus() {
       this.feishuLoading = true

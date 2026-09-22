@@ -71,6 +71,33 @@ public class EditorJsToHtmlConverter {
                         }
                         break;
                     }
+                    case "references": {
+                        for (JsonNode item : block.path("data").path("items")) {
+                            String title = item.path("title").asText("");
+                            String note = item.path("note").asText("");
+                            if (!title.isEmpty()) sb.append(title).append(" ");
+                            if (!note.isEmpty()) sb.append(note).append(" ");
+                        }
+                        break;
+                    }
+                    case "mediaGallery": {
+                        for (JsonNode item : block.path("data").path("items")) {
+                            String caption = item.path("caption").asText("");
+                            if (!caption.isEmpty()) sb.append(caption).append(" ");
+                        }
+                        break;
+                    }
+                    case "timeline": {
+                        for (JsonNode item : block.path("data").path("items")) {
+                            String date = item.path("date").asText("");
+                            String title = item.path("title").asText("");
+                            String description = item.path("description").asText("");
+                            if (!date.isEmpty()) sb.append(date).append(" ");
+                            if (!title.isEmpty()) sb.append(title).append(" ");
+                            if (!description.isEmpty()) sb.append(description).append(" ");
+                        }
+                        break;
+                    }
                     default:
                         break;
                 }
@@ -102,15 +129,18 @@ public class EditorJsToHtmlConverter {
 
     private String convertBlock(String type, JsonNode data, Map<String, String> imgMap) {
         return switch (type) {
-            case "header"    -> convertHeader(data);
-            case "paragraph" -> convertParagraph(data);
-            case "image"     -> convertImage(data, imgMap);
-            case "list"      -> convertList(data);
-            case "code"      -> convertCode(data);
-            case "quote"     -> convertQuote(data);
-            case "delimiter" -> convertDelimiter();
-            case "table"     -> convertTable(data);
-            case "markdown"  -> convertMarkdown(data);
+            case "header"      -> convertHeader(data);
+            case "paragraph"   -> convertParagraph(data);
+            case "image"       -> convertImage(data, imgMap);
+            case "list"        -> convertList(data);
+            case "code"        -> convertCode(data);
+            case "quote"       -> convertQuote(data);
+            case "delimiter"   -> convertDelimiter();
+            case "table"       -> convertTable(data);
+            case "markdown"    -> convertMarkdown(data);
+            case "references"  -> convertReferences(data);
+            case "mediaGallery" -> convertMediaGallery(data);
+            case "timeline"    -> convertTimeline(data);
             default -> "";
         };
     }
@@ -289,5 +319,102 @@ public class EditorJsToHtmlConverter {
             firstRow = false;
         }
         return sb.append("</table>").toString();
+    }
+
+    private String convertReferences(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<ul style=\"margin:12px 0;padding-left:20px;color:#333;font-size:16px;line-height:1.8;\">");
+        for (JsonNode item : data.path("items")) {
+            String kind = item.path("kind").asText("link");
+            String title = escapeHtml(item.path("title").asText(""));
+            String url = "note".equals(kind) ? "" : item.path("url").asText("");
+            String note = escapeHtml(item.path("note").asText(""));
+            sb.append("<li style=\"margin:4px 0;\">");
+            if (!url.isEmpty()) {
+                sb.append(String.format("<a href=\"%s\" style=\"color:#2b5fad;\">%s</a>", url, title));
+            } else {
+                sb.append(title);
+            }
+            if (!note.isEmpty()) {
+                sb.append(String.format(" <span style=\"color:#888;font-size:13px;\">（%s）</span>", note));
+            }
+            sb.append("</li>");
+        }
+        return sb.append("</ul>").toString();
+    }
+
+    private String convertMediaGallery(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<section style=\"display:flex;flex-wrap:wrap;gap:8px;margin:16px 0;\">");
+        for (JsonNode item : data.path("items")) {
+            String type = item.path("type").asText("image");
+            String caption = escapeHtml(item.path("caption").asText(""));
+            sb.append("<figure style=\"margin:0;width:200px;\">");
+            if ("video".equals(type)) {
+                String embedUrl = item.path("embedUrl").asText("");
+                sb.append(String.format(
+                    "<iframe src=\"%s\" style=\"width:100%%;height:120px;border:0;\" allowfullscreen></iframe>",
+                    embedUrl));
+            } else if ("audio".equals(type)) {
+                String url = item.path("url").asText("");
+                sb.append(String.format("<audio controls src=\"%s\" style=\"width:100%%;\"></audio>", url));
+            } else {
+                String url = item.path("url").asText("");
+                sb.append(String.format(
+                    "<img src=\"%s\" style=\"width:100%%;height:auto;border-radius:4px;\" />", url));
+            }
+            if (!caption.isEmpty()) {
+                sb.append(String.format(
+                    "<figcaption style=\"font-size:12px;color:#888;text-align:center;\">%s</figcaption>", caption));
+            }
+            sb.append("</figure>");
+        }
+        return sb.append("</section>").toString();
+    }
+
+    private String convertTimeline(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<section style=\"margin:16px 0;border-left:2px solid #ddd;padding-left:16px;\">");
+        for (JsonNode item : data.path("items")) {
+            String date = escapeHtml(item.path("date").asText(""));
+            String title = escapeHtml(item.path("title").asText(""));
+            String description = escapeHtml(item.path("description").asText(""));
+            String link = item.path("link").asText("");
+            sb.append("<div style=\"margin-bottom:12px;\">")
+              .append(String.format("<div style=\"font-size:13px;color:#888;\">%s</div>", date))
+              .append("<div style=\"font-size:16px;color:#333;font-weight:bold;\">");
+            sb.append(title);
+            if (!link.isEmpty()) {
+                sb.append(String.format(" <a href=\"%s\" style=\"color:#2b5fad;font-size:14px;text-decoration:none;\">🔗</a>", link));
+            }
+            sb.append("</div>");
+            if (!description.isEmpty()) {
+                sb.append(String.format("<div style=\"font-size:14px;color:#555;\">%s</div>", description));
+            }
+            sb.append("</div>");
+        }
+        return sb.append("</section>").toString();
+    }
+
+    /**
+     * 转义 HTML 特殊字符，防止 references/mediaGallery/timeline 中的用户输入文本
+     * （title/note/caption/date/description）在导出的 HTML（个人主页 / 微信文章）中造成存储型 XSS。
+     * 注意：仅用于文本字段，不用于 href/src 等 URL 属性值。
+     */
+    private static String escapeHtml(String input) {
+        if (input == null || input.isEmpty()) return input;
+        StringBuilder sb = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            switch (c) {
+                case '&' -> sb.append("&amp;");
+                case '<' -> sb.append("&lt;");
+                case '>' -> sb.append("&gt;");
+                case '"' -> sb.append("&quot;");
+                case '\'' -> sb.append("&#39;");
+                default -> sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }

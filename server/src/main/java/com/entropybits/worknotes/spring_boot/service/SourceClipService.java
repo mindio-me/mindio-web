@@ -63,6 +63,7 @@ public class SourceClipService {
                 .content(request.getContent())
                 .contentFormat(request.getContentFormat())
                 .excerpt(buildExcerpt(request.getContent()))
+                .durationSeconds(request.getDurationSeconds())
                 .owner(user)
                 .build();
         clip = clipRepository.save(clip);

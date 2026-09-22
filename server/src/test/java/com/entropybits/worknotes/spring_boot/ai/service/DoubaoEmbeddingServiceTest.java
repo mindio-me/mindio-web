@@ -35,9 +35,9 @@ class DoubaoEmbeddingServiceTest {
 
         AiProperties props = new AiProperties();
         props.getDoubao().setApiKey("test-key");
-        props.getDoubao().setEmbeddingModel("test-embedding-model");
         props.getDoubao().setBaseUrl("http://127.0.0.1:" + httpServer.getAddress().getPort());
-        props.getDoubao().setEmbeddingPath("/embeddings");
+        props.getEmbedding().setModel("test-embedding-model");
+        props.getEmbedding().setPath("/embeddings");
 
         service = new DoubaoEmbeddingService(props, objectMapper);
     }
@@ -49,7 +49,7 @@ class DoubaoEmbeddingServiceTest {
 
     @Test
     void embed_parsesFloatArrayFromResponse() throws Exception {
-        setUp(200, "{\"data\":[{\"embedding\":[0.1,0.2,0.3]}]}");
+        setUp(200, "{\"data\":{\"embedding\":[0.1,0.2,0.3]}}");
 
         float[] result = service.embed("测试文本");
 
@@ -67,7 +67,7 @@ class DoubaoEmbeddingServiceTest {
 
     @Test
     void embed_throwsWhenResponseDataIsEmpty() throws Exception {
-        setUp(200, "{\"data\":[]}");
+        setUp(200, "{\"data\":{}}");
 
         assertThatThrownBy(() -> service.embed("测试文本"))
                 .isInstanceOf(RuntimeException.class)

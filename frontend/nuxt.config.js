@@ -105,7 +105,7 @@ export default {
     },
     redirect: {
       login: '/login',
-      logout: '/login',
+      logout: '/',
       callback: '/login',
       home: '/workspace'
     }
@@ -117,6 +117,20 @@ export default {
     host: '0.0.0.0'
   },
 
+  // SSR 渲染配置
+  render: {
+    bundleRenderer: {
+      // Nuxt 开发模式默认给每次 SSR 渲染都建一个全新的 vm 沙箱（vue-server-renderer 的
+      // runInNewContext:true），这个沙箱只手动塞了 Buffer/console/process/setTimeout 等
+      // 寥寥几个全局对象，没有 atob 之类 Node 16+ 才补齐的全局。markdown-it 的 HTML 实体
+      // 解码表在模块加载时就会立刻调用 atob() 解码，一旦有任何走 SSR 的组件 import 了
+      // utils/markdown.js（比如 ChatPanel.vue），开发模式下每次渲染都会 ReferenceError:
+      // atob is not defined。关掉沙箱后走真实 Node 全局（本来生产模式默认就是这样），
+      // 开发/生产行为保持一致。
+      runInNewContext: false
+    }
+  },
+
   // Build Configuration
   build: {
     babel: {
@@ -125,7 +139,11 @@ export default {
     transpile: [
       /^element-ui/,
       /^@editorjs/,
-      /^mermaid/
+      /^editorjs-undo/,
+      /^mermaid/,
+      /markdown-it/ // 不能加 ^ 锚点：markdown-it 的嵌套依赖 entities 用了 webpack 4 解析不了的数字分隔符语法，
+                     // 这条要同时匹配 node_modules/markdown-it/... 和 node_modules/markdown-it/node_modules/entities/...，
+                     // 而 Nuxt 判断是否转译时用的路径永远带开头分隔符，^ 锚定的正则在这里永远匹配不上
     ],
     loaders: {
       scss: {
@@ -135,6 +153,10 @@ export default {
       }
     },
     extend(config, { isClient, isServer }) {
+      // Fix mermaid's uuid import issue with Webpack 4
+      config.resolve = config.resolve || {}
+      config.resolve.alias = config.resolve.alias || {}
+      config.resolve.alias.uuid = require.resolve('uuid')
       // Handle .mjs files from @editorjs and mermaid packages with babel-loader
       config.module.rules.push({
         test: /\.mjs$/,

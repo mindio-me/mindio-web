@@ -4,9 +4,13 @@
 -->
 <template>
   <div class="projects-page">
-    <div class="workspace-layout" :class="{ 'right-collapsed': rightPanelCollapsed }">
+    <div
+      class="workspace-layout"
+      :class="{ 'right-collapsed': rightPanelCollapsed, 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
+    >
       <!-- ========== 左侧列表 ========== -->
-      <aside class="workspace-sidebar">
+      <aside v-show="!leftPanelCollapsed" class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
             <el-input v-model="projectSearch" :placeholder="$t('workspace.projects.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
@@ -38,8 +42,18 @@
         </div>
       </aside>
 
+      <div v-show="!wsIsNarrow && !leftPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('left', $event)"></div>
+
       <!-- ========== 中间编辑区 ========== -->
       <main class="workspace-main" :class="{ 'workspace-main--fullscreen': isFullscreen }">
+        <PanelCollapseToggle
+          v-if="!isFullscreen"
+          side="left"
+          :collapsed="leftPanelCollapsed"
+          :expand-title="$t('workspace.projects.expandSidebar')"
+          :collapse-title="$t('workspace.projects.collapseSidebar')"
+          @toggle="leftPanelCollapsed = !leftPanelCollapsed"
+        />
         <div v-if="selectedProject" class="entity-detail-wrapper">
           <!-- 详情模式 -->
           <div v-if="projectViewMode === 'detail'" class="entity-detail-view">
@@ -50,20 +64,18 @@
                 <el-button size="small" icon="el-icon-edit" @click="projectViewMode = 'edit'">{{ $t('common.edit') }}</el-button>
                 <el-button v-if="!isFullscreen" size="small" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
                 <el-button v-if="isFullscreen" size="small" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
-                <button
-                  v-if="!isFullscreen"
-                  class="panel-toggle-btn"
-                  :title="rightPanelCollapsed ? $t('workspace.projects.expandPanel') : $t('workspace.projects.collapsePanel')"
-                  @click="rightPanelCollapsed = !rightPanelCollapsed"
-                >
-                  <i :class="rightPanelCollapsed ? 'el-icon-d-arrow-left' : 'el-icon-d-arrow-right'"></i>
-                </button>
                 <el-button size="small" type="danger" plain @click="deleteProject">{{ $t('common.delete') }}</el-button>
               </div>
             </div>
 
             <!-- 详情内容 -->
             <div class="entity-detail-content">
+              <!-- 中文名称 -->
+              <div v-if="selectedProject.nameZh" class="detail-field">
+                <label class="detail-label">{{ $t('workspace.projects.nameZh') }}</label>
+                <div class="detail-value">{{ selectedProject.nameZh }}</div>
+              </div>
+
               <!-- 简称 -->
               <div v-if="selectedProject.shortName" class="detail-field">
                 <label class="detail-label">{{ $t('workspace.projects.shortName') }}</label>
@@ -72,14 +84,32 @@
 
               <!-- 副标题 -->
               <div v-if="selectedProject.subtitle" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.subtitle') }}</label>
+                <label class="detail-label">{{ $t('workspace.projects.subtitleEn') }}</label>
                 <div class="detail-value">{{ selectedProject.subtitle }}</div>
+              </div>
+              <div v-if="selectedProject.subtitleZh" class="detail-field">
+                <label class="detail-label">{{ $t('workspace.projects.subtitleZh') }}</label>
+                <div class="detail-value">{{ selectedProject.subtitleZh }}</div>
+              </div>
+
+              <!-- 高亮说明句 -->
+              <div v-if="selectedProject.highlightMetric" class="detail-field">
+                <label class="detail-label">{{ $t('workspace.projects.highlightMetricEn') }}</label>
+                <div class="detail-value">{{ selectedProject.highlightMetric }}</div>
+              </div>
+              <div v-if="selectedProject.highlightMetricZh" class="detail-field">
+                <label class="detail-label">{{ $t('workspace.projects.highlightMetricZh') }}</label>
+                <div class="detail-value">{{ selectedProject.highlightMetricZh }}</div>
               </div>
 
               <!-- 描述 -->
               <div v-if="selectedProject.description" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.description') }}</label>
+                <label class="detail-label">{{ $t('workspace.projects.descriptionEn') }}</label>
                 <div class="detail-value">{{ selectedProject.description }}</div>
+              </div>
+              <div v-if="selectedProject.descriptionZh" class="detail-field">
+                <label class="detail-label">{{ $t('workspace.projects.descriptionZh') }}</label>
+                <div class="detail-value">{{ selectedProject.descriptionZh }}</div>
               </div>
 
               <!-- 正文内容（富文本或 Markdown） -->
@@ -149,9 +179,15 @@
 
               <!-- 技术栈 -->
               <div v-if="displayTechnologies.length" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.technologies') }}</label>
+                <label class="detail-label">{{ $t('workspace.projects.technologiesEn') }}</label>
                 <div class="detail-value">
                   <el-tag v-for="(tech, idx) in displayTechnologies" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
+                </div>
+              </div>
+              <div v-if="displayTechnologiesZh.length" class="detail-field">
+                <label class="detail-label">{{ $t('workspace.projects.technologiesZh') }}</label>
+                <div class="detail-value">
+                  <el-tag v-for="(tech, idx) in displayTechnologiesZh" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
                 </div>
               </div>
 
@@ -196,7 +232,7 @@
             <el-form :model="projectForm" label-position="top" class="entity-form">
               <el-row :gutter="16">
                 <el-col :span="16">
-                  <el-form-item :label="$t('workspace.notes.title')">
+                  <el-form-item :label="$t('workspace.projects.nameEnLabel')">
                     <el-input v-model="projectForm.name" :placeholder="$t('workspace.projects.namePlaceholder')" />
                   </el-form-item>
                 </el-col>
@@ -206,11 +242,26 @@
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item :label="$t('workspace.projects.subtitle')">
+              <el-form-item :label="$t('workspace.projects.nameZh')">
+                <el-input v-model="projectForm.nameZh" :placeholder="$t('workspace.projects.nameZhPlaceholder')" />
+              </el-form-item>
+              <el-form-item :label="$t('workspace.projects.subtitleEn')">
                 <el-input v-model="projectForm.subtitle" :placeholder="$t('workspace.projects.subtitlePlaceholder')" />
               </el-form-item>
-              <el-form-item :label="$t('workspace.projects.description')">
+              <el-form-item :label="$t('workspace.projects.subtitleZh')">
+                <el-input v-model="projectForm.subtitleZh" :placeholder="$t('workspace.projects.subtitleZhPlaceholder')" />
+              </el-form-item>
+              <el-form-item :label="$t('workspace.projects.highlightMetricEn')">
+                <el-input v-model="projectForm.highlightMetric" :placeholder="$t('workspace.projects.highlightMetricPlaceholder')" maxlength="300" show-word-limit />
+              </el-form-item>
+              <el-form-item :label="$t('workspace.projects.highlightMetricZh')">
+                <el-input v-model="projectForm.highlightMetricZh" :placeholder="$t('workspace.projects.highlightMetricZhPlaceholder')" maxlength="300" show-word-limit />
+              </el-form-item>
+              <el-form-item :label="$t('workspace.projects.descriptionEn')">
                 <el-input v-model="projectForm.description" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionPlaceholder')" />
+              </el-form-item>
+              <el-form-item :label="$t('workspace.projects.descriptionZh')">
+                <el-input v-model="projectForm.descriptionZh" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionZhPlaceholder')" />
               </el-form-item>
               <el-form-item :label="$t('workspace.projects.content')">
                 <div id="projectRichTextEditor" class="project-rich-text-editor"></div>
@@ -242,11 +293,18 @@
                   </el-form-item>
                 </el-col>
               </el-row>
-              <el-form-item :label="$t('workspace.projects.technologies')">
+              <el-form-item :label="$t('workspace.projects.technologiesEn')">
                 <div class="dynamic-tags">
                   <el-tag v-for="(tech, idx) in projectForm.technologies" :key="idx" closable size="small" @close="projectForm.technologies.splice(idx, 1)">{{ tech }}</el-tag>
                   <el-input v-if="projectTagInputVisible" ref="projectTagInput" v-model="projectTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectTag" @blur="addProjectTag" />
                   <el-button v-else size="small" class="tag-add-btn" @click="showProjectTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
+                </div>
+              </el-form-item>
+              <el-form-item :label="$t('workspace.projects.technologiesZh')">
+                <div class="dynamic-tags">
+                  <el-tag v-for="(tech, idx) in projectForm.technologiesZh" :key="idx" closable size="small" @close="projectForm.technologiesZh.splice(idx, 1)">{{ tech }}</el-tag>
+                  <el-input v-if="projectZhTagInputVisible" ref="projectZhTagInput" v-model="projectZhTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectZhTag" @blur="addProjectZhTag" />
+                  <el-button v-else size="small" class="tag-add-btn" @click="showProjectZhTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
                 </div>
               </el-form-item>
               <el-row :gutter="16">
@@ -273,7 +331,17 @@
           <i class="el-icon-folder-opened empty-icon"></i>
           <p class="empty-text">{{ $t('workspace.projects.selectEmpty') }}</p>
         </div>
+        <PanelCollapseToggle
+          v-if="!isFullscreen"
+          side="right"
+          :collapsed="rightPanelCollapsed"
+          :expand-title="$t('workspace.projects.expandPanel')"
+          :collapse-title="$t('workspace.projects.collapsePanel')"
+          @toggle="rightPanelCollapsed = !rightPanelCollapsed"
+        />
       </main>
+
+      <div v-show="!wsIsNarrow && !rightPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('right', $event)"></div>
 
       <!-- ========== 右侧信息 ========== -->
       <aside v-show="!rightPanelCollapsed" class="workspace-right">
@@ -301,12 +369,12 @@
     >
       <div class="entity-detail-content preview-content">
         <div v-if="projectForm.subtitle" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.subtitle') }}</label>
+          <label class="detail-label">{{ $t('workspace.projects.subtitleEn') }}</label>
           <div class="detail-value">{{ projectForm.subtitle }}</div>
         </div>
 
         <div v-if="projectForm.description" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.description') }}</label>
+          <label class="detail-label">{{ $t('workspace.projects.descriptionEn') }}</label>
           <div class="detail-value">{{ projectForm.description }}</div>
         </div>
 
@@ -322,7 +390,7 @@
         </div>
 
         <div v-if="projectForm.technologies && projectForm.technologies.length" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.technologies') }}</label>
+          <label class="detail-label">{{ $t('workspace.projects.technologiesEn') }}</label>
           <div class="detail-value">
             <el-tag v-for="(tech, idx) in projectForm.technologies" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
           </div>
@@ -334,10 +402,12 @@
 
 <script>
 import { renderMarkdown as renderMd } from '~/utils/markdown'
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 
 export default {
   name: 'ProjectsPage',
   layout: 'workspace',
+  mixins: [workspaceLayoutResize],
   data() {
     return {
       loading: false,
@@ -345,15 +415,21 @@ export default {
       selectedProject: null,
       projectForm: {
         name: '',
+        nameZh: '',
         shortName: '',
         subtitle: '',
+        subtitleZh: '',
+        highlightMetric: '',
+        highlightMetricZh: '',
         description: '',
+        descriptionZh: '',
         icon: '',
         imageUrl: '',
         projectUrl: '',
         githubUrl: '',
         category: '',
         technologies: [],
+        technologiesZh: [],
         content: '',
         contentType: 'richtext',
         isPublic: true,
@@ -365,10 +441,13 @@ export default {
       projectSearch: '',
       projectTagInputVisible: false,
       projectTagInputValue: '',
+      projectZhTagInputVisible: false,
+      projectZhTagInputValue: '',
       projectViewMode: 'edit', // 'detail' | 'edit'
       previewVisible: false,
 
       // 布局控制
+      leftPanelCollapsed: false,
       rightPanelCollapsed: false,
       isFullscreen: false
     }
@@ -384,6 +463,12 @@ export default {
       return Array.isArray(this.selectedProject.technologies)
         ? this.selectedProject.technologies
         : this.selectedProject.technologies.split(',').map(t => t.trim()).filter(t => t)
+    },
+    displayTechnologiesZh() {
+      if (!this.selectedProject?.technologiesZh) return []
+      return Array.isArray(this.selectedProject.technologiesZh)
+        ? this.selectedProject.technologiesZh
+        : this.selectedProject.technologiesZh.split(',').map(t => t.trim()).filter(t => t)
     }
   },
   watch: {
@@ -419,6 +504,9 @@ export default {
     if (this._onEsc) document.removeEventListener('keydown', this._onEsc)
   },
   methods: {
+    wsLayoutOptions() {
+      return { storageKey: 'mindio:workspace:projects:colWidths', hasRight: true }
+    },
     async loadProjects() {
       this.loading = true
       try {
@@ -441,9 +529,14 @@ export default {
       // 预填充编辑表单
       this.projectForm = {
         name: item.name || '',
+        nameZh: item.nameZh || '',
         shortName: item.shortName || '',
         subtitle: item.subtitle || '',
+        subtitleZh: item.subtitleZh || '',
+        highlightMetric: item.highlightMetric || '',
+        highlightMetricZh: item.highlightMetricZh || '',
         description: item.description || '',
+        descriptionZh: item.descriptionZh || '',
         icon: item.icon || '',
         imageUrl: item.imageUrl || '',
         projectUrl: item.projectUrl || '',
@@ -452,6 +545,9 @@ export default {
         technologies: Array.isArray(item.technologies)
           ? [...item.technologies]
           : (item.technologies ? item.technologies.split(',').map(t => t.trim()).filter(t => t) : []),
+        technologiesZh: Array.isArray(item.technologiesZh)
+          ? [...item.technologiesZh]
+          : (item.technologiesZh ? item.technologiesZh.split(',').map(t => t.trim()).filter(t => t) : []),
         content: item.content || '',
         contentType: item.contentType || 'richtext',
         isPublic: item.isPublic !== false,
@@ -507,7 +603,10 @@ export default {
           ...this.projectForm,
           technologies: Array.isArray(this.projectForm.technologies)
             ? this.projectForm.technologies.join(',')
-            : this.projectForm.technologies
+            : this.projectForm.technologies,
+          technologiesZh: Array.isArray(this.projectForm.technologiesZh)
+            ? this.projectForm.technologiesZh.join(',')
+            : this.projectForm.technologiesZh
         }
 
         await this.$projectService.updateProject(this.selectedProject.id, submitData)
@@ -578,6 +677,22 @@ export default {
       this.projectTagInputVisible = false
       this.projectTagInputValue = ''
     },
+    showProjectZhTagInput() {
+      this.projectZhTagInputVisible = true
+      this.$nextTick(() => {
+        if (this.$refs.projectZhTagInput) {
+          this.$refs.projectZhTagInput.focus()
+        }
+      })
+    },
+    addProjectZhTag() {
+      const val = this.projectZhTagInputValue.trim()
+      if (val && !this.projectForm.technologiesZh.includes(val)) {
+        this.projectForm.technologiesZh.push(val)
+      }
+      this.projectZhTagInputVisible = false
+      this.projectZhTagInputValue = ''
+    },
     initProjectEditor() {
       if (this.projectViewMode !== 'edit') return
 
@@ -645,31 +760,12 @@ export default {
 <style scoped lang="scss">
 .projects-page {
   background: transparent;
-}
-
-.workspace-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1.5fr) 260px;
-  gap: 16px;
-  height: calc(100vh - 110px);
-  transition: grid-template-columns 0.3s ease;
-
-  &.right-collapsed {
-    grid-template-columns: 280px minmax(0, 1fr);
-  }
-}
-
-.workspace-sidebar {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
   height: 100%;
-  max-height: 100%;
+  overflow: hidden;
 }
+
+// 三栏框架样式（.workspace-layout / -sidebar / -main / -right / .right-collapsed
+// / .col-resizer / @media 1024 / @media 768）见 assets/styles/main.scss
 
 .sidebar-section + .sidebar-section {
   border-top: 1px solid var(--border-color);
@@ -791,12 +887,6 @@ export default {
   padding: 12px 4px;
 }
 
-.workspace-main {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 16px 20px;
-  overflow-y: auto;
-}
 
 .note-main-empty {
   height: 100%;
@@ -1031,12 +1121,6 @@ export default {
   }
 }
 
-.workspace-right {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  overflow-y: auto;
-}
 
 .right-panel {
   height: 100%;
@@ -1222,46 +1306,6 @@ export default {
   ::v-deep .el-input__count-inner {
     background: transparent !important;
     color: var(--text-muted) !important;
-  }
-}
-
-@media screen and (max-width: 1024px) {
-  .workspace-layout {
-    grid-template-columns: 260px minmax(0, 1.5fr);
-  }
-  .workspace-right {
-    display: none;
-  }
-}
-
-@media screen and (max-width: 768px) {
-  .workspace-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-}
-
-// 折叠/展开按钮
-.panel-toggle-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-muted);
-  transition: all 0.2s;
-  vertical-align: middle;
-
-  i { font-size: 14px; }
-
-  &:hover {
-    background: var(--bg-secondary);
-    color: var(--text-color);
   }
 }
 

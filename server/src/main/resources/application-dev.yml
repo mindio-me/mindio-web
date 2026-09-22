@@ -23,3 +23,10 @@ feishu:
   # 生成方式：使用上面的 PowerShell 命令或在线工具生成
   token-crypto-key: ${FEISHU_TOKEN_CRYPTO_KEY:}
 
+# AI 翻译服务配置
+ai:
+  provider: ${AI_PROVIDER:deepseek}   # anthropic | openai | deepseek | doubao
+  deepseek:
+    api-key: ${AI_DEEPSEEK_KEY:}
+    model: ${AI_DEEPSEEK_MODEL:deepseek-v4-flash}
+    base-url: https://api.deepseek.com

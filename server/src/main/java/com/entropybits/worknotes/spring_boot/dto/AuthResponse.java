@@ -25,6 +25,7 @@ public class AuthResponse {
     private String username;
     private String email;
     private String role;
+    private boolean mustChangePassword;
 
     public AuthResponse(String token, Long id, String username, String email, String role) {
         this.token = token;

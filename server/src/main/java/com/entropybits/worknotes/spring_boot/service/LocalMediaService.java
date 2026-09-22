@@ -8,6 +8,7 @@ package com.entropybits.worknotes.spring_boot.service;
 import com.entropybits.worknotes.spring_boot.dto.LocalMediaDirectoryRequest;
 import com.entropybits.worknotes.spring_boot.dto.LocalMediaDirectoryResponse;
 import com.entropybits.worknotes.spring_boot.dto.LocalMediaFileResponse;
+import com.entropybits.worknotes.spring_boot.entity.LocalFileExtraction;
 import com.entropybits.worknotes.spring_boot.entity.LocalMediaDirectory;
 import com.entropybits.worknotes.spring_boot.entity.LocalMediaFile;
 import com.entropybits.worknotes.spring_boot.entity.User;
@@ -15,12 +16,15 @@ import com.entropybits.worknotes.spring_boot.repository.LocalMediaDirectoryRepos
 import com.entropybits.worknotes.spring_boot.repository.LocalMediaFileRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
@@ -38,6 +42,7 @@ import java.util.*;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class LocalMediaService {
 
     private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "gif", "webp", "bmp", "svg");
@@ -57,6 +62,9 @@ public class LocalMediaService {
     private final LocalMediaDirectoryRepository dirRepository;
     private final LocalMediaFileRepository fileRepository;
     private final UserRepository userRepository;
+    private final LocalFileExtractionService extractionService;
+    private final ContentIndexingService contentIndexingService;
+    private final PlatformTransactionManager transactionManager;
 
     @Transactional(readOnly = true)
     public List<LocalMediaDirectoryResponse> getDirectories(String username) {
@@ -66,21 +74,20 @@ public class LocalMediaService {
                 .toList();
     }
 
-    @Transactional
     public LocalMediaDirectoryResponse addDirectory(LocalMediaDirectoryRequest request, String username) {
         User user = getUser(username);
         String normalizedPath = normalizePath(request.getDirPath());
 
-        if (dirRepository.findByOwnerAndDirPath(user, normalizedPath).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "该目录已添加：" + normalizedPath);
-        }
-
-        LocalMediaDirectory dir = LocalMediaDirectory.builder()
-                .owner(user)
-                .dirPath(normalizedPath)
-                .displayName(request.getDisplayName())
-                .build();
-        dir = dirRepository.save(dir);
+        LocalMediaDirectory dir = new TransactionTemplate(transactionManager).execute(status -> {
+            if (dirRepository.findByOwnerAndDirPath(user, normalizedPath).isPresent()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "该目录已添加：" + normalizedPath);
+            }
+            return dirRepository.save(LocalMediaDirectory.builder()
+                    .owner(user)
+                    .dirPath(normalizedPath)
+                    .displayName(request.getDisplayName())
+                    .build());
+        });
 
         return LocalMediaDirectoryResponse.fromEntity(scan(dir, user));
     }
@@ -91,10 +98,10 @@ public class LocalMediaService {
         dirRepository.delete(dir);
     }
 
-    @Transactional
     public LocalMediaDirectoryResponse rescan(Long dirId, String username) {
-        LocalMediaDirectory dir = getOwnedDirectory(dirId, username);
         User user = getUser(username);
+        LocalMediaDirectory dir = new TransactionTemplate(transactionManager)
+                .execute(status -> getOwnedDirectory(dirId, username));
         return LocalMediaDirectoryResponse.fromEntity(scan(dir, user));
     }
 
@@ -174,6 +181,7 @@ public class LocalMediaService {
         dirRepository.save(dir);
 
         List<LocalMediaFile> collected = new ArrayList<>();
+        List<Long> alreadySuccessfulExtractionIds = new ArrayList<>();
 
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
@@ -199,6 +207,7 @@ public class LocalMediaService {
 
                     Integer width = null;
                     Integer height = null;
+                    String contentHash = null;
                     if ("IMAGE".equals(mediaType) && !"svg".equals(ext)) {
                         try {
                             BufferedImage img = ImageIO.read(file.toFile());
@@ -208,6 +217,15 @@ public class LocalMediaService {
                             }
                         } catch (Exception ignored) {
                             // dimensions remain null — non-fatal
+                        }
+                        try {
+                            LocalFileExtraction extraction = extractionService.registerImageForOcr(Files.readAllBytes(file));
+                            contentHash = extraction.getContentHash();
+                            if (extraction.getStatus() == LocalFileExtraction.Status.SUCCESS) {
+                                alreadySuccessfulExtractionIds.add(extraction.getId());
+                            }
+                        } catch (Exception e) {
+                            log.warn("图片hash计算/OCR登记失败: {}", file, e);
                         }
                     }
 
@@ -223,6 +241,7 @@ public class LocalMediaService {
                             .fileLastModified(lastModified)
                             .imageWidth(width)
                             .imageHeight(height)
+                            .contentHash(contentHash)
                             .build());
                     return FileVisitResult.CONTINUE;
                 }
@@ -235,10 +254,15 @@ public class LocalMediaService {
 
             boolean truncated = collected.size() >= MAX_FILES;
 
-            fileRepository.deleteByDirectory(dir);
-            for (int i = 0; i < collected.size(); i += 500) {
-                fileRepository.saveAll(collected.subList(i, Math.min(i + 500, collected.size())));
-            }
+            new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+                fileRepository.deleteByDirectory(dir);
+                for (int i = 0; i < collected.size(); i += 500) {
+                    fileRepository.saveAll(collected.subList(i, Math.min(i + 500, collected.size())));
+                }
+            });
+            // 上面这个事务已经提交，LocalMediaFile行已真正落库，这里可以直接同步调用，
+            // 不再需要afterCommit钩子等事务提交后才触发。
+            alreadySuccessfulExtractionIds.forEach(contentIndexingService::reindexLocalMediaExtraction);
 
             dir.setScanStatus("IDLE");
             dir.setLastScanAt(LocalDateTime.now());
@@ -247,7 +271,11 @@ public class LocalMediaService {
                 dir.setLastScanError("文件数量超过上限 " + MAX_FILES + "，已截断显示");
             }
 
-        } catch (IOException e) {
+        } catch (Exception e) {
+            // 不只catch IOException：批量落库/重新索引这一步抛出的任何异常都必须走到这里
+            // 把scanStatus复位，否则目录会永久卡在SCANNING，且没有任何对账机制能自愈
+            // （不像ImageOcrScheduler.reconcile()那样有定时兜底）。
+            log.warn("目录扫描失败 dirId={} path={}", dir.getId(), dir.getDirPath(), e);
             dir.setScanStatus("ERROR");
             dir.setLastScanError(e.getMessage());
         }

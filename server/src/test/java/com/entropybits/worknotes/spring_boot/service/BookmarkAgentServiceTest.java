@@ -46,13 +46,15 @@ class BookmarkAgentServiceTest {
     @Mock AiTranslationService deepseekService;
     @Mock AiTranslationService doubaoService;
     @Mock ContentIndexingService contentIndexingService;
+    @Mock NoteImageRefRepository noteImageRefRepository;
 
     private BookmarkAgentService service;
 
     private void setUp() {
         service = new BookmarkAgentService(jobRepository, clipRepository, noteRepository, noteClipRefRepository,
                 userRepository, tagRepository, clipTagLinkRepository, aiProperties,
-                anthropicService, openAiService, deepseekService, doubaoService, contentIndexingService);
+                anthropicService, openAiService, deepseekService, doubaoService, contentIndexingService,
+                noteImageRefRepository);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "self", service);
     }
 
@@ -512,6 +514,26 @@ class BookmarkAgentServiceTest {
 
         verify(jobRepository).save(argThat(j ->
                 j.getStatus() == BookmarkAgentJob.Status.FAILED && "AI 调用失败".equals(j.getErrorMessage())));
+    }
+
+    @Test
+    void replaceGeneratedNote_deletesNoteImageRefsBeforeDeletingOldNote() {
+        // note_image_refs.note_id的外键没有ON DELETE CASCADE（不同于V5给clip_search_messages
+        // 加的先例），如果用户手动编辑过一篇自动生成的笔记并贴了张已完成OCR的图，下次
+        // 自动重新生成时如果不先清note_image_refs，这里的delete会直接撞外键约束抛异常，
+        // 炸掉收藏摘要的定时生成任务。必须和NoteService.deleteNote一样先清再删。
+        setUp();
+        User owner = User.builder().id(1L).build();
+        Note old = Note.builder().id(99L).owner(owner).generatedType(Note.GeneratedType.CLUSTER).build();
+        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(java.util.Optional.of(old));
+        when(noteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", "内容", List.of());
+
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(noteImageRefRepository, noteRepository);
+        order.verify(noteImageRefRepository).deleteByNote(old);
+        order.verify(noteRepository).delete(old);
     }
 
     @Test

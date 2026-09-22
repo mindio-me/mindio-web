@@ -43,10 +43,28 @@ public class Profile {
     private String fullName; // 全名
 
     @Column(length = 200)
-    private String title; // 职位/头衔
+    private String title; // 职位/头衔（英文/默认）
+
+    @Column(length = 200)
+    private String titleZh; // 职位/头衔（中文），公开主页按访客语言选用，留空则回退到 title
 
     @Column(length = Integer.MAX_VALUE)
-    private String bio; // 个人简介
+    private String bio; // 个人简介（英文/默认）
+
+    @Column(length = Integer.MAX_VALUE)
+    private String bioZh; // 个人简介（中文），留空则回退到 bio
+
+    @Column(length = Integer.MAX_VALUE)
+    private String philosophy; // 理念/见解（英文/默认），展示在公开主页的 About 区块
+
+    @Column(length = Integer.MAX_VALUE)
+    private String philosophyZh; // 理念/见解（中文），留空则回退到 philosophy
+
+    @Column(length = 200)
+    private String availabilityStatus; // 当前可接洽状态（英文/默认），展示在公开主页 Hero 的徽章，留空则不显示
+
+    @Column(length = 200)
+    private String availabilityStatusZh; // 当前可接洽状态（中文），留空则回退到 availabilityStatus
 
     @Column(length = 500)
     private String avatarUrl; // 头像URL
@@ -83,7 +101,10 @@ public class Profile {
     private String logoUrl; // Logo URL
 
     @Column(length = Integer.MAX_VALUE)
-    private String skills; // 技能列表，JSON格式
+    private String skills; // 技能/方向标签，逗号分隔（英文/默认）
+
+    @Column(length = Integer.MAX_VALUE)
+    private String skillsZh; // 技能/方向标签，逗号分隔（中文），留空则回退到 skills
 
     @Column(length = Integer.MAX_VALUE)
     private String experience; // 工作经历，JSON格式

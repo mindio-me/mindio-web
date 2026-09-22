@@ -20,6 +20,7 @@ import AiService from '~/services/aiService'
 import RedditService from '~/services/redditService'
 import BookmarkImportService from '~/services/bookmarkImportService'
 import BookmarkAgentService from '~/services/bookmarkAgentService'
+import GlobalChatService from '~/services/globalChatService'
 
 export default ({ $axios }, inject) => {
   inject('projectService', new ProjectService($axios))
@@ -35,6 +36,7 @@ export default ({ $axios }, inject) => {
   inject('aiService', new AiService($axios))
   inject('redditService', new RedditService($axios))
   inject('clipService', new ClipService($axios))
+  inject('globalChatService', new GlobalChatService($axios))
   inject('bookmarkImportService', new BookmarkImportService($axios))
   inject('bookmarkAgentService', new BookmarkAgentService($axios))
   inject('localDocService', new LocalDocService($axios))

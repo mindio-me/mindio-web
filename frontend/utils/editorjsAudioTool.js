@@ -48,6 +48,36 @@ function injectStyles() {
   color: #aaa;
   text-align: center;
 }
+.audio-tool__summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(102,126,234,0.06);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #4a4a6a;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.audio-tool__transcript-toggle {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: #667eea;
+  cursor: pointer;
+  user-select: none;
+  display: inline-block;
+}
+.audio-tool__transcript-toggle:hover { text-decoration: underline; }
+.audio-tool__transcript {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #fafbff;
+  border: 1px solid #eeeef8;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: #888;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
 
 /* ── AudioTool: modal overlay ─────────────────────── */
 .at-overlay {
@@ -430,6 +460,32 @@ class AudioTool {
       cap.textContent = this.data.caption
       wrapper.appendChild(cap)
     }
+    this._renderTranscriptAndSummary(wrapper)
+  }
+
+  _renderTranscriptAndSummary(wrapper) {
+    if (this.data.summary) {
+      const summaryEl = document.createElement('div')
+      summaryEl.classList.add('audio-tool__summary')
+      summaryEl.textContent = this.data.summary
+      wrapper.appendChild(summaryEl)
+    }
+    if (this.data.transcript) {
+      const toggle = document.createElement('span')
+      toggle.classList.add('audio-tool__transcript-toggle')
+      toggle.textContent = '查看完整逐字稿'
+      const transcriptEl = document.createElement('div')
+      transcriptEl.classList.add('audio-tool__transcript')
+      transcriptEl.textContent = this.data.transcript
+      transcriptEl.style.display = 'none'
+      toggle.addEventListener('click', () => {
+        const showing = transcriptEl.style.display !== 'none'
+        transcriptEl.style.display = showing ? 'none' : ''
+        toggle.textContent = showing ? '查看完整逐字稿' : '收起逐字稿'
+      })
+      wrapper.appendChild(toggle)
+      wrapper.appendChild(transcriptEl)
+    }
   }
 
   _openModal() {
@@ -745,7 +801,9 @@ class AudioTool {
   save() {
     return {
       url: this.data.url || '',
-      caption: this.data.caption || ''
+      caption: this.data.caption || '',
+      transcript: this.data.transcript || '',
+      summary: this.data.summary || ''
     }
   }
 

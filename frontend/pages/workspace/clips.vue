@@ -4,13 +4,17 @@
 -->
 <template>
   <div class="clips-page">
-    <div class="clips-layout">
+    <div
+      class="workspace-layout"
+      :class="{ 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
+    >
 
       <!-- 左侧栏：知识图谱/时间线生成 + 标签筛选 -->
       <button type="button" class="rail-toggle rail-toggle-left" @click="leftRailOpen = !leftRailOpen">
         <i class="el-icon-price-tag"></i>
       </button>
-      <aside class="clips-rail clips-left-rail" :class="{ 'is-open': leftRailOpen }">
+      <aside class="workspace-sidebar clips-left-rail" :class="{ 'is-open': leftRailOpen }">
         <div class="rail-section">
           <div class="agent-generate-group" v-for="type in ['CLUSTER', 'TIMELINE']" :key="type">
             <el-button
@@ -61,8 +65,10 @@
         </div>
       </aside>
 
+      <div v-show="!wsIsNarrow" class="col-resizer" @pointerdown="wsStartResize('left', $event)"></div>
+
       <!-- 中间：筛选栏 + 卡片列表 + 分页 -->
-      <div class="clips-main">
+      <div class="workspace-main">
 
         <!-- 筛选栏 -->
         <div class="clips-toolbar">
@@ -154,11 +160,13 @@
         />
       </div>
 
+      <div v-show="!wsIsNarrow" class="col-resizer" @pointerdown="wsStartResize('right', $event)"></div>
+
       <!-- 右侧栏：最近访问的收藏 -->
       <button type="button" class="rail-toggle rail-toggle-right" @click="rightRailOpen = !rightRailOpen">
         <i class="el-icon-time"></i>
       </button>
-      <aside class="clips-rail clips-right-rail" :class="{ 'is-open': rightRailOpen }">
+      <aside class="workspace-right clips-right-rail" :class="{ 'is-open': rightRailOpen }">
         <div class="rail-section-title">{{ $t('workspace.clips.recentClips') }}</div>
         <ul class="recent-list">
           <li v-for="clip in recentClips" :key="clip.id" class="recent-item" @click="openDetail(clip)">
@@ -337,10 +345,12 @@
 
 <script>
 import SourceClipCreateDialog from '~/components/SourceClipCreateDialog.vue'
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 
 export default {
   name: 'ClipsPage',
   layout: 'workspace',
+  mixins: [workspaceLayoutResize],
   components: { SourceClipCreateDialog },
   middleware: 'auth',
   data() {
@@ -423,6 +433,13 @@ export default {
     clearTimeout(this.agentPollTimers.TIMELINE)
   },
   methods: {
+    wsLayoutOptions() {
+      return {
+        storageKey: 'mindio:workspace:clips:colWidths',
+        hasRight: true,
+        narrowQuery: '(max-width: 1200px)',
+      }
+    },
     async loadClips() {
       this.loading = true
       try {
@@ -797,18 +814,10 @@ export default {
 </script>
 
 <style scoped>
-.clips-page { height: calc(100vh - 100px); overflow-y: auto; }
+.clips-page { height: 100%; overflow: hidden; }
 
-.clips-layout { display: flex; align-items: flex-start; gap: 20px; padding: 8px 20px; }
-
-.clips-rail {
-  flex: 0 0 auto;
-  padding: 4px 0;
-}
-.clips-left-rail { flex-basis: 220px; }
-.clips-right-rail { flex-basis: 240px; }
-
-.clips-main { flex: 1 1 auto; min-width: 0; max-width: 1320px; }
+/* 左栏标签磁贴数量不定，允许侧栏自身滚动（覆盖共享框架的 overflow: hidden） */
+.workspace-sidebar { overflow-y: auto; }
 
 .rail-section { margin-bottom: 4px; }
 .rail-section-title { font-size: 13px; font-weight: 600; color: #606266; margin-bottom: 10px; }
@@ -851,23 +860,27 @@ export default {
 
 .rail-toggle { display: none; }
 
-.clips-right-rail {
+.clips-toolbar {
   display: flex;
-  flex-direction: column;
-  height: calc(100vh - 140px);
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 20px;
   position: sticky;
-  top: 8px;
+  top: 0;
+  background: var(--card-bg-color);
+  z-index: 1;
 }
-.clips-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
 .agent-generate-group { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 10px; }
 .agent-progress { width: 100%; }
 .agent-progress-caption { display: block; margin-top: 4px; font-size: 12px; color: #909399; }
 .agent-last-generated-link { font-size: 12px; color: #409eff; cursor: pointer; white-space: nowrap; }
 
 @media (max-width: 1200px) {
-  .clips-layout { position: relative; }
+  .clips-page .workspace-layout { position: relative; grid-template-columns: minmax(0, 1fr); }
 
-  .clips-rail {
+  .clips-page .workspace-sidebar.clips-left-rail,
+  .clips-page .workspace-right.clips-right-rail {
     position: fixed;
     top: 70px;
     bottom: 20px;
@@ -876,16 +889,18 @@ export default {
     background: var(--card-bg-color, #fff);
     border: 1px solid var(--border-color, #e4e7ed);
     border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, .15);
     padding: 16px;
     overflow-y: auto;
     transition: transform .25s ease;
     height: auto;
+    display: flex;
+    flex-direction: column;
   }
-  .clips-left-rail { left: 12px; transform: translateX(-130%); }
-  .clips-left-rail.is-open { transform: translateX(0); }
-  .clips-right-rail { right: 12px; transform: translateX(130%); }
-  .clips-right-rail.is-open { transform: translateX(0); }
+  .clips-page .workspace-sidebar.clips-left-rail { left: 12px; transform: translateX(-130%); }
+  .clips-page .workspace-sidebar.clips-left-rail.is-open { transform: translateX(0); }
+  .clips-page .workspace-right.clips-right-rail { right: 12px; transform: translateX(130%); }
+  .clips-page .workspace-right.clips-right-rail.is-open { transform: translateX(0); }
 
   .rail-toggle {
     display: flex;
@@ -901,12 +916,10 @@ export default {
     color: #606266;
     cursor: pointer;
     z-index: 21;
-    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .1);
   }
   .rail-toggle-left { left: 12px; }
   .rail-toggle-right { right: 12px; }
-
-  .clips-main { max-width: none; }
 }
 
 .clips-grid {

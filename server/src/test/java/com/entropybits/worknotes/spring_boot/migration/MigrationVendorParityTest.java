@@ -22,11 +22,23 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 迁移文件，却忘了给另一个 vendor 也加"这种疏忽变成一个明确、快速失败的单元测试，而不是
  * 某个 vendor 启动时才出现的、含糊的 Flyway 运行时校验错误。
  *
- * <p>已知的、刻意为之的例外：h2/V3__revert_notes_longtext_clob_widening.sql 只撤销
+ * <p>已知的、刻意为之的版本号例外：h2/V3__revert_notes_longtext_clob_widening.sql 只撤销
  * H2LongTextFixConfig（一个只在 desktop/H2 profile 生效的历史遗留 CommandLineRunner，
  * 已删除）留下的问题——MySQL 自建部署从未跑过这个 runner，不受影响，因此故意没有对应的
  * mysql/V3。除了下面这个已登记的例外，两边版本号集合必须完全一致；新增任何其他
  * 单个 vendor 独有的版本号都会让这个测试失败。
+ *
+ * <p>已知的、刻意为之的<b>结构</b>差异（版本号相同、文件内容按 vendor 分叉）：
+ * <ul>
+ *   <li>V1 —— local_doc_directories / local_media_directories 的目录唯一约束。真实 MySQL
+ *       下 (owner_id, dir_path) 复合唯一索引超过 InnoDB 3072 字节上限（dir_path 是
+ *       varchar(1000)），所以 mysql/V1 改用 STORED 生成列 dir_path_hash = SHA2(dir_path,256)，
+ *       唯一约束建在 (owner_id, dir_path_hash) 上；h2/V1 没有该限制、且 desktop 存量库已锁定
+ *       其 checksum，保持 unique (owner_id, dir_path)。语义一致：每个 (owner, path) 最多一条。</li>
+ *   <li>V2 / V5 / V8 / V10 / V12 —— 幂等 ADD COLUMN 的写法：h2/ 用原生 IF NOT EXISTS，
+ *       mysql/ 用 INFORMATION_SCHEMA + PREPARE/EXECUTE 动态 SQL（MySQL 不支持 IF NOT EXISTS）。</li>
+ * </ul>
+ * 这个测试只比对版本号集合，不比对文件内容，上述结构差异不会让它失败——登记在此以备查。
  */
 class MigrationVendorParityTest {
 

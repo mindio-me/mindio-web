@@ -7,6 +7,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
 import com.entropybits.worknotes.spring_boot.dto.ClipImportUrlRequest;
+import com.entropybits.worknotes.spring_boot.dto.LinkPreviewResponse;
 import com.entropybits.worknotes.spring_boot.dto.SourceClipDraft;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.utils.UploadUtil;
@@ -22,8 +23,13 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -37,6 +43,7 @@ public class ClipImportService {
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
     private static final int MIN_CONTENT_TEXT_LENGTH = 100;
+    private static final Set<String> ALLOWED_URL_SCHEMES = Set.of("http", "https");
 
     // ------------------------------------------------------------------ //
     //  URL 导入
@@ -136,6 +143,99 @@ public class ClipImportService {
                     .fetchSuccess(true)
                     .build();
         }
+    }
+
+    /**
+     * 供 @editorjs/link 富链接预览块使用：抓取标题/描述/封面图，响应格式对接该官方客户端固定认的
+     * { success, link, meta:{title,description,image:{url}} } 形状（见 LinkPreviewResponse 类注释）。
+     * 和 fetchFromUrl 是两条不同的路：那边抓全文正文入 SourceClip 库，这里只抓摘要级元信息，不入库。
+     */
+    public LinkPreviewResponse fetchLinkPreview(String url) {
+        if (url == null || url.isBlank()) {
+            return LinkPreviewResponse.builder().success(false).build();
+        }
+        String trimmed = url.trim();
+        if (!isFetchableUrl(trimmed)) {
+            log.warn("Rejected link preview fetch for disallowed URL: {}", trimmed);
+            return LinkPreviewResponse.builder().success(false).link(trimmed).build();
+        }
+
+        try {
+            Document doc = Jsoup.connect(trimmed)
+                    .userAgent(USER_AGENT)
+                    .timeout(FETCH_TIMEOUT_MS)
+                    .get();
+            doc.setBaseUri(trimmed);
+
+            String title = extractTitle(doc, false);
+            String description = extractDescription(doc);
+            String imageUrl = extractPreviewImageUrl(doc);
+
+            return LinkPreviewResponse.builder()
+                    .success(true)
+                    .link(trimmed)
+                    .meta(LinkPreviewResponse.Meta.builder()
+                            .title(title)
+                            .description(description)
+                            .image(imageUrl != null
+                                    ? LinkPreviewResponse.Image.builder().url(imageUrl).build()
+                                    : null)
+                            .build())
+                    .build();
+        } catch (IOException e) {
+            log.warn("Failed to fetch link preview for {}: {}", trimmed, e.getMessage());
+            return LinkPreviewResponse.builder().success(false).link(trimmed).build();
+        }
+    }
+
+    /**
+     * 仅允许 http/https，且解析出的地址不能是回环/内网/链路本地(含云厂商 169.254.169.254 元数据端点)/
+     * 组播地址 —— 挡住"拿这个接口当探测内网的跳板"这种 SSRF 场景。
+     * 注意：这是发起请求前的一次性解析检查，和 Jsoup 实际连接时的 DNS 解析不是同一次查询，
+     * 存在 DNS rebinding 的理论绕过窗口；当前场景（个人/自用笔记工具，非面向公网多租户服务）下
+     * 判定这层朴素校验的性价比已经够用，暂不做"解析后固定 IP 连接"这种更强的加固。
+     */
+    boolean isFetchableUrl(String url) {
+        URI uri;
+        try {
+            uri = new URI(url);
+        } catch (URISyntaxException e) {
+            return false;
+        }
+        String scheme = uri.getScheme();
+        if (scheme == null || !ALLOWED_URL_SCHEMES.contains(scheme.toLowerCase())) return false;
+        String host = uri.getHost();
+        if (host == null || host.isBlank()) return false;
+
+        try {
+            for (InetAddress addr : InetAddress.getAllByName(host)) {
+                if (addr.isLoopbackAddress() || addr.isSiteLocalAddress() || addr.isLinkLocalAddress()
+                        || addr.isAnyLocalAddress() || addr.isMulticastAddress()) {
+                    return false;
+                }
+            }
+        } catch (UnknownHostException e) {
+            return false;
+        }
+        return true;
+    }
+
+    String extractDescription(Document doc) {
+        Element og = doc.selectFirst("meta[property=og:description]");
+        if (og != null && !og.attr("content").isBlank()) return og.attr("content").trim();
+        Element twitter = doc.selectFirst("meta[name=twitter:description]");
+        if (twitter != null && !twitter.attr("content").isBlank()) return twitter.attr("content").trim();
+        Element meta = doc.selectFirst("meta[name=description]");
+        if (meta != null && !meta.attr("content").isBlank()) return meta.attr("content").trim();
+        return null;
+    }
+
+    String extractPreviewImageUrl(Document doc) {
+        Element og = doc.selectFirst("meta[property=og:image]");
+        if (og != null && !og.attr("abs:content").isBlank()) return og.attr("abs:content");
+        Element twitter = doc.selectFirst("meta[name=twitter:image]");
+        if (twitter != null && !twitter.attr("abs:content").isBlank()) return twitter.attr("abs:content");
+        return null;
     }
 
     // ------------------------------------------------------------------ //

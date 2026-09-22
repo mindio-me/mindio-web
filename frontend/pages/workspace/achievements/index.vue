@@ -4,9 +4,13 @@
 -->
 <template>
   <div class="achievements-page">
-    <div class="workspace-layout">
+    <div
+      class="workspace-layout"
+      :class="{ 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
+    >
       <!-- ========== 左侧列表 ========== -->
-      <aside class="workspace-sidebar">
+      <aside v-show="!leftPanelCollapsed" class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
             <el-input v-model="achievementSearch" :placeholder="$t('workspace.achievements.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
@@ -38,8 +42,17 @@
         </div>
       </aside>
 
+      <div v-show="!wsIsNarrow && !leftPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('left', $event)"></div>
+
       <!-- ========== 中间编辑区 ========== -->
       <main class="workspace-main">
+        <PanelCollapseToggle
+          side="left"
+          :collapsed="leftPanelCollapsed"
+          :expand-title="$t('workspace.achievements.expandSidebar')"
+          :collapse-title="$t('workspace.achievements.collapseSidebar')"
+          @toggle="leftPanelCollapsed = !leftPanelCollapsed"
+        />
         <div v-if="selectedAchievement" class="entity-detail-wrapper">
           <!-- 详情模式 -->
           <div v-if="achievementViewMode === 'detail'" class="entity-detail-view">
@@ -217,10 +230,19 @@
           <i class="el-icon-trophy empty-icon"></i>
           <p class="empty-text">{{ $t('workspace.achievements.selectEmpty') }}</p>
         </div>
+        <PanelCollapseToggle
+          side="right"
+          :collapsed="rightPanelCollapsed"
+          :expand-title="$t('workspace.achievements.expandPanel')"
+          :collapse-title="$t('workspace.achievements.collapsePanel')"
+          @toggle="rightPanelCollapsed = !rightPanelCollapsed"
+        />
       </main>
 
+      <div v-show="!wsIsNarrow && !rightPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('right', $event)"></div>
+
       <!-- ========== 右侧信息 ========== -->
-      <aside class="workspace-right">
+      <aside v-show="!rightPanelCollapsed" class="workspace-right">
         <div class="right-panel" v-if="selectedAchievement">
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.achievements.rightPanelTitle') }}</h3>
@@ -237,9 +259,12 @@
 </template>
 
 <script>
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+
 export default {
   name: 'AchievementsPage',
   layout: 'workspace',
+  mixins: [workspaceLayoutResize],
   data() {
     return {
       loading: false,
@@ -262,7 +287,9 @@ export default {
       achievementSearch: '',
       achievementTagInputVisible: false,
       achievementTagInputValue: '',
-      achievementViewMode: 'edit' // 'detail' | 'edit'
+      achievementViewMode: 'edit', // 'detail' | 'edit'
+      leftPanelCollapsed: false,
+      rightPanelCollapsed: false
     }
   },
   watch: {
@@ -307,6 +334,9 @@ export default {
     this.$nuxt.$off('workspace:create:achievements', this.createAchievement)
   },
   methods: {
+    wsLayoutOptions() {
+      return { storageKey: 'mindio:workspace:achievements:colWidths', hasRight: true }
+    },
     async loadAchievements() {
       this.loading = true
       try {
@@ -511,26 +541,13 @@ export default {
 <style scoped lang="scss">
 .achievements-page {
   background: transparent;
-}
-
-.workspace-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1.5fr) 260px;
-  gap: 16px;
-  height: calc(100vh - 110px);
-}
-
-.workspace-sidebar {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
   height: 100%;
-  max-height: 100%;
+  overflow: hidden;
 }
+
+// 三栏框架样式（.workspace-layout / -sidebar / -main / -right / .col-resizer
+// / @media 1024 / @media 768）见 assets/styles/main.scss
+
 
 .sidebar-section + .sidebar-section {
   border-top: 1px solid var(--border-color);
@@ -652,12 +669,6 @@ export default {
   padding: 12px 4px;
 }
 
-.workspace-main {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 16px 20px;
-  overflow-y: auto;
-}
 
 .note-main-empty {
   height: 100%;
@@ -865,12 +876,6 @@ export default {
   }
 }
 
-.workspace-right {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  overflow-y: auto;
-}
 
 .right-panel {
   height: 100%;
@@ -971,20 +976,4 @@ export default {
   }
 }
 
-@media screen and (max-width: 1024px) {
-  .workspace-layout {
-    grid-template-columns: 260px minmax(0, 1.5fr);
-  }
-  .workspace-right {
-    display: none;
-  }
-}
-
-@media screen and (max-width: 768px) {
-  .workspace-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-}
 </style>

@@ -1,0 +1,13 @@
+-- spring-boot/src/main/resources/db/migration/mysql/V15__widen_agent_conversation_state_blob.sql
+--
+-- state_blob 原来是 TEXT（MySQL 上限 65535 字节）。LangGraph 的 checkpointer 每轮对话
+-- 都会把整个 InMemorySaver 的 storage/writes/blobs 序列化后落这一列——单个持续对话
+-- （conversationId 就是 username，是唯一连续会话）攒到几十轮后，pickle+base64 的体积
+-- 会超过这个上限。超限时 PUT /internal/agent-state/{conversationId} 直接 500，而 Python
+-- 那边 flush() 失败被 `except Exception: pass` 原样吞掉、不报错——这条会话的checkpoint
+-- 会冻结在超限前最后一次成功写入的状态，此后每一轮都在这份冻结的坏历史上重放同一个
+-- 错误，且完全没有日志能看出原因。实测撞到过（2026-09-16，conversationId=admin，冻结
+-- 前的blob已经是62208字节，紧贴着65535的上限）。
+--
+-- TEXT不够就放大到 LONGTEXT（上限4GB），一次性解决容量问题。
+ALTER TABLE agent_conversation_state MODIFY COLUMN state_blob LONGTEXT;

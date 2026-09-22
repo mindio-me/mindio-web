@@ -97,15 +97,21 @@ public class ProjectService {
 
         Project project = Project.builder()
                 .name(request.getName())
+                .nameZh(request.getNameZh())
                 .shortName(request.getShortName())
                 .subtitle(request.getSubtitle())
+                .subtitleZh(request.getSubtitleZh())
+                .highlightMetric(request.getHighlightMetric())
+                .highlightMetricZh(request.getHighlightMetricZh())
                 .description(request.getDescription())
+                .descriptionZh(request.getDescriptionZh())
                 .icon(request.getIcon())
                 .imageUrl(request.getImageUrl())
                 .projectUrl(request.getProjectUrl())
                 .githubUrl(request.getGithubUrl())
                 .category(request.getCategory())
                 .technologies(request.getTechnologies())
+                .technologiesZh(request.getTechnologiesZh())
                 .content(request.getContent())
                 .contentType(request.getContentType() != null ? request.getContentType() : "richtext")
                 .isPublic(request.getIsPublic())
@@ -132,15 +138,21 @@ public class ProjectService {
         }
 
         project.setName(request.getName());
+        project.setNameZh(request.getNameZh());
         project.setShortName(request.getShortName());
         project.setSubtitle(request.getSubtitle());
+        project.setSubtitleZh(request.getSubtitleZh());
+        project.setHighlightMetric(request.getHighlightMetric());
+        project.setHighlightMetricZh(request.getHighlightMetricZh());
         project.setDescription(request.getDescription());
+        project.setDescriptionZh(request.getDescriptionZh());
         project.setIcon(request.getIcon());
         project.setImageUrl(request.getImageUrl());
         project.setProjectUrl(request.getProjectUrl());
         project.setGithubUrl(request.getGithubUrl());
         project.setCategory(request.getCategory());
         project.setTechnologies(request.getTechnologies());
+        project.setTechnologiesZh(request.getTechnologiesZh());
         project.setContent(request.getContent());
         project.setContentType(request.getContentType() != null ? request.getContentType() : "richtext");
         project.setIsPublic(request.getIsPublic());

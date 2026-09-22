@@ -21,6 +21,7 @@ import com.entropybits.worknotes.spring_boot.integration.feishu.entity.FeishuWik
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuDocumentSnapshotRepository;
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuImageMappingRepository;
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuWikiImportMappingRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteImageRefRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.ProjectRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
@@ -56,6 +57,7 @@ public class NoteService {
     private final FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository;
     private final FeishuImageMappingRepository feishuImageMappingRepository;
     private final ContentIndexingService contentIndexingService;
+    private final NoteImageRefRepository noteImageRefRepository;
 
     /**
      * 创建笔记
@@ -165,6 +167,7 @@ public class NoteService {
 
         // 4. 删除笔记
         contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, note.getId());
+        noteImageRefRepository.deleteByNote(note);
         noteRepository.delete(note);
     }
 
@@ -429,27 +432,49 @@ public class NoteService {
      * 匹配模式：http(s)://任意host:port/api/uploads/ → {uploadUrlPrefix}/uploads/
      */
     private void rewriteContentUrls(NoteResponse resp) {
-        if (uploadUrlPrefix == null || uploadUrlPrefix.isBlank()) return;
         String content = resp.getContent();
         if (content == null || content.isBlank()) return;
-        String rewritten = rewriteUploadUrls(content, uploadUrlPrefix);
+        String rewritten = rewriteUploadUrls(content, resolveRewriteTarget(uploadUrlPrefix));
         if (!rewritten.equals(content)) {
             resp.setContent(rewritten);
         }
     }
 
     /**
-     * 将 content 中历史遗留的 localhost 上传 URL 替换为当前配置的 url-prefix。
-     * 匹配模式：http(s)://任意host:port/api/uploads/ → {uploadUrlPrefix}/uploads/
+     * 上传 URL 归一化的目标前缀：
+     * 配置了 {@code worknotes.upload.url-prefix} 时用它（绝对地址，供跨源/多环境）；
+     * 未配置时退回 servlet context-path {@code /api}，让正文里存/发的是根相对地址
+     * （{@code /api/uploads/...}），与前端 {@code API_BASE_URL=/api} 的同源部署天然匹配。
+     */
+    static String resolveRewriteTarget(String uploadUrlPrefix) {
+        return (uploadUrlPrefix != null && !uploadUrlPrefix.isBlank()) ? uploadUrlPrefix : "/api";
+    }
+
+    /**
+     * 把 content 里“我们自己的上传 URL”归一化为当前环境的 {@code target} 前缀，分两趟：
+     * <ol>
+     *   <li>历史遗留的绝对地址 {@code http(s)://任意host:port/api/uploads/} → {@code {target}/uploads/}</li>
+     *   <li>根相对地址 {@code /api/uploads/} → {@code {target}/uploads/}（{@code target} 为 "/api" 时是 no-op）</li>
+     * </ol>
+     * 判据是紧跟 {@code /api} 之后的 {@code /uploads/} 段：外部图片（无此段）两趟都不会被碰。
      * <p>
-     * 字符类必须排除空白符/引号/括号/尖括号等 markdown 分隔符，否则贪婪匹配会跨越
+     * 第一趟的字符类必须排除空白符/引号/括号/尖括号等 markdown 分隔符，否则贪婪匹配会跨越
      * 多个 URL 甚至整段正文（例如正文中出现了不相关的英文双引号），把中间内容当作
      * URL 的一部分一并吞掉，导致连续图片场景下大段内容丢失。
+     * <p>
+     * 第二趟的反向断言 {@code (?<![\w:/])} 保证只匹配真正的根相对 {@code /api}，
+     * 不会误伤第一趟刚替换出来的绝对地址里的 {@code /api} 片段。
      */
-    static String rewriteUploadUrls(String content, String uploadUrlPrefix) {
-        return content.replaceAll(
+    static String rewriteUploadUrls(String content, String target) {
+        if (content == null || content.isBlank()) return content;
+        String replacement = java.util.regex.Matcher.quoteReplacement(target);
+        String out = content.replaceAll(
                 "https?://[^\\s\"'()<>]+/api(?=/uploads/)",
-                uploadUrlPrefix
+                replacement
         );
+        if (!"/api".equals(target)) {
+            out = out.replaceAll("(?<![\\w:/])/api(?=/uploads/)", replacement);
+        }
+        return out;
     }
 }

@@ -63,9 +63,12 @@ public class UploadServiceImpl implements UploadService {
     private String uploadUrlPrefix;
 
     private final AttachmentRepository attachmentRepository;
+    private final com.entropybits.worknotes.spring_boot.service.LocalFileExtractionService extractionService;
 
-    public UploadServiceImpl(AttachmentRepository attachmentRepository) {
+    public UploadServiceImpl(AttachmentRepository attachmentRepository,
+                              com.entropybits.worknotes.spring_boot.service.LocalFileExtractionService extractionService) {
         this.attachmentRepository = attachmentRepository;
+        this.extractionService = extractionService;
     }
 
     @jakarta.annotation.PostConstruct
@@ -221,11 +224,11 @@ public class UploadServiceImpl implements UploadService {
             attachment.setImageType(1);
             attachment.setPid(pid != null ? pid : 0);
             attachment.setOwner(ownerId);
+            byte[] remoteBytes = isImage ? Files.readAllBytes(file.toPath()) : null;
+            registerImageHashIfApplicable(attachment, isImage, remoteBytes);
             attachmentRepository.save(attachment);
 
-            if (uploadUrlPrefix != null && !uploadUrlPrefix.isEmpty()) {
-                result.setUrl(uploadUrlPrefix + result.getUrl());
-            }
+            result.setUrl(publicUrlPrefix() + result.getUrl());
             return result;
         } catch (IllegalArgumentException e) {
             throw new BadRequestException("url格式不正确");
@@ -298,13 +301,12 @@ public class UploadServiceImpl implements UploadService {
             attachment.setImageType(1); // 本地存储
             attachment.setPid(pid != null ? pid : 0);
             attachment.setOwner(ownerId);
+            registerImageHashIfApplicable(attachment, true, imageBytes);
 
             attachmentRepository.save(attachment);
 
             // 添加URL前缀
-            if (uploadUrlPrefix != null && !uploadUrlPrefix.isEmpty()) {
-                result.setUrl(uploadUrlPrefix + result.getUrl());
-            }
+            result.setUrl(publicUrlPrefix() + result.getUrl());
 
             return result;
         } catch (Exception e) {
@@ -386,6 +388,8 @@ public class UploadServiceImpl implements UploadService {
         // 保存文件
         multipartFile.transferTo(file);
 
+        byte[] bytes = isImage ? Files.readAllBytes(file.toPath()) : null;
+
         // 构建返回结果
         FileResultVo result = new FileResultVo();
         result.setFileName(originalFilename);
@@ -403,15 +407,24 @@ public class UploadServiceImpl implements UploadService {
         attachment.setImageType(1); // 本地存储
         attachment.setPid(pid != null ? pid : 0);
         attachment.setOwner(ownerId);
+        registerImageHashIfApplicable(attachment, isImage, bytes);
 
         attachmentRepository.save(attachment);
 
         // 添加URL前缀
-        if (uploadUrlPrefix != null && !uploadUrlPrefix.isEmpty()) {
-            result.setUrl(uploadUrlPrefix + result.getUrl());
-        }
+        result.setUrl(publicUrlPrefix() + result.getUrl());
 
         return result;
+    }
+
+    /**
+     * 对外可访问的 URL 前缀：
+     * 配置了 {@code worknotes.upload.url-prefix} 时用它（绝对地址，供跨源/多环境场景）；
+     * 未配置时退回 servlet context-path {@code /api}，让写进笔记正文的是根相对地址
+     * （{@code /api/uploads/...}），不写死环境，与前端 {@code API_BASE_URL=/api} 的同源部署天然匹配。
+     */
+    private String publicUrlPrefix() {
+        return (uploadUrlPrefix != null && !uploadUrlPrefix.isEmpty()) ? uploadUrlPrefix : "/api";
     }
 
     /**
@@ -482,6 +495,17 @@ public class UploadServiceImpl implements UploadService {
 
             default -> null;
         };
+    }
+
+    /** 三个图片上传入口共用的OCR登记逻辑：只有图片才算hash+登记，非图片不动这个字段。 */
+    private void registerImageHashIfApplicable(Attachment attachment, boolean isImage, byte[] content) {
+        if (!isImage) return;
+        try {
+            String hash = extractionService.registerImageForOcr(content).getContentHash();
+            attachment.setContentHash(hash);
+        } catch (Exception e) {
+            logger.warn("图片hash计算/OCR登记失败: {}", attachment.getName(), e);
+        }
     }
 }
 

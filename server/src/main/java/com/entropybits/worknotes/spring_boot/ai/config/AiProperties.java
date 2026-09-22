@@ -19,6 +19,8 @@ public class AiProperties {
     private ProviderConfig openai = new ProviderConfig();
     private ProviderConfig deepseek = new ProviderConfig();
     private ProviderConfig doubao = new ProviderConfig();
+    /** Embedding 目前固定走 doubao 的 api-key/base-url，认证不单独配置，只有模型和路径独立 */
+    private EmbeddingConfig embedding = new EmbeddingConfig();
 
     @Data
     public static class ProviderConfig {
@@ -27,9 +29,12 @@ public class AiProperties {
         private String baseUrl;
         /** Chat Completions 路径，默认 /v1/chat/completions，豆包等特殊服务商可覆盖 */
         private String chatPath = "/v1/chat/completions";
-        /** Embeddings 模型名，只有配了 embedding 能力的 provider（目前只有 doubao）需要填 */
-        private String embeddingModel;
+    }
+
+    @Data
+    public static class EmbeddingConfig {
+        private String model;
         /** Embeddings 接口路径，默认 /v1/embeddings，豆包等特殊服务商可覆盖 */
-        private String embeddingPath = "/v1/embeddings";
+        private String path = "/v1/embeddings";
     }
 }

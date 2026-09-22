@@ -229,6 +229,12 @@ export default {
     }
   },
   beforeDestroy() {
+    if (this.editorPasteHandler) {
+      const editorContainer = document.querySelector('#richTextEditor')
+      if (editorContainer) {
+        editorContainer.removeEventListener('paste', this.editorPasteHandler)
+      }
+    }
     if (this.editor) {
       this.editor.destroy()
     }
@@ -257,7 +263,33 @@ export default {
         }
         this.editor.create()
         this.editor.txt.html(this.noteForm.content)
+
+        this.editorPasteHandler = this.handleEditorPaste.bind(this)
+        const editorContainer = document.querySelector('#richTextEditor')
+        if (editorContainer) {
+          editorContainer.addEventListener('paste', this.editorPasteHandler)
+        }
       })
+    },
+    async handleEditorPaste(event) {
+      const items = event.clipboardData && event.clipboardData.items
+      if (!items) return
+      const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith('image/'))
+      if (!imageItem) return
+
+      event.preventDefault()
+      const blob = imageItem.getAsFile()
+      if (!blob) return
+
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+      const file = new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: blob.type })
+
+      try {
+        const result = await this.$uploadService.uploadLocal(file, 'note', 0)
+        this.handleUploadSuccess(result)
+      } catch (e) {
+        this.$message.error('粘贴图片上传失败')
+      }
     },
     handleUploadSuccess(result) {
       this.uploadDialogVisible = false

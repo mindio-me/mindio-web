@@ -76,6 +76,10 @@ public class LocalMediaFile {
     @Column(name = "image_height")
     private Integer imageHeight;
 
+    /** 只有IMAGE类型文件在scan()时才会计算，VIDEO/AUDIO留空。用于关联回稳定的LocalFileExtraction。 */
+    @Column(name = "content_hash", length = 64)
+    private String contentHash;
+
     @CreationTimestamp
     @Column(name = "snapshot_created_at", nullable = false, updatable = false)
     private LocalDateTime snapshotCreatedAt;

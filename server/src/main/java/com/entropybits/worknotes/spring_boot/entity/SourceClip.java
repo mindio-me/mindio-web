@@ -28,7 +28,7 @@ import java.util.Set;
 public class SourceClip {
 
     public enum SourceType {
-        WEBPAGE, WECHAT_ARTICLE, WECHAT_CHAT_TEXT, WECHAT_CHAT_IMAGE
+        WEBPAGE, WECHAT_ARTICLE, WECHAT_CHAT_TEXT, WECHAT_CHAT_IMAGE, AUDIO_RECORDING
     }
 
     public enum ExtractionMode {
@@ -69,6 +69,9 @@ public class SourceClip {
 
     @Column(length = 20)
     private String contentFormat; // html | markdown | text
+
+    /** 录音时长（秒）。只有 sourceType=AUDIO_RECORDING 的 clip 才会有值。 */
+    private Integer durationSeconds;
 
     @Column(length = Integer.MAX_VALUE)
     private String excerpt;

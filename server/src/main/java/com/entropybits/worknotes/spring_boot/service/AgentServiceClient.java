@@ -44,12 +44,19 @@ public class AgentServiceClient {
          * 人类可读的标题要调用方自己按ID反查（复用现有lookupTitle逻辑）。 */
         void onDone(String content, List<ChatCitation> citations);
         void onError(String message);
+        void onConfirmRequest(String proposalId, String blockType, Long noteId, Map<String, Object> preview);
+        void onBlockUpdated(Long noteId, String blockId, String blockType, List<Map<String, Object>> items);
+        void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data);
     }
 
     private final String baseUrl;
     private final String internalToken;
     private final ObjectMapper objectMapper;
+    // 显式钉住HTTP/1.1：JDK默认Version.HTTP_2会对明文http://地址发起h2c升级请求
+    // （带Upgrade: h2c头），uvicorn不认识这个头，报"Unsupported upgrade request"
+    // 警告并把紧跟着的真实请求体解析坏——表现为agent服务始终返回422但请求体本身是对的。
     private final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(15))
             .build();
 
@@ -118,8 +125,91 @@ public class AgentServiceClient {
             case "tool_call" -> listener.onToolCall((String) event.get("query"));
             case "done" -> listener.onDone((String) event.get("content"), parseCitations(event.get("citations")));
             case "error" -> listener.onError((String) event.get("content"));
+            case "confirm_request" -> listener.onConfirmRequest(
+                    (String) event.get("proposalId"),
+                    (String) event.get("blockType"),
+                    toLong(event.get("noteId")),
+                    castItem(event.get("preview")));
+            case "block_updated" -> listener.onBlockUpdated(
+                    toLong(event.get("noteId")),
+                    (String) event.get("blockId"),
+                    (String) event.get("blockType"),
+                    castItems(event.get("items")));
+            case "media_block_updated" -> listener.onMediaBlockUpdated(
+                    toLong(event.get("noteId")),
+                    (String) event.get("blockId"),
+                    (String) event.get("blockType"),
+                    castItem(event.get("data")));
             default -> log.warn("unknown agent service event type: {}", type);
         }
+    }
+
+    private Long toLong(Object value) {
+        return value instanceof Number n ? n.longValue() : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castItem(Object value) {
+        return value instanceof Map<?, ?> ? (Map<String, Object>) value : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> castItems(Object value) {
+        return value instanceof List<?> ? (List<Map<String, Object>>) value : List.of();
+    }
+
+    public void resumeChat(String username, String proposalId, String decision, StreamListener listener) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("conversationId", username);
+        body.put("proposalId", proposalId);
+        body.put("decision", decision);
+
+        String json = objectMapper.writeValueAsString(body);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/internal/chat/resume"))
+                .header("X-Internal-Token", internalToken)
+                .header("content-type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .timeout(Duration.ofSeconds(300))
+                .build();
+
+        HttpResponse<Stream<String>> response = httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+        if (response.statusCode() >= 400) {
+            String errorBody;
+            try (Stream<String> errorLines = response.body()) {
+                errorBody = errorLines.collect(Collectors.joining("\n"));
+            }
+            throw new RuntimeException("agent service error: HTTP " + response.statusCode() + " " + errorBody);
+        }
+        try (Stream<String> lines = response.body()) {
+            Iterator<String> it = lines.iterator();
+            while (it.hasNext()) {
+                String line = it.next();
+                if (line.isBlank()) continue;
+                Map<String, Object> event = objectMapper.readValue(line, new TypeReference<>() {});
+                dispatch(event, listener);
+            }
+        }
+    }
+
+    public String visionExtract(String imageDataUri) throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("imageDataUri", imageDataUri);
+        String json = objectMapper.writeValueAsString(body);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/internal/vision-extract"))
+                .header("X-Internal-Token", internalToken)
+                .header("content-type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .timeout(Duration.ofSeconds(60))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() >= 400) {
+            throw new RuntimeException("vision-extract failed: HTTP " + response.statusCode() + " " + response.body());
+        }
+        Map<String, Object> result = objectMapper.readValue(response.body(), new TypeReference<>() {});
+        return (String) result.get("text");
     }
 
     @SuppressWarnings("unchecked")

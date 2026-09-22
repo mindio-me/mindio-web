@@ -5,6 +5,7 @@
 package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
+import com.entropybits.worknotes.spring_boot.dto.ChatResumeRequest;
 import com.entropybits.worknotes.spring_boot.dto.SendChatMessageRequest;
 import com.entropybits.worknotes.spring_boot.service.GlobalChatService;
 import org.junit.jupiter.api.Test;
@@ -69,5 +70,25 @@ class GlobalChatControllerTest {
 
         assertThat(response.getBody()).isEmpty();
         verify(chatService).getMessagesForNote("alice", 9L);
+    }
+
+    @Test
+    void resume_returnsEmitterImmediatelyAndDelegatesToServiceOnBackgroundThread() {
+        GlobalChatController controller = new GlobalChatController(chatService);
+        when(principal.getUsername()).thenReturn("alice");
+
+        ChatResumeRequest request = new ChatResumeRequest();
+        request.setProposalId("p1");
+        request.setDecision("accept");
+
+        SseEmitter emitter = controller.resume(request, principal);
+
+        assertThat(emitter).isNotNull();
+        org.mockito.Mockito.verify(chatService, org.mockito.Mockito.timeout(2000))
+                .resumeStream(
+                        org.mockito.ArgumentMatchers.eq("alice"),
+                        org.mockito.ArgumentMatchers.eq("p1"),
+                        org.mockito.ArgumentMatchers.eq("accept"),
+                        org.mockito.ArgumentMatchers.any(SseEmitter.class));
     }
 }

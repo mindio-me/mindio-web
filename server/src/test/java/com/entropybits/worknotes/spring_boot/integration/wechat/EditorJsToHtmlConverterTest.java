@@ -155,4 +155,115 @@ class EditorJsToHtmlConverterTest {
         String html = converter.convert(json, Map.of());
         assertThat(html).isEmpty();
     }
+
+    @Test
+    void convert_referencesBlockRendersLinkedList() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"references\",\"data\":{\"items\":["
+                + "{\"kind\":\"link\",\"title\":\"参考文章\",\"url\":\"https://example.com\"},"
+                + "{\"kind\":\"note\",\"title\":\"关联笔记\",\"noteId\":42}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).contains("参考文章").contains("href=\"https://example.com\"");
+        assertThat(html).contains("关联笔记");
+    }
+
+    @Test
+    void convert_mediaGalleryBlockRendersImagesAndEmbeds() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"mediaGallery\",\"data\":{\"items\":["
+                + "{\"type\":\"image\",\"url\":\"https://example.com/a.png\",\"caption\":\"说明\"},"
+                + "{\"type\":\"video\",\"embedUrl\":\"https://youtube.com/embed/x\"}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).contains("<img").contains("https://example.com/a.png").contains("说明");
+        assertThat(html).contains("<iframe").contains("https://youtube.com/embed/x");
+    }
+
+    @Test
+    void convert_timelineBlockRendersDateTitleDescription() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"timeline\",\"data\":{\"items\":["
+                + "{\"date\":\"2024-01\",\"title\":\"事件一\",\"description\":\"详情\"}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).contains("2024-01").contains("事件一").contains("详情");
+    }
+
+    @Test
+    void extractPlainText_referencesBlockIncludesTitleAndNote() {
+        String json = "{\"blocks\":[{\"type\":\"references\",\"data\":{\"items\":["
+                + "{\"kind\":\"link\",\"title\":\"参考文章\",\"url\":\"https://example.com\",\"note\":\"备注\"}"
+                + "]}}]}";
+
+        String text = converter.extractPlainText(json, 500);
+
+        assertThat(text).contains("参考文章").contains("备注");
+    }
+
+    @Test
+    void convert_timelineBlockWithLinkRendersClickableIcon() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"timeline\",\"data\":{\"items\":["
+                + "{\"date\":\"2024-01\",\"title\":\"事件\",\"description\":\"说明\",\"link\":\"https://example.com/article\"}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).contains("2024-01").contains("事件").contains("说明");
+        assertThat(html).contains("<a href=\"https://example.com/article\"").contains("🔗");
+    }
+
+    @Test
+    void convert_referencesBlockEscapesTitleAndNoteHtml() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"references\",\"data\":{\"items\":["
+                + "{\"kind\":\"link\",\"title\":\"<script>alert(1)</script>\",\"url\":\"https://example.com\","
+                + "\"note\":\"<img src=x onerror=alert(1)>\"}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).doesNotContain("<script>alert(1)</script>")
+                .doesNotContain("<img src=x onerror=alert(1)>");
+        assertThat(html).contains("&lt;script&gt;alert(1)&lt;/script&gt;")
+                .contains("&lt;img src=x onerror=alert(1)&gt;");
+        // href attribute value is left untouched (out of scope for this fix)
+        assertThat(html).contains("href=\"https://example.com\"");
+    }
+
+    @Test
+    void convert_mediaGalleryBlockEscapesCaptionHtml() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"mediaGallery\",\"data\":{\"items\":["
+                + "{\"type\":\"image\",\"url\":\"https://example.com/a.png\","
+                + "\"caption\":\"<script>alert(1)</script>\"}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).doesNotContain("<script>alert(1)</script>");
+        assertThat(html).contains("&lt;script&gt;alert(1)&lt;/script&gt;");
+        // src attribute value is left untouched (out of scope for this fix)
+        assertThat(html).contains("src=\"https://example.com/a.png\"");
+    }
+
+    @Test
+    void convert_timelineBlockEscapesTitleDateAndDescriptionHtml() throws Exception {
+        String json = "{\"blocks\":[{\"type\":\"timeline\",\"data\":{\"items\":["
+                + "{\"date\":\"<b>2024-01</b>\",\"title\":\"<script>alert(1)</script>\","
+                + "\"description\":\"<img src=x onerror=alert(1)>\",\"link\":\"https://example.com/article\"}"
+                + "]}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).doesNotContain("<script>alert(1)</script>")
+                .doesNotContain("<img src=x onerror=alert(1)>")
+                .doesNotContain("<b>2024-01</b>");
+        assertThat(html).contains("&lt;script&gt;alert(1)&lt;/script&gt;")
+                .contains("&lt;img src=x onerror=alert(1)&gt;")
+                .contains("&lt;b&gt;2024-01&lt;/b&gt;");
+        // href attribute value is left untouched (out of scope for this fix)
+        assertThat(html).contains("href=\"https://example.com/article\"");
+    }
 }

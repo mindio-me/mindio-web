@@ -5,6 +5,7 @@
 package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
+import com.entropybits.worknotes.spring_boot.dto.ChatResumeRequest;
 import com.entropybits.worknotes.spring_boot.dto.SendChatMessageRequest;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.service.GlobalChatService;
@@ -52,6 +53,16 @@ public class GlobalChatController {
         String username = user.getUsername();
         new Thread(() -> chatService.sendMessageStream(
                 username, request.getContent(), request.getCurrentNoteId(), request.getAttachments(), emitter)).start();
+        return emitter;
+    }
+
+    @PostMapping(value = "/resume", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter resume(
+            @Valid @RequestBody ChatResumeRequest request,
+            @AuthenticationPrincipal UserDetails user) {
+        SseEmitter emitter = new SseEmitter(0L);
+        String username = user.getUsername();
+        new Thread(() -> chatService.resumeStream(username, request.getProposalId(), request.getDecision(), emitter)).start();
         return emitter;
     }
 }

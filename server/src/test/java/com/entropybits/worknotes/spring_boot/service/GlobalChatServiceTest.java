@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -45,6 +46,7 @@ class GlobalChatServiceTest {
     @Mock SourceClipRepository sourceClipRepository;
     @Mock ContentChunkingService chunkingService;
     @Mock AgentServiceClient agentServiceClient;
+    @Mock LocalFileExtractionService extractionService;
 
     private GlobalChatService service;
     private final User user = User.builder().id(1L).username("alice").build();
@@ -52,7 +54,7 @@ class GlobalChatServiceTest {
     @BeforeEach
     void setUp() {
         service = new GlobalChatService(chatMessageRepository, userRepository, noteRepository, sourceClipRepository,
-                chunkingService, agentServiceClient, new ObjectMapper());
+                chunkingService, agentServiceClient, extractionService, new ObjectMapper());
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         // lenient：listHistory 这类只读方法不会调用 save，避免 Mockito 严格桩报 UnnecessaryStubbing
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> {
@@ -242,6 +244,24 @@ class GlobalChatServiceTest {
     }
 
     @Test
+    void sendMessageStream_resolvesLocalMediaCitationTitleViaExtractionService() throws Exception {
+        when(extractionService.findDisplayNameForExtraction(42L)).thenReturn("screenshot.png");
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("这张截图显示了登录页面",
+                    List.of(new ChatCitation("LOCAL_MEDIA", 42L, null, null)));
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "这张截图说了什么", null, List.of(), captureEmitter(recorder));
+
+        ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
+        assertThat(done.citations()).hasSize(1);
+        assertThat(done.citations().get(0).title()).isEqualTo("screenshot.png");
+    }
+
+    @Test
     void sendMessageStream_preservesPartialTextWhenAgentServiceReportsErrorMidStream() throws Exception {
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(6);
@@ -315,5 +335,73 @@ class GlobalChatServiceTest {
         assertThat(recorder.events.get(0).attachments()).hasSize(1);
         assertThat(recorder.events.get(0).attachments().get(0).url()).isEqualTo("https://cdn.example.com/a.png");
         assertThat(recorder.events.get(0).attachments().get(0).fileName()).isEqualTo("a.png");
+    }
+
+    @Test
+    void sendMessageStream_confirmRequestEndsStreamWithoutPersistingAssistantMessage() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onConfirmRequest("p1", "timeline", 9L, Map.of("date", "2024-01", "title", "事件一"));
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "加一条", 9L, List.of(), captureEmitter(recorder));
+
+        assertThat(recorder.events).extracting(ChatStreamEvent::type)
+                .containsExactly("user_message", "confirm_request");
+        // 只持久化了用户消息，没有额外的assistant消息（等resume之后才会有真正的回复）
+        verify(chatMessageRepository, times(1)).save(any());
+    }
+
+    @Test
+    void resumeStream_acceptPersistsAssistantMessageAndSendsDone() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(3);
+            listener.onDone("已经加好了", List.of());
+            return null;
+        }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.resumeStream("alice", "p1", "accept", captureEmitter(recorder));
+
+        assertThat(recorder.events).extracting(ChatStreamEvent::type).containsExactly("done");
+        assertThat(recorder.events.get(0).content()).isEqualTo("已经加好了");
+        verify(chatMessageRepository, times(1)).save(any());
+    }
+
+    @Test
+    void resumeStream_blockUpdatedEventIsForwardedToClient() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(3);
+            listener.onBlockUpdated(9L, "block-1", "timeline", List.of(Map.of("date", "2024-01", "title", "事件一")));
+            listener.onDone("已经加好了", List.of());
+            return null;
+        }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.resumeStream("alice", "p1", "accept", captureEmitter(recorder));
+
+        assertThat(recorder.events).extracting(ChatStreamEvent::type).containsExactly("block_updated", "done");
+        assertThat(recorder.events.get(0).noteId()).isEqualTo(9L);
+        assertThat(recorder.events.get(0).blockId()).isEqualTo("block-1");
+    }
+
+    @Test
+    void resumeStream_mediaBlockUpdatedEventIsForwardedToClient() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(3);
+            listener.onMediaBlockUpdated(9L, "b1", "image", Map.of("url", "a.png", "caption", "一张图片描述"));
+            listener.onDone("已经分析好了", List.of());
+            return null;
+        }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.resumeStream("alice", "p1", "accept", captureEmitter(recorder));
+
+        assertThat(recorder.events).extracting(ChatStreamEvent::type).containsExactly("media_block_updated", "done");
+        assertThat(recorder.events.get(0).noteId()).isEqualTo(9L);
+        assertThat(recorder.events.get(0).blockId()).isEqualTo("b1");
+        assertThat(recorder.events.get(0).data()).containsEntry("caption", "一张图片描述");
     }
 }

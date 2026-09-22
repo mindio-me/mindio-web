@@ -53,14 +53,17 @@ public class EditorJsToMarkdownConverter {
 
     private String convertBlock(String type, JsonNode data) {
         return switch (type) {
-            case "header"    -> convertHeader(data);
-            case "paragraph" -> convertParagraph(data);
-            case "list"      -> convertList(data);
-            case "code"      -> convertCode(data);
-            case "quote"     -> convertQuote(data);
-            case "delimiter" -> "---";
-            case "image"     -> convertImage(data);
-            default          -> "";
+            case "header"      -> convertHeader(data);
+            case "paragraph"   -> convertParagraph(data);
+            case "list"        -> convertList(data);
+            case "code"        -> convertCode(data);
+            case "quote"       -> convertQuote(data);
+            case "delimiter"   -> "---";
+            case "image"       -> convertImage(data);
+            case "references"  -> convertReferences(data);
+            case "mediaGallery" -> convertMediaGallery(data);
+            case "timeline"    -> convertTimeline(data);
+            default            -> "";
         };
     }
 
@@ -118,6 +121,45 @@ public class EditorJsToMarkdownConverter {
         if (url.isBlank()) return "";
         String label = caption.isBlank() ? "图片" : caption;
         return "[" + label + "](" + url + ")";
+    }
+
+    private String convertReferences(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        for (JsonNode item : data.path("items")) {
+            String title = stripHtml(item.path("title").asText(""));
+            if (title.isBlank()) continue;
+            String kind = item.path("kind").asText("link");
+            String url = "note".equals(kind) ? "" : item.path("url").asText("");
+            sb.append(url.isBlank() ? "- " + title : "- [" + title + "](" + url + ")").append("\n");
+        }
+        return sb.toString().stripTrailing();
+    }
+
+    private String convertMediaGallery(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        for (JsonNode item : data.path("items")) {
+            String type = item.path("type").asText("image");
+            if ("image".equals(type)) {
+                String url = item.path("url").asText("");
+                if (!url.isBlank()) sb.append("![](").append(url).append(")\n");
+            } else {
+                String url = "video".equals(type) ? item.path("embedUrl").asText("") : item.path("url").asText("");
+                String label = "video".equals(type) ? "视频" : "音频";
+                if (!url.isBlank()) sb.append("[").append(label).append("](").append(url).append(")\n");
+            }
+        }
+        return sb.toString().stripTrailing();
+    }
+
+    private String convertTimeline(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        for (JsonNode item : data.path("items")) {
+            String date = stripHtml(item.path("date").asText(""));
+            String title = stripHtml(item.path("title").asText(""));
+            if (title.isBlank()) continue;
+            sb.append("- **").append(date).append("** ").append(title).append("\n");
+        }
+        return sb.toString().stripTrailing();
     }
 
     /** Strip HTML tags */

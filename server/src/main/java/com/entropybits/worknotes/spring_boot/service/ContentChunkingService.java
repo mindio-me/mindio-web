@@ -29,9 +29,11 @@ public class ContentChunkingService {
     private static final int HARD_CAP = 1500;
 
     private final ObjectMapper objectMapper;
+    private final LocalFileExtractionService extractionService;
 
-    public ContentChunkingService(ObjectMapper objectMapper) {
+    public ContentChunkingService(ObjectMapper objectMapper, LocalFileExtractionService extractionService) {
         this.objectMapper = objectMapper;
+        this.extractionService = extractionService;
     }
 
     public List<String> chunkNote(Note note) {
@@ -44,14 +46,65 @@ public class ContentChunkingService {
             case "richtext" -> htmlToParagraphs(note.getContent());
             default -> markdownToParagraphs(note.getContent());
         };
-        return mergeAndSplit(units);
+        List<String> imageOcrUnits = extractImageUrls(note).stream()
+                .map(extractionService::findExtractedTextForImageUrl)
+                .filter(text -> text != null && !text.isBlank())
+                .toList();
+        List<String> combined = new ArrayList<>(units);
+        combined.addAll(imageOcrUnits);
+        return prependTitleChunk(note.getTitle(), mergeAndSplit(combined));
     }
 
     public List<String> chunkClip(SourceClip clip) {
         List<String> units = "html".equals(clip.getContentFormat())
                 ? htmlToParagraphs(clip.getContent())
                 : markdownToParagraphs(clip.getContent());
-        return mergeAndSplit(units);
+        return prependTitleChunk(clip.getTitle(), mergeAndSplit(units));
+    }
+
+    /**
+     * 标题单独成一块，不参与 mergeAndSplit 的合并/裁切：如果把标题混进正文一起合并，
+     * 短标题会被稀释进几百字的正文分块里，按标题关键词检索时余弦相似度上不去，
+     * 命中不了（这也是标题搜索长期搜不到的根因）。单独一块能保证标题关键词有一个
+     * 未被稀释的强匹配向量。
+     */
+    private List<String> prependTitleChunk(String title, List<String> bodyChunks) {
+        if (title == null || title.isBlank()) return bodyChunks;
+        List<String> result = new ArrayList<>(bodyChunks.size() + 1);
+        result.add(title.trim());
+        result.addAll(bodyChunks);
+        return result;
+    }
+
+    /** OCR等场景产出的纯文本，复用markdown的按空行分段逻辑。 */
+    public List<String> chunkPlainText(String text) {
+        return mergeAndSplit(markdownToParagraphs(text));
+    }
+
+    /**
+     * 提取笔记正文里引用的图片URL（&lt;img src&gt;或markdown语法）。供chunkNote折入OCR文字，
+     * 也供ContentIndexingService维护"笔记→图片hash"的引用关系（NoteImageRef）复用。
+     * editorjs的image block这次不处理——现有编辑页只暴露richtext/markdown两种内容类型，
+     * editorjs不是可达路径，YAGNI。
+     */
+    public List<String> extractImageUrls(Note note) {
+        String contentType = note.getContentType();
+        if (contentType == null) contentType = "richtext";
+        if ("editorjs".equals(contentType)) return List.of();
+        return extractImageUrls(note.getContent(), "richtext".equals(contentType));
+    }
+
+    private List<String> extractImageUrls(String content, boolean isHtml) {
+        if (content == null || content.isBlank()) return List.of();
+        java.util.regex.Pattern pattern = isHtml
+                ? java.util.regex.Pattern.compile("<img[^>]+src=[\"']([^\"']+)[\"']", java.util.regex.Pattern.CASE_INSENSITIVE)
+                : java.util.regex.Pattern.compile("!\\[[^\\]]*\\]\\(([^)]+)\\)");
+        java.util.regex.Matcher matcher = pattern.matcher(content);
+        List<String> urls = new ArrayList<>();
+        while (matcher.find()) {
+            urls.add(matcher.group(1));
+        }
+        return urls;
     }
 
     // ---- markdown ----
@@ -117,8 +170,15 @@ public class ContentChunkingService {
             case "markdown" -> (String) data.get("markdown");
             case "list" -> joinListItems((List<Object>) data.get("items"));
             case "table" -> joinTableRows((List<Object>) data.get("content"));
-            case "image" -> stripHtml((String) data.get("caption"));
-            default -> null; // delimiter/video/audio/embed 等没有可索引文本的 block 类型
+            case "image", "embed", "video", "audio" -> stripHtml((String) data.get("caption"));
+            case "references" -> joinReferenceItems((List<Object>) data.get("items"));
+            case "mediaGallery" -> joinGalleryCaptions((List<Object>) data.get("items"));
+            case "timeline" -> joinTimelineItems((List<Object>) data.get("items"));
+            case "checklist" -> joinChecklistItems((List<Object>) data.get("items"));
+            case "warning" -> joinWarning(data);
+            case "linkTool" -> joinLinkToolMeta(data);
+            case "attaches" -> stripHtml((String) data.get("title"));
+            default -> null; // delimiter/audioRecord 等没有可索引文本的 block 类型
         };
     }
 
@@ -155,6 +215,72 @@ public class ContentChunkingService {
                 sb.append("\n");
             }
         }
+        return sb.isEmpty() ? null : sb.toString().trim();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String joinReferenceItems(List<Object> items) {
+        if (items == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> m)) continue;
+            if (m.get("title") instanceof String s && !s.isBlank()) sb.append(s).append("\n");
+            if (m.get("note") instanceof String s && !s.isBlank()) sb.append(s).append("\n");
+        }
+        return sb.isEmpty() ? null : sb.toString().trim();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String joinGalleryCaptions(List<Object> items) {
+        if (items == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> m)) continue;
+            if (m.get("caption") instanceof String s && !s.isBlank()) sb.append(s).append("\n");
+        }
+        return sb.isEmpty() ? null : sb.toString().trim();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String joinTimelineItems(List<Object> items) {
+        if (items == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> m)) continue;
+            StringBuilder line = new StringBuilder();
+            if (m.get("date") instanceof String s && !s.isBlank()) line.append(s).append(" ");
+            if (m.get("title") instanceof String s && !s.isBlank()) line.append(s);
+            if (!line.isEmpty()) sb.append(line).append("\n");
+            if (m.get("description") instanceof String s && !s.isBlank()) sb.append(s).append("\n");
+        }
+        return sb.isEmpty() ? null : sb.toString().trim();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String joinChecklistItems(List<Object> items) {
+        if (items == null) return null;
+        StringBuilder sb = new StringBuilder();
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> m)) continue;
+            if (!(m.get("text") instanceof String text) || text.isBlank()) continue;
+            boolean checked = Boolean.TRUE.equals(m.get("checked"));
+            sb.append(checked ? "[x] " : "[ ] ").append(stripHtml(text)).append("\n");
+        }
+        return sb.isEmpty() ? null : sb.toString().trim();
+    }
+
+    private String joinWarning(Map<String, Object> data) {
+        StringBuilder sb = new StringBuilder();
+        if (data.get("title") instanceof String s && !s.isBlank()) sb.append(stripHtml(s)).append("\n");
+        if (data.get("message") instanceof String s && !s.isBlank()) sb.append(stripHtml(s)).append("\n");
+        return sb.isEmpty() ? null : sb.toString().trim();
+    }
+
+    private String joinLinkToolMeta(Map<String, Object> data) {
+        if (!(data.get("meta") instanceof Map<?, ?> meta)) return null;
+        StringBuilder sb = new StringBuilder();
+        if (meta.get("title") instanceof String s && !s.isBlank()) sb.append(stripHtml(s)).append("\n");
+        if (meta.get("description") instanceof String s && !s.isBlank()) sb.append(stripHtml(s)).append("\n");
         return sb.isEmpty() ? null : sb.toString().trim();
     }
 

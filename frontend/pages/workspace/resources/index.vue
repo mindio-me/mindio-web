@@ -4,9 +4,13 @@
 -->
 <template>
   <div class="resources-page">
-    <div class="workspace-layout">
+    <div
+      class="workspace-layout"
+      :class="{ 'col-resizing': wsColResizing }"
+      :style="wsLayoutStyle"
+    >
       <!-- ========== 左侧栏 ========== -->
-      <aside class="workspace-sidebar">
+      <aside v-show="!leftPanelCollapsed" class="workspace-sidebar">
         <div class="sidebar-section">
           <div class="sidebar-search">
             <el-input v-model="resourceSearch" :placeholder="$t('workspace.resources.searchPlaceholder')" prefix-icon="el-icon-search" clearable size="small" />
@@ -29,8 +33,17 @@
         </div>
       </aside>
 
+      <div v-show="!wsIsNarrow && !leftPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('left', $event)"></div>
+
       <!-- ========== 中间内容区 ========== -->
       <main class="workspace-main">
+        <PanelCollapseToggle
+          side="left"
+          :collapsed="leftPanelCollapsed"
+          :expand-title="$t('workspace.resources.expandSidebar')"
+          :collapse-title="$t('workspace.resources.collapseSidebar')"
+          @toggle="leftPanelCollapsed = !leftPanelCollapsed"
+        />
         <div v-loading="loading" class="resources-content">
           <div v-if="filteredResources.length === 0 && !loading" class="empty-state">
             <i class="el-icon-search empty-icon"></i>
@@ -56,10 +69,19 @@
             </a>
           </div>
         </div>
+        <PanelCollapseToggle
+          side="right"
+          :collapsed="rightPanelCollapsed"
+          :expand-title="$t('workspace.resources.expandPanel')"
+          :collapse-title="$t('workspace.resources.collapsePanel')"
+          @toggle="rightPanelCollapsed = !rightPanelCollapsed"
+        />
       </main>
 
+      <div v-show="!wsIsNarrow && !rightPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('right', $event)"></div>
+
       <!-- ========== 右侧信息 ========== -->
-      <aside class="workspace-right">
+      <aside v-show="!rightPanelCollapsed" class="workspace-right">
         <div class="right-panel">
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.resources.statsTitle') }}</h3>
@@ -155,9 +177,12 @@
 </template>
 
 <script>
+import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+
 export default {
   name: 'ResourcesPage',
   layout: 'workspace',
+  mixins: [workspaceLayoutResize],
   data() {
     return {
       loading: false,
@@ -181,7 +206,9 @@ export default {
         category: '',
         icon: '',
         tags: ''
-      }
+      },
+      leftPanelCollapsed: false,
+      rightPanelCollapsed: false
     }
   },
   computed: {
@@ -249,6 +276,9 @@ export default {
     this.$nuxt.$off('workspace:create:resources', this.showCreateDialog)
   },
   methods: {
+    wsLayoutOptions() {
+      return { storageKey: 'mindio:workspace:resources:colWidths', hasRight: true }
+    },
     async loadResources() {
       this.loading = true
       try {
@@ -367,26 +397,13 @@ export default {
 <style scoped lang="scss">
 .resources-page {
   background: transparent;
-}
-
-.workspace-layout {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1.5fr) 260px;
-  gap: 16px;
-  height: calc(100vh - 110px);
-}
-
-.workspace-sidebar {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow: hidden;
   height: 100%;
-  max-height: 100%;
+  overflow: hidden;
 }
+
+// 三栏框架样式（.workspace-layout / -sidebar / -main / -right / .col-resizer
+// / @media 布局部分）见 assets/styles/main.scss；下方 @media 只留
+// .resources-grid 等页面专属响应式
 
 .sidebar-section + .sidebar-section {
   border-top: 1px solid var(--border-color);
@@ -569,12 +586,6 @@ export default {
   }
 }
 
-.workspace-main {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 16px 20px;
-  overflow-y: auto;
-}
 
 .resources-content {
   height: 100%;
@@ -727,12 +738,6 @@ export default {
 }
 
 
-.workspace-right {
-  background: var(--card-bg-color);
-  // border: 1px solid var(--border-color);
-  padding: 12px 12px 8px;
-  overflow-y: auto;
-}
 
 .right-panel {
   height: 100%;
@@ -801,12 +806,6 @@ export default {
 }
 
 @media screen and (max-width: 1024px) {
-  .workspace-layout {
-    grid-template-columns: 260px minmax(0, 1.5fr);
-  }
-  .workspace-right {
-    display: none;
-  }
   .resources-grid {
     grid-template-columns: repeat(5, 1fr);
     gap: 10px;
@@ -827,11 +826,6 @@ export default {
 }
 
 @media screen and (max-width: 768px) {
-  .workspace-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
   .resources-grid {
     grid-template-columns: repeat(4, 1fr);
     gap: 8px;

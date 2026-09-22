@@ -19,7 +19,13 @@ public class ProfileResponse {
     private Long id;
     private String fullName;
     private String title;
+    private String titleZh;
     private String bio;
+    private String bioZh;
+    private String philosophy;
+    private String philosophyZh;
+    private String availabilityStatus;
+    private String availabilityStatusZh;
     private String avatarUrl;
     private String location;
     private String website;
@@ -30,6 +36,7 @@ public class ProfileResponse {
     private String wechatQrUrl;
     private String email;
     private String skills;
+    private String skillsZh;
     private String experience;
     private String education;
     private String username;
@@ -41,7 +48,13 @@ public class ProfileResponse {
         response.setId(profile.getId());
         response.setFullName(profile.getFullName());
         response.setTitle(profile.getTitle());
+        response.setTitleZh(profile.getTitleZh());
         response.setBio(profile.getBio());
+        response.setBioZh(profile.getBioZh());
+        response.setPhilosophy(profile.getPhilosophy());
+        response.setPhilosophyZh(profile.getPhilosophyZh());
+        response.setAvailabilityStatus(profile.getAvailabilityStatus());
+        response.setAvailabilityStatusZh(profile.getAvailabilityStatusZh());
         response.setAvatarUrl(profile.getAvatarUrl());
         response.setLocation(profile.getLocation());
         response.setWebsite(profile.getWebsite());
@@ -52,6 +65,7 @@ public class ProfileResponse {
         response.setWechatQrUrl(profile.getWechatQrUrl());
         response.setEmail(profile.getEmail());
         response.setSkills(profile.getSkills());
+        response.setSkillsZh(profile.getSkillsZh());
         response.setExperience(profile.getExperience());
         response.setEducation(profile.getEducation());
         response.setUsername(profile.getUser().getUsername());

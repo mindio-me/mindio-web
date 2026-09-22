@@ -15,7 +15,13 @@ public class ProfileRequest {
 
     private String fullName;
     private String title;
+    private String titleZh;
     private String bio;
+    private String bioZh;
+    private String philosophy;
+    private String philosophyZh;
+    private String availabilityStatus;
+    private String availabilityStatusZh;
     private String avatarUrl;
     private String location;
     private String website;
@@ -25,7 +31,8 @@ public class ProfileRequest {
     private String wechat;
     private String wechatQrUrl;
     private String email;
-    private String skills; // JSON格式
+    private String skills;
+    private String skillsZh;
     private String experience; // JSON格式
     private String education; // JSON格式
 }

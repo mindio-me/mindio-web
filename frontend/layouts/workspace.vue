@@ -14,24 +14,70 @@
       <i :class="topbarCollapsed ? 'el-icon-arrow-down' : 'el-icon-arrow-up'"></i>
     </button>
 
-    <!-- 顶部栏：logo + 用户信息 -->
+    <!-- 顶部栏：logo + 模块导航 + 用户信息 -->
     <transition name="topbar-slide">
       <div v-show="!topbarCollapsed" class="workspace-topbar">
         <div class="topbar-left">
           <div class="topbar-logo" @click="$router.push('/')">
             <MindioLogo />
-            <span class="topbar-logo-text">MindIO</span>
+            <!-- <span class="topbar-logo-text">MindIO</span> -->
           </div>
-          <el-button type="text" class="topbar-home-link" @click="$router.push('/')">
-            <i class="el-icon-s-home"></i> {{ $t('topbar.home') }}
-          </el-button>
+          <template v-if="isAccountPage">
+            <div class="module-tabs-back" @click="$router.push('/workspace/notes')">
+              <i class="el-icon-back"></i>
+              <span>{{ $t('topbar.backToWorkspace') }}</span>
+            </div>
+          </template>
+          <template v-else>
+            <div class="module-tabs">
+              <div
+                v-for="tab in visibleModuleTabs"
+                :key="tab.key"
+                class="module-tab"
+                :class="{ active: activeModule === tab.key }"
+                @click="switchModule(tab.key)"
+              >
+                <i :class="tab.icon"></i>
+                <span>{{ tab.label }}</span>
+              </div>
+            </div>
+            <el-button
+              v-if="showCreateButton"
+              type="primary"
+              size="small"
+              icon="el-icon-plus"
+              circle
+              class="module-tabs-create-btn"
+              :disabled="desktopReadOnly"
+              :title="createButtonTooltip"
+              @click="handleCreate"
+            ></el-button>
+          </template>
         </div>
         <div class="topbar-right">
+          <button class="theme-toggle" @click="$router.push('/')" :title="$t('topbar.home')">
+            <i class="el-icon-s-home"></i>
+          </button>
           <button class="theme-toggle" @click="toggleTheme" :title="isDarkTheme ? $t('topbar.lightMode') : $t('topbar.darkMode')">
             <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
           </button>
           <button class="theme-toggle lang-toggle" @click="toggleLang" :title="$t('lang.toggle')">
             {{ $t('lang.toggle') }}
+          </button>
+          <button class="theme-toggle" @click="$nuxt.$emit('workspace:chat:toggle')" :title="$t('topbar.chatOpen')">
+            <i class="el-icon-chat-dot-round"></i>
+          </button>
+          <button
+            class="theme-toggle recording-mic-btn"
+            :class="{ 'is-recording': recordingStatus !== 'idle' }"
+            @click="onMicButtonClick"
+            :title="recordingStatus !== 'idle' ? '录音进行中' : '开始录音'"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+              <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+              <path d="M19 11a7 7 0 0 1-14 0"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+            </svg>
           </button>
           <el-dropdown @command="handleUserCommand">
             <span class="topbar-user">
@@ -55,75 +101,31 @@
       </div>
     </transition>
 
-    <!-- 模块 Tab 切换 / 账户页返回入口 -->
-    <transition name="tabs-slide">
-      <div v-show="!topbarCollapsed" class="module-tabs-row">
-      <template v-if="isAccountPage">
-        <div class="module-tabs-back" @click="$router.push('/workspace/notes')">
-          <i class="el-icon-back"></i>
-          <span>{{ $t('topbar.backToWorkspace') }}</span>
-        </div>
+    <el-alert
+      v-if="desktopReadOnly"
+      class="desktop-readonly-alert"
+      type="warning"
+      :closable="false"
+      show-icon
+    >
+      <template slot="title">
+        桌面版当前为只读模式：可以读取和导出本地数据，但不能新增或编辑。请到"设置"里刷新或完成授权。
       </template>
-      <template v-else>
-      <div class="module-tabs">
-        <div
-          v-for="tab in visibleModuleTabs"
-          :key="tab.key"
-          class="module-tab"
-          :class="{ active: activeModule === tab.key }"
-          @click="switchModule(tab.key)"
-        >
-          <i :class="tab.icon"></i>
-          <span>{{ tab.label }}</span>
-        </div>
-      </div>
-      <div class="module-tabs-actions">
-        <el-button
-          v-if="activeModule === 'notes' && !isEditPage"
-          type="primary"
-          size="small"
-          icon="el-icon-plus"
-          @click="handleCreate"
-        >{{ $t('actions.newNote') }}</el-button>
-        <el-button
-          v-if="activeModule === 'projects'"
-          type="primary"
-          size="small"
-          icon="el-icon-plus"
-          @click="handleCreate"
-        >{{ $t('actions.newProject') }}</el-button>
-        <el-button
-          v-if="activeModule === 'achievements'"
-          type="primary"
-          size="small"
-          icon="el-icon-plus"
-          @click="handleCreate"
-        >{{ $t('actions.newAchievement') }}</el-button>
-        <el-button
-          v-if="activeModule === 'clips'"
-          type="primary"
-          size="small"
-          icon="el-icon-plus"
-          @click="handleCreate"
-        >{{ $t('actions.newClip') }}</el-button>
-        <el-button
-          v-if="activeModule === 'tags'"
-          type="primary"
-          size="small"
-          icon="el-icon-plus"
-          @click="handleCreate"
-        >{{ $t('actions.newTag') }}</el-button>
-      </div>
-      </template>
-    </div>
-    </transition>
+    </el-alert>
 
-    <!-- 页面内容 -->
-    <nuxt />
+    <!-- 页面内容：占满顶部栏之外的剩余空间，具体高度由页面自身用 height:100% 适配 -->
+    <div class="workspace-content">
+      <nuxt />
+    </div>
+
+    <GlobalChatDrawer />
+    <RecordingCapsule />
   </div>
 </template>
 
 <script>
+import recordingController from '~/utils/recordingController'
+
 export default {
   name: 'WorkspaceLayout',
   provide() {
@@ -139,6 +141,9 @@ export default {
     }
   },
   computed: {
+    recordingStatus() {
+      return recordingController.state.status
+    },
     moduleTabs() {
       return [
         { key: 'notes', label: this.$t('nav.notes'), icon: 'el-icon-notebook-2' },
@@ -173,6 +178,22 @@ export default {
     },
     isEditPage() {
       return this.$route.path.includes('/edit')
+    },
+    showCreateButton() {
+      if (this.activeModule === 'notes' && this.isEditPage) return false
+      return ['notes', 'projects', 'services', 'achievements', 'resources', 'clips', 'tags'].includes(this.activeModule)
+    },
+    createButtonTooltip() {
+      const key = {
+        notes: 'actions.newNote',
+        projects: 'actions.newProject',
+        services: 'actions.newService',
+        achievements: 'actions.newAchievement',
+        resources: 'actions.newResource',
+        clips: 'actions.newClip',
+        tags: 'actions.newTag'
+      }[this.activeModule]
+      return key ? this.$t(key) : ''
     }
   },
   watch: {
@@ -248,6 +269,13 @@ export default {
       } else if (command === 'settings') {
         this.$router.push('/workspace/settings')
       }
+    },
+    onMicButtonClick() {
+      if (recordingController.state.status === 'idle') {
+        // 失败提示统一由 RecordingCapsule 订阅 controller 的 'error' 事件弹出
+        // （本布局没有自己的 toast），这里只负责不让 rejection 逃逸成未处理异常。
+        recordingController.start().catch(() => {})
+      }
     }
   }
 }
@@ -257,13 +285,16 @@ export default {
 .workspace-layout {
   height: 100vh;
   overflow: hidden;
-  padding: 12px 20px;
+  padding: 8px 12px;
   background: var(--bg-secondary);
   position: relative;
   transition: padding 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 
   &.topbar-collapsed {
-    padding-top: 20px; // 只保留切换按钮的少量空间
+    padding-top: 14px; // 只保留切换按钮的少量空间
   }
 }
 
@@ -333,7 +364,9 @@ export default {
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .topbar-logo {
@@ -344,22 +377,14 @@ export default {
   font-weight: 600;
   color: var(--text-color);
   cursor: pointer;
-}
-
-.topbar-home-link {
-  font-size: 13px;
-  color: var(--text-muted) !important;
-  padding: 4px 8px;
-
-  &:hover {
-    color: #667eea !important;
-  }
+  flex-shrink: 0;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-shrink: 0;
 
   .topbar-user {
     cursor: pointer;
@@ -404,33 +429,15 @@ export default {
   letter-spacing: 0.02em;
 }
 
-// 模块 Tab 行
-.module-tabs-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  gap: 12px;
-  overflow: hidden;
+.recording-mic-btn.is-recording {
+  color: #ef4444;
+  &:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+  }
 }
 
-// Tab 行动画
-.tabs-slide-enter-active,
-.tabs-slide-leave-active {
-  transition: all 0.3s ease;
-  max-height: 60px;
-  opacity: 1;
-}
-
-.tabs-slide-enter,
-.tabs-slide-leave-to {
-  max-height: 0;
-  opacity: 0;
-  margin-bottom: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
+// 模块 Tab 列表
 .module-tabs {
   display: flex;
   gap: 4px;
@@ -438,14 +445,19 @@ export default {
   // border-radius: 10px;
   padding: 4px;
   // border: 1px solid var(--border-color);
+  overflow-x: auto;
+  flex-shrink: 1;
+  min-width: 0;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent 100%);
 }
 
 .module-tab {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  // border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 14px;
   color: var(--text-secondary);
@@ -467,7 +479,7 @@ export default {
   }
 }
 
-.module-tabs-actions {
+.module-tabs-create-btn {
   flex-shrink: 0;
 }
 
@@ -480,6 +492,7 @@ export default {
   font-size: 14px;
   color: var(--text-secondary);
   transition: all 0.2s;
+  flex-shrink: 0;
 
   &:hover {
     background: var(--bg-secondary);
@@ -511,13 +524,16 @@ export default {
       display: none;
     }
   }
-  .module-tabs-row {
-    flex-direction: column;
-    align-items: stretch;
+  .topbar-left {
     gap: 8px;
   }
+  .topbar-right {
+    gap: 6px;
+  }
+  .lang-toggle {
+    display: none;
+  }
   .module-tabs {
-    overflow-x: auto;
     flex-wrap: nowrap;
   }
   .module-tab {

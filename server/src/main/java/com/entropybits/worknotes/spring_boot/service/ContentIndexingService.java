@@ -6,10 +6,16 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
+import com.entropybits.worknotes.spring_boot.entity.LocalFileExtraction;
+import com.entropybits.worknotes.spring_boot.entity.LocalMediaFile;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NoteImageRef;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.repository.ContentChunkRepository;
+import com.entropybits.worknotes.spring_boot.repository.LocalFileExtractionRepository;
+import com.entropybits.worknotes.spring_boot.repository.LocalMediaFileRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteImageRefRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +28,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 笔记/收藏保存后异步增量重索引：按分块内容哈希 diff，哈希不变则复用旧 embedding，
@@ -38,28 +47,63 @@ public class ContentIndexingService {
     private final ContentChunkingService chunkingService;
     private final EmbeddingService embeddingService;
     private final ObjectMapper objectMapper;
+    private final LocalFileExtractionRepository extractionRepository;
+    private final LocalMediaFileRepository localMediaFileRepository;
+    private final LocalFileExtractionService extractionService;
+    private final NoteImageRefRepository noteImageRefRepository;
 
     public ContentIndexingService(ContentChunkRepository chunkRepository,
                                    NoteRepository noteRepository,
                                    SourceClipRepository clipRepository,
                                    ContentChunkingService chunkingService,
                                    EmbeddingService embeddingService,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   LocalFileExtractionRepository extractionRepository,
+                                   LocalMediaFileRepository localMediaFileRepository,
+                                   LocalFileExtractionService extractionService,
+                                   NoteImageRefRepository noteImageRefRepository) {
         this.chunkRepository = chunkRepository;
         this.noteRepository = noteRepository;
         this.clipRepository = clipRepository;
         this.chunkingService = chunkingService;
         this.embeddingService = embeddingService;
         this.objectMapper = objectMapper;
+        this.extractionRepository = extractionRepository;
+        this.localMediaFileRepository = localMediaFileRepository;
+        this.extractionService = extractionService;
+        this.noteImageRefRepository = noteImageRefRepository;
     }
 
     @Async
     @Transactional
     public void reindexNote(Long noteId) {
-        noteRepository.findById(noteId).ifPresentOrElse(
-                note -> upsertChunks(ContentChunk.SourceType.NOTE, noteId, note.getOwner(), chunkingService.chunkNote(note)),
-                () -> log.debug("笔记 {} 在异步索引执行前已被删除，跳过", noteId)
-        );
+        noteRepository.findById(noteId).ifPresentOrElse(note -> {
+            upsertChunks(ContentChunk.SourceType.NOTE, noteId, note.getOwner(), chunkingService.chunkNote(note));
+            upsertImageRefs(note);
+        }, () -> log.debug("笔记 {} 在异步索引执行前已被删除，跳过", noteId));
+    }
+
+    /**
+     * 维护"笔记→图片hash"的引用关系（NoteImageRef）：笔记引用的图片集合是什么就是什么，
+     * 量级很小（一篇笔记通常只贴几张图），直接整体delete-then-insert覆盖，不用像
+     * upsertChunks那样按位置做diff。delete和insert之间必须flush：note_image_refs的
+     * (note_id, content_hash)唯一约束会在delete还没真正落库时被同一事务里的insert撞上。
+     */
+    private void upsertImageRefs(Note note) {
+        Set<String> hashes = chunkingService.extractImageUrls(note).stream()
+                .map(extractionService::resolveContentHashForImageUrl)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        noteImageRefRepository.deleteByNote(note);
+        noteImageRefRepository.flush();
+
+        if (!hashes.isEmpty()) {
+            List<NoteImageRef> refs = hashes.stream()
+                    .map(hash -> NoteImageRef.builder().note(note).contentHash(hash).build())
+                    .toList();
+            noteImageRefRepository.saveAll(refs);
+        }
     }
 
     @Async
@@ -69,6 +113,22 @@ public class ContentIndexingService {
                 clip -> upsertChunks(ContentChunk.SourceType.CLIP, clipId, clip.getOwner(), chunkingService.chunkClip(clip)),
                 () -> log.debug("收藏 {} 在异步索引执行前已被删除，跳过", clipId)
         );
+    }
+
+    @Async
+    @Transactional
+    public void reindexLocalMediaExtraction(Long extractionId) {
+        extractionRepository.findById(extractionId).ifPresentOrElse(extraction -> {
+            if (extraction.getStatus() != LocalFileExtraction.Status.SUCCESS) {
+                log.debug("LocalFileExtraction {} 尚未成功完成OCR，跳过索引", extractionId);
+                return;
+            }
+            localMediaFileRepository.findFirstByContentHash(extraction.getContentHash()).ifPresentOrElse(
+                    mediaFile -> upsertChunks(ContentChunk.SourceType.LOCAL_MEDIA, extractionId, mediaFile.getOwner(),
+                            chunkingService.chunkPlainText(extraction.getExtractedText())),
+                    () -> log.debug("LocalFileExtraction {} 没有关联的本地媒体文件，跳过索引", extractionId)
+            );
+        }, () -> log.debug("LocalFileExtraction {} 在异步索引执行前已被删除，跳过", extractionId));
     }
 
     @Transactional

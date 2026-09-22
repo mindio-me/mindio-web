@@ -36,5 +36,7 @@ public interface LocalMediaFileRepository extends JpaRepository<LocalMediaFile, 
             @Param("mediaType") String mediaType,
             Pageable pageable);
 
+    java.util.Optional<LocalMediaFile> findFirstByContentHash(String contentHash);
+
     void deleteByDirectory(LocalMediaDirectory directory);
 }

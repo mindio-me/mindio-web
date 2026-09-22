@@ -4,45 +4,7 @@
 -->
 <template>
   <div class="contact-page">
-    <!-- Header -->
-    <header class="page-header">
-      <div class="header-content">
-        <div class="header-left">
-          <div class="logo">
-            <MindioLogo />
-            <span>MindIO</span>
-          </div>
-        </div>
-        <nav class="header-nav">
-          <nuxt-link to="/" class="nav-link" exact-active-class="active" exact>{{ $t('site.nav.home') }}</nuxt-link>
-          <nuxt-link to="/notes" class="nav-link" exact-active-class="active">{{ $t('site.nav.blog') }}</nuxt-link>
-          <nuxt-link to="/projects" class="nav-link" exact-active-class="active">{{ $t('site.nav.projects') }}</nuxt-link>
-          <nuxt-link to="/contact" class="nav-link" exact-active-class="active">{{ $t('site.nav.contact') }}</nuxt-link>
-        </nav>
-        <div class="header-right">
-          <button class="theme-toggle" @click="toggleTheme" :title="isDarkTheme ? $t('topbar.lightMode') : $t('topbar.darkMode')">
-            <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-          </button>
-          <button class="lang-toggle" @click="toggleLang">{{ $t('lang.toggle') }}</button>
-          <!-- <div v-if="$auth && $auth.loggedIn && !$device.isMobile" class="user-profile">
-            <img src="/default_user.png" alt="User" class="user-avatar" />
-          </div>
-          <button v-if="$auth && $auth.loggedIn && !$device.isMobile" class="logout-btn" @click="handleLogout">{{ $t('site.header.logout') }}</button> -->
-          <button class="menu-toggle" @click="isMobileMenuOpen = !isMobileMenuOpen" aria-label="Menu">
-            <i :class="isMobileMenuOpen ? 'el-icon-close' : 'el-icon-s-operation'"></i>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <!-- Mobile Navigation -->
-    <div v-if="isMobileMenuOpen" class="mobile-overlay" @click="isMobileMenuOpen = false"></div>
-    <nav v-if="isMobileMenuOpen" class="mobile-menu">
-      <nuxt-link to="/" class="mobile-nav-link" exact-active-class="active" exact @click.native="isMobileMenuOpen = false">{{ $t('site.nav.home') }}</nuxt-link>
-      <nuxt-link to="/notes" class="mobile-nav-link" exact-active-class="active" @click.native="isMobileMenuOpen = false">{{ $t('site.nav.blog') }}</nuxt-link>
-      <nuxt-link to="/projects" class="mobile-nav-link" exact-active-class="active" @click.native="isMobileMenuOpen = false">{{ $t('site.nav.projects') }}</nuxt-link>
-      <nuxt-link to="/contact" class="mobile-nav-link" exact-active-class="active" @click.native="isMobileMenuOpen = false">{{ $t('site.nav.contact') }}</nuxt-link>
-    </nav>
+    <PublicHeader />
 
     <!-- Hero Section -->
     <section class="hero-section">
@@ -150,18 +112,7 @@
       </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="page-footer">
-      <div class="footer-container">
-        <div class="footer-left">
-          <p>{{ $t('home.footer.copyright') }}</p>
-        </div>
-        <div class="footer-right">
-          <a href="https://github.com/mindio-me/mindio-web" target="_blank" rel="noopener" class="footer-link">GitHub</a>
-          <nuxt-link to="/contact" class="footer-link">{{ $t('site.nav.contact') }}</nuxt-link>
-        </div>
-      </div>
-    </footer>
+    <PublicFooter :owner-profile="ownerProfile" />
   </div>
 </template>
 
@@ -172,8 +123,6 @@ export default {
   auth: false,
   data() {
     return {
-      isDarkTheme: false,
-      isMobileMenuOpen: false,
       isBookingModalVisible: false,
       ownerProfile: null,
       isTidyLoaded: false,
@@ -181,16 +130,7 @@ export default {
     }
   },
 
-  watch: {
-    $route() { this.isMobileMenuOpen = false }
-  },
-
   async mounted() {
-    if (process.client) {
-      const root = document.documentElement;
-      this.isDarkTheme = root.classList.contains('theme-dark');
-    }
-
     if (process.client) {
       window.addEventListener('keydown', this.handleKeydown)
     }
@@ -207,31 +147,10 @@ export default {
     }
   },
   methods: {
-    formatUrl(url) {
-      if (!url) return '#'
-      return url.startsWith('http') ? url : 'https://' + url
-    },
     resolveUrl(path) {
       if (!path) return ''
       if (/^https?:\/\//.test(path)) return path
       return (this.$axios.defaults.baseURL || '') + path
-    },
-    toggleLang() {
-      const next = this.$i18n.locale === 'zh-CN' ? 'en' : 'zh-CN'
-      this.$i18n.setLocale(next)
-    },
-    toggleTheme() {
-      if (this.$root.$options.app && this.$root.$options.app.themeToggle) {
-        this.isDarkTheme = this.$root.$options.app.themeToggle();
-      } else if (process.client) {
-        const root = document.documentElement;
-        const isDark = root.classList.toggle('theme-dark');
-        window.localStorage.setItem('worknotes-theme', isDark ? 'dark' : 'light');
-        this.isDarkTheme = isDark;
-      }
-    },
-    handleLogout() {
-      console.log('Logout clicked')
     },
     bookCall() {
       this.isBookingModalVisible = true
@@ -302,147 +221,6 @@ export default {
   display: flex;
   flex-direction: column;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
-
-// Header
-.page-header {
-  background: var(--header-bg);
-  border-bottom: 1px solid var(--border-color);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.header-content {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: relative;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  width: 280px;
-  flex-shrink: 0;
-  padding: 0 24px;
-  background: var(--header-bg);
-  border-right: 1px solid var(--border-color);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-color);
-  cursor: pointer;
-
-  i {
-    font-size: 24px;
-    color: #667eea;
-  }
-}
-
-.header-nav {
-  display: flex;
-  gap: 32px;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.nav-link {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 15px;
-  font-weight: 500;
-  transition: color 0.2s;
-
-  &:hover {
-    color: #667eea;
-  }
-
-  &.active {
-    color: #667eea;
-    position: relative;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -20px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #667eea;
-    }
-  }
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px;
-}
-
-.user-profile {
-  display: flex;
-  align-items: center;
-}
-
-.user-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.logout-btn {
-  padding: 8px 16px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--bg-secondary);
-    border-color: var(--border-color);
-  }
-}
-
-.theme-toggle,
-.lang-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-
-  i {
-    font-size: 16px;
-  }
-
-  &:hover {
-    background: rgba(148, 163, 184, 0.08);
-  }
-}
-
-.lang-toggle {
-  font-size: 12px;
-  font-weight: 600;
 }
 
 // Hero Section
@@ -884,72 +662,8 @@ export default {
   }
 }
 
-// Footer
-.page-footer {
-  background: #1a202c;
-  padding: 40px 0;
-}
-
-.footer-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.footer-left p {
-  color: #a0aec0;
-  margin: 0;
-  font-size: 14px;
-}
-
-.footer-right {
-  display: flex;
-  gap: 24px;
-}
-
-.footer-link {
-  color: #a0aec0;
-  text-decoration: none;
-  font-size: 14px;
-  transition: color 0.2s;
-
-  &:hover {
-    color: white;
-  }
-}
-
-// ── Hamburger & Mobile Menu ───────────────────────────────
-.menu-toggle {
-  display: none;
-  width: 32px; height: 32px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  align-items: center; justify-content: center;
-  cursor: pointer;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  i { font-size: 18px; }
-  &:hover { background: var(--bg-secondary); }
-}
-
-.mobile-overlay { display: none; }
-.mobile-menu { display: none; }
-
 // Responsive Design
 @media screen and (max-width: 1024px) {
-  .header-left {
-    width: auto;
-    border-right: none;
-  }
-
-  .header-nav {
-    margin-left: 24px;
-  }
-
   .hero-title {
     font-size: 40px;
   }
@@ -966,62 +680,6 @@ export default {
 
 @media screen and (max-width: 768px) {
   .contact-page { overflow-x: hidden; }
-
-  .header-left {
-    padding: 0 20px;
-  }
-
-  .header-right {
-    padding: 0 20px;
-    gap: 8px;
-  }
-
-  .header-nav {
-    display: none;
-  }
-
-  .logo span { display: none; }
-  .app-btn, .login-btn { padding: 6px 12px; font-size: 13px; }
-  .logout-btn { display: none; }
-  .menu-toggle { display: flex; }
-
-  .mobile-overlay {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 97;
-  }
-
-  .mobile-menu {
-    display: flex;
-    flex-direction: column;
-    position: fixed;
-    top: 64px;
-    left: 0; right: 0;
-    background: var(--header-bg);
-    border-bottom: 1px solid var(--border-color);
-    box-shadow: 0 8px 24px var(--shadow-color);
-    z-index: 98;
-    padding: 8px 0 16px;
-
-    .mobile-nav-link {
-      display: block;
-      padding: 14px 24px;
-      color: var(--text-secondary);
-      text-decoration: none;
-      font-size: 16px;
-      font-weight: 500;
-      border-left: 3px solid transparent;
-      transition: all 0.15s;
-
-      &:hover { color: #667eea; background: var(--bg-secondary); }
-      &.active {
-        color: #667eea;
-        border-left-color: #667eea;
-        background: rgba(102, 126, 234, 0.06);
-      }
-    }
-  }
 
   .hero-section {
     padding: 56px 0 36px;

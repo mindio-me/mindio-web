@@ -19,23 +19,41 @@ export default function ({ $axios, redirect, app }) {
   })
 
   // 响应拦截器
-  $axios.onError((error) => {
+  $axios.onError(async (error) => {
+    // suppressErrorToast 只应该压掉"弹错误提示"这一个副作用，401 的登出/换token/跳转
+    // 逻辑必须照常执行——不然一个后台静默请求过期时，整条会话恢复链路会被连带吞掉。
+    const suppressToast = Boolean(error.config && error.config.suppressErrorToast)
     const code = parseInt(error.response && error.response.status)
     const message = error.response?.data?.message || '请求失败'
 
     if (code === 401) {
-      // 未授权，跳转到登录页
-      app.$auth.logout()
-      redirect('/login')
-      app.$message.error('登录已过期，请重新登录')
-    } else if (code === 403) {
-      app.$message.error('无权限访问')
-    } else if (code === 404) {
-      app.$message.error('资源不存在')
-    } else if (code === 500) {
-      app.$message.error('服务器错误')
-    } else {
-      app.$message.error(message)
+      if (app.$license && app.$license.isDesktop) {
+        // 桌面版没有用户名密码登录页：许可证仍有效时静默换新 token，
+        // 只有换取失败（许可证已失效）才转到邮箱激活页，绝不弹 /login
+        try {
+          const { data } = await $axios.post('/v1/auth/desktop-session')
+          app.$auth.setUserToken(data.token)
+          await app.$auth.fetchUser()
+        } catch (_sessionError) {
+          app.$auth.logout()
+          redirect('/activate')
+        }
+      } else {
+        // 未授权，跳转到登录页
+        app.$auth.logout()
+        redirect('/login')
+        app.$message.error('登录已过期，请重新登录')
+      }
+    } else if (!suppressToast) {
+      if (code === 403) {
+        app.$message.error('无权限访问')
+      } else if (code === 404) {
+        app.$message.error('资源不存在')
+      } else if (code === 500) {
+        app.$message.error('服务器错误')
+      } else {
+        app.$message.error(message)
+      }
     }
 
     return Promise.reject(error)

@@ -99,6 +99,12 @@ html.theme-dark #__layout {
     }
   }
 
+  // 抽屉
+  .el-drawer {
+    background: var(--card-bg-color);
+    color: var(--text-color);
+  }
+
   // 下拉菜单
   .el-dropdown-menu {
     background: var(--card-bg-color);
@@ -410,6 +416,131 @@ html.theme-dark #__layout {
   .empty-text {
     font-size: 16px;
   }
+}
+
+/* ===== Workspace 三栏框架（共享；页面删掉本地重复定义后由此接管） ===== */
+.workspace-layout {
+  display: grid;
+  height: 100%;
+  gap: 0;
+  // 宽屏由 mixin 的 :style="wsLayoutStyle" 内联覆盖；这里是 SSR 首帧 /
+  // 未接 mixin 的页面 / 窄屏兜底。8px 的 gutter 轨道即 .col-resizer 抓取区，
+  // 与 workspaceLayoutResize.js 的 wsLayoutStyle 里的字面量保持一致。
+  grid-template-columns: 280px 8px minmax(0, 1fr) 8px 260px;
+  transition: grid-template-columns 0.3s ease;
+}
+.workspace-layout--no-right { grid-template-columns: 280px 8px minmax(0, 1fr); }
+.workspace-layout--no-left  { grid-template-columns: minmax(0, 1fr) 8px 260px; }
+.workspace-layout.right-collapsed { grid-template-columns: 280px 8px minmax(0, 1fr); }
+.workspace-layout.col-resizing { transition: none; cursor: col-resize; }
+
+.workspace-sidebar,
+.workspace-main,
+.workspace-right {
+  background: var(--card-bg-color);
+  border-radius: 12px;
+  min-height: 0; // 让 grid 子项能各自滚动
+}
+.workspace-sidebar {
+  padding: 8px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden; // 侧栏本身不滚，内部列表区独立滚动
+}
+.workspace-main  { padding: 12px 14px; overflow-y: auto; position: relative; }
+.workspace-right { padding: 8px 8px 6px; overflow-y: auto; }
+
+// 左右栏一键折叠——按钮常驻在 .workspace-main 对应边缘（贴着分隔线原本的位置），
+// 折叠/展开都由它处理（见 components/PanelCollapseToggle.vue）；resizer 本身折叠时
+// 连同栏位一起 v-show 隐藏（沿用 notes/projects 已验证的 rightPanelCollapsed 机制，
+// 未接入左栏折叠的页面 mixin 里 this.leftPanelCollapsed 恒为 undefined，等价于
+// false，不受影响）
+%ws-panel-collapse-toggle-base {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 18px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+
+  &:hover { color: var(--text-color); }
+  &.is-collapsed { opacity: 1; }
+}
+.ws-right-collapse-toggle {
+  @extend %ws-panel-collapse-toggle-base;
+  right: 0;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+}
+.ws-left-collapse-toggle {
+  @extend %ws-panel-collapse-toggle-base;
+  left: 0;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+}
+.workspace-main:hover .ws-right-collapse-toggle,
+.workspace-main:hover .ws-left-collapse-toggle {
+  opacity: 1;
+}
+
+.col-resizer {
+  align-self: stretch;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  cursor: col-resize;
+  position: relative;
+  z-index: 2;
+  touch-action: none;
+  transition: background 0.15s ease;
+
+  &::before {
+    content: '';
+    width: 2px;
+    border-radius: 1px;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  // 视觉只有 8px 的 gutter，命中区扩到 14px（左右各溢出 3px 到面板内边距里，
+  // 不碰内容、也基本不压到 .workspace-main 的纵向滚动条），窄 gutter 也好抓
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 14px;
+    transform: translateX(-50%);
+  }
+  // hover 反馈覆盖整条 8px gutter（不只中间 2px 那条线），更容易注意到能拖
+  &:hover { background: var(--bg-secondary); }
+  &:hover::before { background: var(--border-color); }
+  // 只有正在被拖动的那一条才高亮——mixin 在 pointerdown 时直接给这个
+  // resizer 元素加类名（不经 Vue 响应式，也就不会连带另一条一起变色）
+  &.ws-col-resizer-active { background: rgba(102, 126, 234, 0.12); }
+  &.ws-col-resizer-active::before { background: #667eea; }
+}
+
+@media screen and (max-width: 1024px) {
+  .workspace-layout { grid-template-columns: 260px minmax(0, 1fr); }
+  .workspace-layout--no-left { grid-template-columns: minmax(0, 1fr); }
+  .workspace-right,
+  .col-resizer,
+  .ws-right-collapse-toggle { display: none; } // 窄屏右栏本就隐藏，折叠按钮也没用
+}
+@media screen and (max-width: 768px) {
+  .workspace-layout { display: flex; flex-direction: column; gap: 12px; }
 }
 
 // Element UI Message 组件样式修复

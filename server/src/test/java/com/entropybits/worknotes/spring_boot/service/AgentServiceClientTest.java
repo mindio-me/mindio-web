@@ -55,6 +55,18 @@ class AgentServiceClientTest {
         String doneContent;
         List<ChatCitation> doneCitations;
         String errorMessage;
+        String confirmProposalId;
+        String confirmBlockType;
+        Long confirmNoteId;
+        Map<String, Object> confirmPreview;
+        Long blockUpdatedNoteId;
+        String blockUpdatedBlockId;
+        String blockUpdatedBlockType;
+        List<Map<String, Object>> blockUpdatedItems;
+        Long mediaBlockUpdatedNoteId;
+        String mediaBlockUpdatedBlockId;
+        String mediaBlockUpdatedBlockType;
+        Map<String, Object> mediaBlockUpdatedData;
 
         @Override
         public void onTextDelta(String text) { textDeltas.add(text); }
@@ -70,6 +82,30 @@ class AgentServiceClientTest {
 
         @Override
         public void onError(String message) { errorMessage = message; }
+
+        @Override
+        public void onConfirmRequest(String proposalId, String blockType, Long noteId, Map<String, Object> preview) {
+            confirmProposalId = proposalId;
+            confirmBlockType = blockType;
+            confirmNoteId = noteId;
+            confirmPreview = preview;
+        }
+
+        @Override
+        public void onBlockUpdated(Long noteId, String blockId, String blockType, List<Map<String, Object>> items) {
+            blockUpdatedNoteId = noteId;
+            blockUpdatedBlockId = blockId;
+            blockUpdatedBlockType = blockType;
+            blockUpdatedItems = items;
+        }
+
+        @Override
+        public void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data) {
+            mediaBlockUpdatedNoteId = noteId;
+            mediaBlockUpdatedBlockId = blockId;
+            mediaBlockUpdatedBlockType = blockType;
+            mediaBlockUpdatedData = data;
+        }
     }
 
     @Test
@@ -174,5 +210,104 @@ class AgentServiceClientTest {
         assertThatThrownBy(() -> client.streamChat("alice", "你好", "alice", null, List.of(), null, new RecordingListener()))
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("500");
+    }
+
+    @Test
+    void visionExtract_postsImageDataUriAndReturnsExtractedText() throws Exception {
+        com.sun.net.httpserver.HttpServer server =
+                com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        java.util.concurrent.atomic.AtomicReference<String> capturedBody = new java.util.concurrent.atomic.AtomicReference<>();
+        server.createContext("/internal/vision-extract", ex -> {
+            capturedBody.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            String responseJson = "{\"text\":\"识别到的文字\"}";
+            byte[] bytes = responseJson.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        server.start();
+        try {
+            AgentServiceClient visionClient = new AgentServiceClient(
+                    "http://127.0.0.1:" + server.getAddress().getPort(), "test-internal-token", objectMapper);
+
+            String text = visionClient.visionExtract("data:image/png;base64,abc");
+
+            assertThat(text).isEqualTo("识别到的文字");
+            assertThat(capturedBody.get()).contains("data:image/png;base64,abc");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void streamChat_parsesConfirmRequestEvent() throws Exception {
+        setUp(200, "{\"type\":\"confirm_request\",\"proposalId\":\"p1\",\"blockType\":\"timeline\","
+                + "\"noteId\":9,\"preview\":{\"date\":\"2024-01\",\"title\":\"事件一\"}}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "帮我加一条", "alice", null, List.of(), 9L, listener);
+
+        assertThat(listener.confirmProposalId).isEqualTo("p1");
+        assertThat(listener.confirmBlockType).isEqualTo("timeline");
+        assertThat(listener.confirmNoteId).isEqualTo(9L);
+        assertThat(listener.confirmPreview).containsEntry("date", "2024-01").containsEntry("title", "事件一");
+    }
+
+    @Test
+    void streamChat_parsesBlockUpdatedEvent() throws Exception {
+        setUp(200, "{\"type\":\"block_updated\",\"noteId\":9,\"blockId\":\"abc\",\"blockType\":\"timeline\","
+                + "\"items\":[{\"date\":\"2024-01\",\"title\":\"事件一\"}]}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "帮我加一条", "alice", null, List.of(), 9L, listener);
+
+        assertThat(listener.blockUpdatedNoteId).isEqualTo(9L);
+        assertThat(listener.blockUpdatedBlockId).isEqualTo("abc");
+        assertThat(listener.blockUpdatedBlockType).isEqualTo("timeline");
+        assertThat(listener.blockUpdatedItems).hasSize(1);
+    }
+
+    @Test
+    void streamChat_parsesMediaBlockUpdatedEvent() throws Exception {
+        setUp(200, "{\"type\":\"media_block_updated\",\"noteId\":9,\"blockId\":\"b1\",\"blockType\":\"image\","
+                + "\"data\":{\"url\":\"a.png\",\"caption\":\"一张图片描述\"}}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "分析这张图", "alice", null, List.of(), 9L, listener);
+
+        assertThat(listener.mediaBlockUpdatedNoteId).isEqualTo(9L);
+        assertThat(listener.mediaBlockUpdatedBlockId).isEqualTo("b1");
+        assertThat(listener.mediaBlockUpdatedBlockType).isEqualTo("image");
+        assertThat(listener.mediaBlockUpdatedData).containsEntry("caption", "一张图片描述");
+    }
+
+    @Test
+    void resumeChat_postsToResumeEndpointAndParsesEvents() throws Exception {
+        HttpServer resumeServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        resumeServer.createContext("/internal/chat/resume", ex -> {
+            lastRequestBody = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String body = "{\"type\":\"done\",\"content\":\"已添加\",\"citations\":[]}\n";
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        resumeServer.start();
+        try {
+            AgentServiceClient resumeClient = new AgentServiceClient(
+                    "http://127.0.0.1:" + resumeServer.getAddress().getPort(), "test-internal-token", objectMapper);
+            RecordingListener listener = new RecordingListener();
+
+            resumeClient.resumeChat("alice", "p1", "accept", listener);
+
+            assertThat(listener.doneContent).isEqualTo("已添加");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = objectMapper.readValue(lastRequestBody, Map.class);
+            assertThat(body.get("conversationId")).isEqualTo("alice");
+            assertThat(body.get("proposalId")).isEqualTo("p1");
+            assertThat(body.get("decision")).isEqualTo("accept");
+        } finally {
+            resumeServer.stop(0);
+        }
     }
 }

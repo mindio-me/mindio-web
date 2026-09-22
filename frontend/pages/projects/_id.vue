@@ -4,32 +4,7 @@
 -->
 <template>
   <div class="project-detail-page">
-    <!-- Header -->
-    <header class="page-header">
-      <div class="header-content">
-        <div class="header-left">
-          <div class="logo" @click="$router.push('/')">
-            <MindioLogo />
-            <span>MindIO</span>
-          </div>
-        </div>
-        <nav class="header-nav">
-          <nuxt-link to="/" class="nav-link" exact-active-class="active" exact>{{ $t('site.nav.home') }}</nuxt-link>
-          <nuxt-link to="/notes" class="nav-link" exact-active-class="active">{{ $t('site.nav.blog') }}</nuxt-link>
-          <nuxt-link to="/projects" class="nav-link" exact-active-class="active">{{ $t('site.nav.projects') }}</nuxt-link>
-          <nuxt-link to="/contact" class="nav-link" exact-active-class="active">{{ $t('site.nav.contact') }}</nuxt-link>
-        </nav>
-        <div class="header-right">
-          <button
-            class="theme-toggle"
-            @click="toggleTheme"
-            :title="isDarkTheme ? '切换到白天模式' : '切换到黑夜模式'"
-          >
-            <i :class="isDarkTheme ? 'el-icon-sunny' : 'el-icon-moon'"></i>
-          </button>
-        </div>
-      </div>
-    </header>
+    <PublicHeader />
 
     <section v-if="!project && !loadError" class="loading-section">
       <div class="loading-inner">
@@ -143,18 +118,7 @@
       </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="page-footer">
-      <div class="footer-container">
-        <div class="footer-left">
-          <p>© 2024 MindIO. All rights reserved.</p>
-        </div>
-        <div class="footer-right">
-          <a href="#" class="footer-link">LinkedIn</a>
-          <a href="#" class="footer-link">GitHub</a>
-        </div>
-      </div>
-    </footer>
+    <PublicFooter :owner-profile="ownerProfile" />
   </div>
 </template>
 
@@ -177,31 +141,19 @@ export default {
 
   data() {
     return {
-      isDarkTheme: false,
       project: null,
-      loadError: false
+      loadError: false,
+      ownerProfile: null
     }
   },
 
-  mounted() {
-    if (process.client) {
-      const root = document.documentElement
-      this.isDarkTheme = root.classList.contains('theme-dark')
-    }
+  async mounted() {
+    try {
+      this.ownerProfile = await this.$profileService.getOwnerProfile()
+    } catch (e) {}
   },
 
   methods: {
-    toggleTheme() {
-      if (this.$root.$options.app && this.$root.$options.app.themeToggle) {
-        this.isDarkTheme = this.$root.$options.app.themeToggle()
-      } else if (process.client) {
-        const root = document.documentElement
-        const isDark = root.classList.toggle('theme-dark')
-        window.localStorage.setItem('worknotes-theme', isDark ? 'dark' : 'light')
-        this.isDarkTheme = isDark
-      }
-    },
-
     getCategoryLabel(category) {
       const map = {
         web: 'Web Application',
@@ -277,112 +229,6 @@ export default {
 .project-detail-page {
   min-height: 100vh;
   background: var(--bg-color);
-}
-
-// Header
-.page-header {
-  background: var(--header-bg);
-  box-shadow: 0 1px 3px var(--shadow-color);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.header-content {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: relative;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  width: 280px;
-  flex-shrink: 0;
-  padding: 0 24px;
-  background: var(--header-bg);
-  border-right: 1px solid var(--border-color);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-color);
-  cursor: pointer;
-
-  i {
-    font-size: 24px;
-    color: #667eea;
-  }
-}
-
-.header-nav {
-  display: flex;
-  gap: 32px;
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.nav-link {
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 15px;
-  font-weight: 500;
-  transition: color 0.2s;
-
-  &:hover {
-    color: #667eea;
-  }
-
-  &.active {
-    color: #667eea;
-    position: relative;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -20px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #667eea;
-    }
-  }
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px;
-}
-
-.theme-toggle {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: transparent;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-
-  i {
-    font-size: 16px;
-  }
-
-  &:hover {
-    background: rgba(148, 163, 184, 0.08);
-  }
 }
 
 // Loading & Error
@@ -755,50 +601,8 @@ export default {
   }
 }
 
-// Footer
-.page-footer {
-  background: #1a202c;
-  padding: 32px 0;
-}
-
-.footer-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 40px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.footer-left p {
-  color: #9ca3af;
-  margin: 0;
-  font-size: 14px;
-}
-
-.footer-right {
-  display: flex;
-  gap: 16px;
-}
-
-.footer-link {
-  color: #9ca3af;
-  text-decoration: none;
-  font-size: 14px;
-  transition: color 0.2s;
-
-  &:hover {
-    color: #fff;
-  }
-}
-
 // Responsive
 @media screen and (max-width: 1024px) {
-  .header-left {
-    width: auto;
-    border-right: none;
-  }
-
   .hero-container,
   .content-wrapper {
     padding: 0 24px;
@@ -806,10 +610,6 @@ export default {
 }
 
 @media screen and (max-width: 768px) {
-  .header-nav {
-    display: none;
-  }
-
   .hero-container {
     flex-direction: column;
     align-items: flex-start;

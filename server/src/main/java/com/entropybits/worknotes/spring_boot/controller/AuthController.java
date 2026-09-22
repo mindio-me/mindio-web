@@ -8,7 +8,6 @@ package com.entropybits.worknotes.spring_boot.controller;
 import com.entropybits.worknotes.spring_boot.dto.AuthResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChangePasswordRequest;
 import com.entropybits.worknotes.spring_boot.dto.LoginRequest;
-import com.entropybits.worknotes.spring_boot.dto.RegisterRequest;
 import com.entropybits.worknotes.spring_boot.dto.UserResponse;
 import com.entropybits.worknotes.spring_boot.security.CustomUserDetailsService;
 import com.entropybits.worknotes.spring_boot.service.AuthService;
@@ -20,7 +19,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * 认证控制器 - 处理用户登录、注册
+ * 认证控制器 - 处理用户登录
  */
 @RestController
 @RequestMapping("/v1/auth")
@@ -29,15 +28,6 @@ public class AuthController {
 
     private final AuthService authService;
     private final CustomUserDetailsService userDetailsService;
-
-    /**
-     * 用户注册
-     */
-    @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        AuthResponse response = authService.register(request);
-        return ResponseEntity.ok(response);
-    }
 
     /**
      * 用户登录

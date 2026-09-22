@@ -19,13 +19,23 @@ public class ProjectRequest {
     @Size(max = 200, message = "项目名称长度不能超过200个字符")
     private String name;
 
+    private String nameZh;
+
     @Size(max = 20, message = "项目简称长度不能超过20个字符")
     private String shortName; // 项目简称/缩写
 
     private String subtitle;
 
+    private String subtitleZh;
+
+    private String highlightMetric;
+
+    private String highlightMetricZh;
+
     @NotBlank(message = "项目描述不能为空")
     private String description;
+
+    private String descriptionZh;
 
     private String icon;
 
@@ -38,6 +48,8 @@ public class ProjectRequest {
     private String category;
 
     private String technologies;
+
+    private String technologiesZh;
 
     private String content; // 项目正文内容（富文本）
 

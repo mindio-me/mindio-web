@@ -15,6 +15,8 @@ import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRe
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.entropybits.worknotes.spring_boot.service.RetrievalService;
 import com.entropybits.worknotes.spring_boot.service.RetrievedChunk;
+import com.entropybits.worknotes.spring_boot.service.TopicBlockService;
+import com.entropybits.worknotes.spring_boot.service.MediaBlockService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -23,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,9 +41,11 @@ class InternalAgentControllerTest {
     @Mock RetrievalService retrievalService;
     @Mock UserRepository userRepository;
     @Mock AgentConversationStateRepository stateRepository;
+    @Mock TopicBlockService topicBlockService;
+    @Mock MediaBlockService mediaBlockService;
 
     InternalAgentController controller() {
-        return new InternalAgentController(retrievalService, userRepository, stateRepository);
+        return new InternalAgentController(retrievalService, userRepository, stateRepository, topicBlockService, mediaBlockService);
     }
 
     @Test
@@ -107,5 +112,36 @@ class InternalAgentControllerTest {
 
         verify(stateRepository).save(existing);
         assertThat(existing.getStateBlob()).isEqualTo("new");
+    }
+
+    @Test
+    void mediaBlocks_delegatesToMediaBlockService() {
+        List<Map<String, Object>> expected = List.of(Map.of("blockId", "b1", "blockType", "image"));
+        when(mediaBlockService.listMediaBlocks(9L)).thenReturn(expected);
+
+        List<Map<String, Object>> result = controller().mediaBlocks(9L);
+
+        assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void blockContent_delegatesToMediaBlockService() {
+        Map<String, Object> expected = Map.of("mimeType", "image/png", "base64Data", "abc");
+        when(mediaBlockService.getBlockFile(9L, "b1")).thenReturn(expected);
+
+        Map<String, Object> result = controller().blockContent(9L, "b1");
+
+        assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void patchBlock_delegatesToMediaBlockService() {
+        Map<String, Object> fields = Map.of("caption", "描述文字");
+        Map<String, Object> expected = Map.of("url", "a.png", "caption", "描述文字");
+        when(mediaBlockService.patchBlock(9L, "b1", fields)).thenReturn(expected);
+
+        Map<String, Object> result = controller().patchBlock(9L, "b1", fields);
+
+        assertThat(result).isEqualTo(expected);
     }
 }

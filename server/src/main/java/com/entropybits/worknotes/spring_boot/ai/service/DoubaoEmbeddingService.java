@@ -20,45 +20,49 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 火山方舟（豆包）embedding 接口调用，走 OpenAI 兼容协议
- * （POST {model, input} → {data: [{embedding: [...]}]}）。
- * 具体字段名/路径以实施时的火山方舟 embedding API 文档为准，这里假设与 OpenAI embeddings
- * 接口同构（与现有 chat-path 的兼容处理是同一模式）。
+ * 火山方舟（豆包）多模态向量化接口调用（/api/v3/embeddings/multimodal）。
+ * 请求体 input 是带 type 字段的内容对象数组（本服务只用 {"type":"text","text":...}），
+ * 不是纯文本 embedding 接口那种字符串数组，两者协议不同，参见火山方舟 embeddings/multimodal 文档。
+ * 响应是 {data: {embedding: [...]}}（单个对象，一次调用的多模态输入只产出一个联合向量，
+ * 跟纯文本接口按数组返回逐条向量不同）。
  */
 @Slf4j
 @Service
 public class DoubaoEmbeddingService implements EmbeddingService {
 
-    private final AiProperties.ProviderConfig config;
+    private final AiProperties.ProviderConfig doubaoConfig;
+    private final AiProperties.EmbeddingConfig embeddingConfig;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .build();
 
     public DoubaoEmbeddingService(AiProperties props, ObjectMapper objectMapper) {
-        this.config = props.getDoubao();
+        this.doubaoConfig = props.getDoubao();
+        this.embeddingConfig = props.getEmbedding();
         this.objectMapper = objectMapper;
     }
 
     @Override
     public float[] embed(String text) throws Exception {
-        String url = config.getBaseUrl() + config.getEmbeddingPath();
+        String url = doubaoConfig.getBaseUrl() + embeddingConfig.getPath();
         Map<String, Object> body = Map.of(
-                "model", config.getEmbeddingModel(),
-                "input", List.of(text)
+                "model", embeddingConfig.getModel(),
+                "encoding_format", "float",
+                "input", List.of(Map.of("type", "text", "text", text))
         );
         String json = objectMapper.writeValueAsString(body);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("Authorization", "Bearer " + config.getApiKey())
+                .header("Authorization", "Bearer " + doubaoConfig.getApiKey())
                 .header("content-type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
                 .timeout(Duration.ofSeconds(30))
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        log.debug("Doubao embedding response status={}", response.statusCode());
+        log.debug("Doubao embedding response status={} body={}", response.statusCode(), response.body());
 
         if (response.statusCode() >= 400) {
             throw new RuntimeException("Doubao embedding API error: HTTP " + response.statusCode() + " " + response.body());
@@ -66,14 +70,18 @@ public class DoubaoEmbeddingService implements EmbeddingService {
 
         Map<String, Object> parsed = objectMapper.readValue(response.body(), new TypeReference<>() {});
         @SuppressWarnings("unchecked")
-        List<Map<String, Object>> data = (List<Map<String, Object>>) parsed.get("data");
+        Map<String, Object> data = (Map<String, Object>) parsed.get("data");
 
         if (data == null || data.isEmpty()) {
             throw new RuntimeException("Doubao embedding API returned empty data");
         }
 
         @SuppressWarnings("unchecked")
-        List<Number> embeddingNumbers = (List<Number>) data.get(0).get("embedding");
+        List<Number> embeddingNumbers = (List<Number>) data.get("embedding");
+
+        if (embeddingNumbers == null) {
+            throw new RuntimeException("Doubao embedding API response missing data.embedding, data keys=" + data.keySet());
+        }
 
         float[] embedding = new float[embeddingNumbers.size()];
         for (int i = 0; i < embedding.length; i++) {

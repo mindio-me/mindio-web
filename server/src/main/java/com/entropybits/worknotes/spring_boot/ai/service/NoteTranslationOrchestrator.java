@@ -134,6 +134,42 @@ public class NoteTranslationOrchestrator {
                         }
                         break;
                     }
+                    case "references": {
+                        JsonNode items = data.path("items");
+                        if (items.isArray()) {
+                            for (int j = 0; j < items.size(); j++) {
+                                JsonNode item = items.get(j);
+                                String title = item.path("title").asText("");
+                                if (!title.isBlank()) { indices.add(new int[]{i, j * 2}); texts.add(stripHtml(title)); }
+                                String note = item.path("note").asText("");
+                                if (!note.isBlank()) { indices.add(new int[]{i, j * 2 + 1}); texts.add(stripHtml(note)); }
+                            }
+                        }
+                        break;
+                    }
+                    case "mediaGallery": {
+                        JsonNode items = data.path("items");
+                        if (items.isArray()) {
+                            for (int j = 0; j < items.size(); j++) {
+                                String caption = items.get(j).path("caption").asText("");
+                                if (!caption.isBlank()) { indices.add(new int[]{i, j}); texts.add(stripHtml(caption)); }
+                            }
+                        }
+                        break;
+                    }
+                    case "timeline": {
+                        JsonNode items = data.path("items");
+                        if (items.isArray()) {
+                            for (int j = 0; j < items.size(); j++) {
+                                JsonNode item = items.get(j);
+                                String title = item.path("title").asText("");
+                                if (!title.isBlank()) { indices.add(new int[]{i, j * 2}); texts.add(stripHtml(title)); }
+                                String description = item.path("description").asText("");
+                                if (!description.isBlank()) { indices.add(new int[]{i, j * 2 + 1}); texts.add(stripHtml(description)); }
+                            }
+                        }
+                        break;
+                    }
                     default:
                         log.debug("Block[{}] type={} skipped (not translatable)", i, type);
                         break;
@@ -222,6 +258,49 @@ public class NoteTranslationOrchestrator {
                             // 旧版：item 是纯字符串
                             newItems.add(tr != null ? tr : origItem.asText());
                         }
+                    }
+                }
+                break;
+            }
+            case "references": {
+                JsonNode items = block.path("data").path("items");
+                if (items.isArray()) {
+                    ArrayNode newItems = data.putArray("items");
+                    for (int j = 0; j < items.size(); j++) {
+                        ObjectNode newItem = ((ObjectNode) items.get(j)).deepCopy();
+                        String tTitle = findTranslated(blockIdx, j * 2, indices, translated);
+                        if (tTitle != null) newItem.put("title", tTitle);
+                        String tNote = findTranslated(blockIdx, j * 2 + 1, indices, translated);
+                        if (tNote != null) newItem.put("note", tNote);
+                        newItems.add(newItem);
+                    }
+                }
+                break;
+            }
+            case "mediaGallery": {
+                JsonNode items = block.path("data").path("items");
+                if (items.isArray()) {
+                    ArrayNode newItems = data.putArray("items");
+                    for (int j = 0; j < items.size(); j++) {
+                        ObjectNode newItem = ((ObjectNode) items.get(j)).deepCopy();
+                        String tCaption = findTranslated(blockIdx, j, indices, translated);
+                        if (tCaption != null) newItem.put("caption", tCaption);
+                        newItems.add(newItem);
+                    }
+                }
+                break;
+            }
+            case "timeline": {
+                JsonNode items = block.path("data").path("items");
+                if (items.isArray()) {
+                    ArrayNode newItems = data.putArray("items");
+                    for (int j = 0; j < items.size(); j++) {
+                        ObjectNode newItem = ((ObjectNode) items.get(j)).deepCopy();
+                        String tTitle = findTranslated(blockIdx, j * 2, indices, translated);
+                        if (tTitle != null) newItem.put("title", tTitle);
+                        String tDesc = findTranslated(blockIdx, j * 2 + 1, indices, translated);
+                        if (tDesc != null) newItem.put("description", tDesc);
+                        newItems.add(newItem);
                     }
                 }
                 break;
