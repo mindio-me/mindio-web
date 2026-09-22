@@ -143,15 +143,31 @@ export default {
     this.$nuxt.$on('workspace:current-note-id', this.onBroadcastNoteId)
     this.$nuxt.$emit('workspace:request-current-note-id')
     recordingController.on('error', this.onRecordingError)
+    recordingController.on('stop', this.onControllerStop)
   },
   beforeDestroy() {
     this.$nuxt.$off('workspace:current-note-id', this.onBroadcastNoteId)
     recordingController.off('error', this.onRecordingError)
+    recordingController.off('stop', this.onControllerStop)
     clearTimeout(this.toastTimer)
   },
   methods: {
     onBroadcastNoteId(id) {
       this.broadcastNoteId = id || null
+    },
+    // 正常的"用户点了停止"已经在 onStop() 里通过 await recordingController.stop() 处理过了
+    // （result.interrupted === false，这里直接忽略，避免同一段录音被存两遍）。这个监听只
+    // 接住设备被拔掉/系统睡眠打断录音时controller 自己发起的强制停止——那种情况下没有人
+    // 点按钮，必须靠事件才能拿到抢救下来的录音内容，走一遍同样的保存管线。
+    onControllerStop(result) {
+      if (!result || !result.interrupted) return
+      this.stopResult = result
+      const origin = result.origin
+      if (origin && origin.type === 'block' && origin.blockId) {
+        this.autoResolveBlock(origin)
+      } else {
+        this.showAttachPopover = true
+      }
     },
     onRecordingError(payload) {
       const reason = (payload && payload.reason) || ''
