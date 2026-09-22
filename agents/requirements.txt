@@ -1,0 +1,10 @@
+langgraph==1.2.11
+langgraph-checkpoint==4.2.0
+langchain-anthropic==1.7.1
+langchain-openai==1.6.0
+fastapi
+uvicorn[standard]
+httpx
+typing_extensions
+pytest
+pytest-asyncio
