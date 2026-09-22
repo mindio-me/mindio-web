@@ -169,7 +169,10 @@ export default {
       return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r
     },
     barHeight(i) {
-      const base = 4 + this.recording.level * 22
+      // 正常说话时麦克风 RMS 电平其实不高，乘 22 很难用满整个高度区间，看起来像是
+      // 没在动——先放大灵敏度（乘 2.6 再夹到 1），让平常说话的音量就能撑满整根条。
+      const boosted = Math.min(1, this.recording.level * 2.6)
+      const base = 4 + boosted * 22
       const jitter = ((i * 37) % 11) - 5 // 固定的伪随机抖动，避免所有条一样高
       return Math.max(4, Math.min(20, base + jitter))
     },
