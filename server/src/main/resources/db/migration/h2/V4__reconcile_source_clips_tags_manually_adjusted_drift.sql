@@ -1,0 +1,14 @@
+-- 本文件在 db/migration/mysql/ 下有同版本号的兄弟文件
+-- （mysql/V4__reconcile_source_clips_tags_manually_adjusted_drift.sql），
+-- 两者必须保持同步：相同版本号、相同 schema 语义，只允许 vendor 特定的类型/语法差异。
+--
+-- 和 V2 修复 tags.used_by_notes/used_by_clips 是同一类事故：SourceClip.tagsManuallyAdjusted
+-- 字段在 00bfb65（2026-08-14）加入实体，早于 V1 基线脚本生成（ff1819c，2026-08-20）。
+-- V1 基线脚本本身包含这一列，但 baseline-on-migrate 只对"全新安装"真正执行 V1 的
+-- CREATE TABLE——已经靠 ddl-auto:update 建过 source_clips 表的存量库，会被直接标记为
+-- "已在 V1"，从未真正跑过这份 CREATE TABLE，这列也就从未被建出来过。ddl-auto 切到
+-- validate 之后，缺列不再被静默忽略，而是直接报 Schema-validation 错误、拒绝启动。
+--
+-- 对全新安装（V1 已经建好这列）和老库（V1 被 baseline 跳过，从未真正建过这列）都要安全：
+-- ADD COLUMN IF NOT EXISTS 对已存在的列是 no-op，对缺失的列会用 DEFAULT FALSE 补上。
+ALTER TABLE source_clips ADD COLUMN IF NOT EXISTS tags_manually_adjusted BOOLEAN NOT NULL DEFAULT FALSE;
