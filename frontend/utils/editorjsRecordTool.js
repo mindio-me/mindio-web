@@ -218,10 +218,14 @@ class RecordTool {
     const noteId = this.config.getNoteId ? this.config.getNoteId() : null
     const blockId = this.block && this.block.id
     this.data = { recording: true }
-    this._renderCurrentState(this._element)
+    // start() 内部在第一个 await（getUserMedia）之前就会同步把 state.status/origin
+    // 置好——必须先调用它、再渲染，否则渲染时 controller 还是 idle，_renderRecordingState
+    // 会把这个刚点开始的块误判成"没有对应活跃录音"，直接显示成录音失败。
     // start() 失败（没权限/没设备）时的用户提示由 RecordingCapsule 订阅 controller
     // 的 'error' 事件统一弹出；这里只负责把这个块自己退回"点击开始录音"。
-    recordingController.start({ type: 'block', noteId, blockId }).catch(() => {
+    const startPromise = recordingController.start({ type: 'block', noteId, blockId })
+    this._renderCurrentState(this._element)
+    startPromise.catch(() => {
       this.data = {}
       this._renderCurrentState(this._element)
     })
