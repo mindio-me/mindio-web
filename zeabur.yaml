@@ -4,7 +4,7 @@ metadata:
   name: MindIO
 spec:
   description: "MindIO is a personal workspace for turning input into output. Self-hostable notes, local resources, AI analysis, and publishing."
-  icon: "https://raw.githubusercontent.com/mindio-me/mindio-web/master/static/favicon.png"
+  icon: "https://raw.githubusercontent.com/mindio-me/mindio-web/main/static/favicon.png"
   tags:
     - productivity
     - notes
@@ -22,6 +22,14 @@ spec:
       type: STRING
       name: JWT Secret
       description: "A long random string for signing JWT tokens (at least 32 characters)"
+    - key: AGENT_INTERNAL_TOKEN
+      type: STRING
+      name: Agent Internal Token
+      description: "A long random string shared between server and agent for internal API auth"
+    - key: ANTHROPIC_API_KEY
+      type: STRING
+      name: Anthropic API Key
+      description: "API key for the AI chat feature (leave blank to disable)"
   services:
     - name: db
       icon: "https://raw.githubusercontent.com/zeabur/service-icons/main/marketplace/mysql.svg"
@@ -56,23 +64,21 @@ spec:
             expose: true
         command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 
+    # NOTE: server/web/agent now build from source out of this single repo's
+    # server/, frontend/, agents/ subdirectories (see the root Dockerfiles in
+    # each) instead of downloading a prebuilt release jar. `rootDirectory` is
+    # Zeabur's documented way to point a GIT-sourced service at a monorepo
+    # subdirectory, but this hasn't been deployed/tested against a live
+    # Zeabur project since the repo restructuring - verify before relying on
+    # it for a real one-click deploy.
     - name: server
       template: GIT
       spec:
         source:
           source: GITHUB
           repo: 1247446367
-          branch: master
-          dockerfile: |
-            FROM eclipse-temurin:17-jre-alpine
-            WORKDIR /app
-            ARG SERVER_VERSION=1.0.0
-            RUN apk add --no-cache wget && \
-                wget -O mindio-server.jar \
-                "https://github.com/mindio-me/mindio-web/releases/download/v${SERVER_VERSION}/mindio-server-${SERVER_VERSION}.jar"
-            EXPOSE 8080
-            ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
-            CMD ["sh", "-c", "java $JAVA_OPTS -jar mindio-server.jar --spring.profiles.active=prod"]
+          branch: main
+          rootDirectory: server
         ports:
           - id: web
             port: 8080
@@ -95,8 +101,36 @@ spec:
             default: ${ZEABUR_WEB_DOMAIN}/api
           WORKNOTES_FRONTEND_BASE_URL:
             default: ${ZEABUR_WEB_DOMAIN}
+          AGENT_INTERNAL_TOKEN:
+            default: ${AGENT_INTERNAL_TOKEN}
+          AGENT_SERVICE_BASE_URL:
+            default: "http://agent:8100"
         dependencies:
           - db
+
+    - name: agent
+      template: GIT
+      spec:
+        source:
+          source: GITHUB
+          repo: 1247446367
+          branch: main
+          rootDirectory: agents
+        ports:
+          - id: agent
+            port: 8100
+            type: HTTP
+        env:
+          JAVA_INTERNAL_BASE_URL:
+            default: "http://server:8080/api"
+          INTERNAL_SHARED_TOKEN:
+            default: ${AGENT_INTERNAL_TOKEN}
+          DEFAULT_PROVIDER:
+            default: anthropic
+          ANTHROPIC_API_KEY:
+            default: ${ANTHROPIC_API_KEY}
+        dependencies:
+          - server
 
     - name: web
       template: GIT
@@ -104,7 +138,8 @@ spec:
         source:
           source: GITHUB
           repo: 1247446367
-          branch: master
+          branch: main
+          rootDirectory: frontend
         ports:
           - id: web
             port: 80

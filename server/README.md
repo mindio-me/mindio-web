@@ -1,9 +1,10 @@
 # MindIO Backend API
 
-Spring Boot backend for MindIO, a personal workspace for turning input into output. This is the API-only backend; the web UI lives in a separate repo: [mindio-web](https://github.com/mindio-me/mindio-web).
+Spring Boot backend for MindIO — see the [repository root README](../README.md) for the full
+project overview, features, and self-hosting instructions.
 
-Live demo: https://demo.mindio.me
-Desktop app (macOS & Windows): https://mindio.me/download
+The web UI it serves lives in [`../frontend`](../frontend/). The AI agent service it talks to
+lives in [`../agents`](../agents/).
 
 ## Tech Stack
 
@@ -67,7 +68,11 @@ The desktop profile uses H2 and stores uploads in the local app data directory p
 
 Some internal package names and configuration keys still use `worknotes` for compatibility. New product deployments should use the `mindio_app` database, while the older `worknotes` database name is reserved for personal/legacy use. User-facing product content should use `MindIO`.
 
+## License
+
+Licensed under the [GNU AGPL v3.0](../LICENSE).
+
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. Pull
-requests require agreeing to our [Contributor License Agreement](CLA.md).
+Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for how to get started. Pull
+requests require agreeing to our [Contributor License Agreement](../CLA.md).

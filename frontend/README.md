@@ -1,28 +1,9 @@
-# MindIO
+# MindIO Frontend
 
-> Your personal workspace for turning input into output.
+The web UI (Nuxt.js) for MindIO — see the [repository root README](../README.md) for the full
+project overview, features, and self-hosting instructions.
 
-This is the frontend (Nuxt.js). The API it talks to lives in a separate repo: [mindio-server](https://github.com/mindio-me/mindio-server).
-
-MindIO is a self-hostable personal workspace that combines note-taking, local resources, AI analysis, and multi-platform publishing into one system.
-
-```text
-personal input -> MindIO -> personal output
-```
-
-Capture notes, documents, images, media, AI conversations, and web clips. MindIO helps you organize and refine them, then publish the result to your personal website, articles, project pages, or social media.
-
-Website: https://mindio.me
-Live demo: https://demo.mindio.me
-
-## Features
-
-- **Notes & Knowledge Base** - rich text and Markdown editing, tags, search, and review
-- **Local Resources** - collect local documents, images, audio, and video into your workspace
-- **AI Analysis** - summarize, translate, extract insights, and reshape raw input
-- **Personal Website** - publish selected output to a public-facing site
-- **Social Publishing** - push content to Reddit, WeChat, and more
-- **Self-hostable** - run it on your own server, full control over your data
+The API it talks to lives in [`../server`](../server/).
 
 ## Tech Stack
 
@@ -30,30 +11,6 @@ Live demo: https://demo.mindio.me
 - Vue.js 2.x
 - Element UI
 - Axios
-
-## One-Click Deploy
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.com/deploy/SfA56e?referralCode=GbJJAR)
-
-## Self-Hosting
-
-```bash
-git clone https://github.com/mindio-me/mindio-web.git
-cd mindio-web
-cp .env.example .env
-docker compose up -d
-```
-
-MindIO will be available at `http://localhost` or your configured domain. This always builds
-against the latest backend release — no version to keep in sync with this doc. To pin a
-specific release instead, pass it as a build arg:
-
-```bash
-docker compose build --build-arg SERVER_VERSION=1.1.0 server
-```
-
-If you're running behind an existing reverse proxy on the host (rather than exposing the `web`
-container directly on 80/443), set `PORT` in `.env` to an internal port and proxy to it.
 
 ## Development
 
@@ -72,18 +29,11 @@ For containerized or one-click deployments, Docker builds the frontend with
 `API_BASE_URL=/api`, which is proxied by nginx to the backend service. Set
 `API_BASE_URL` only when the API is hosted on a different origin.
 
-## Backend
-
-This repo is the frontend only. The API is a separate Spring Boot service — see [mindio-server](https://github.com/mindio-me/mindio-server) for the backend source, database setup, and API docs. Run both together for a full local stack.
-
 ## License
 
-Licensed under the [GNU AGPL v3.0](LICENSE).
+Licensed under the [GNU AGPL v3.0](../LICENSE).
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get started. Pull
-requests require agreeing to our [Contributor License Agreement](CLA.md).
-
-<!-- maintainer bypass-actor push verification: 2026-08-07 -->
-
+Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for how to get started. Pull
+requests require agreeing to our [Contributor License Agreement](../CLA.md).

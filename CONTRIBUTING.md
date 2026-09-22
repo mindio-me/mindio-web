@@ -12,12 +12,15 @@ you like.
 
 You don't need to do anything in advance — when you open your first pull request, a bot will
 automatically comment with instructions to sign the CLA by replying to the PR. This only needs to be
-done once; your signature is shared across `mindio-web` and `mindio-server`.
+done once, across the whole repo.
 
 ## How to contribute
 
 1. Fork this repository and create a branch from `main` for your change.
-2. Run `npm install`, then `npm run dev` to start a local dev server against your target API.
+2. Set up whichever component(s) you're changing:
+   - `frontend/` (Nuxt.js): `cd frontend && npm install && npm run dev`
+   - `server/` (Spring Boot): `cd server && .\mvnw.cmd spring-boot:run` (or `./mvnw spring-boot:run` on macOS/Linux)
+   - `agents/` (Python/LangGraph): `cd agents && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8100`
 3. Make your change, keeping it focused — small, single-purpose PRs review faster.
 4. Open a pull request describing what changed and why.
 5. Sign the CLA when the bot prompts you (first PR only).
@@ -26,4 +29,4 @@ done once; your signature is shared across `mindio-web` and `mindio-server`.
 ## Reporting bugs / requesting features
 
 Please open a GitHub issue with as much detail as possible: steps to reproduce, expected vs. actual
-behavior, and your environment (OS, Node version, browser).
+behavior, and your environment (OS, component versions, browser if relevant).
