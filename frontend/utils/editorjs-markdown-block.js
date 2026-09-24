@@ -142,6 +142,10 @@ export default class MarkdownBlock {
     this.textarea = document.createElement('textarea')
     this.textarea.classList.add('cdx-markdown-block__textarea')
     this.textarea.value = this.data.markdown
+    // 程序化赋值 .value 会把光标移到末尾；用户还没手动点过输入框时，
+    // 之后 _setMode 里的 focus() 会触发浏览器把光标位置滚动进视口，
+    // 也就是滚到内容末尾而不是顶部——这里把光标复位到开头，避免切换模式时页面自动跳到底部
+    this.textarea.selectionStart = this.textarea.selectionEnd = 0
     this.textarea.placeholder = '输入 Markdown 内容...'
     this.textarea.spellcheck = false
     this.textarea.autocomplete = 'off'
@@ -328,13 +332,12 @@ export default class MarkdownBlock {
   _autoResizeTextarea() {
     if (!this.textarea) return
 
-    const lines = (this.textarea.value || '').split('\n').length
-    const lineHeight = 22
-    const padding = 32
+    // 用 scrollHeight 量实际渲染高度，而不是按 \n 数逻辑行——
+    // 长段落软换行会占多行但不含 \n，按行数算的高度会小于实际内容高度，
+    // 导致 overflow: hidden 裁切内容，且视口停在上次光标位置而非顶部
     const minHeight = 120
-
-    const contentHeight = Math.ceil(lines * lineHeight + padding)
-    this.textarea.style.height = Math.max(contentHeight, minHeight) + 'px'
+    this.textarea.style.height = 'auto'
+    this.textarea.style.height = Math.max(this.textarea.scrollHeight, minHeight) + 'px'
   }
 
   /**
