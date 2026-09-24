@@ -19,12 +19,15 @@ import static org.mockito.Mockito.when;
 class RssNewsSearchProviderTest {
 
     @Test
-    void buildSearchUrl_encodesQueryAndUsesGoogleNewsSearchEndpoint() {
+    void buildSearchUrl_encodesQueryAndUsesBingSearchRssEndpoint() {
+        // 原来用 news.google.com，国内无代理直连会超时（实测验证过，HttpURLConnection 不会像
+        // curl 那样自动读 HTTPS_PROXY），换成 Bing 的同款 RSS 端点，跟 BingNewsFetcher 一致
         RssNewsSearchProvider provider = new RssNewsSearchProvider(mock(RssFeedParser.class));
 
         String url = provider.buildSearchUrl("AI 深度报道", 5);
 
-        assertThat(url).startsWith("https://news.google.com/rss/search?q=");
+        assertThat(url).startsWith("https://www.bing.com/search?q=");
+        assertThat(url).contains("format=rss");
         assertThat(url).contains(URLEncoder.encode("AI 深度报道", StandardCharsets.UTF_8));
     }
 

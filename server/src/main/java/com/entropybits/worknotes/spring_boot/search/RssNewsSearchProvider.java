@@ -12,7 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * 默认搜索后端：不需要任何 API key，用 Google News 的关键词搜索 RSS 拿真实新闻文章。
+ * 默认搜索后端：不需要任何 API key，用 Bing 的关键词搜索 RSS 拿真实网页结果。
+ * 原来用的是 news.google.com——在没有代理的国内网络环境直连会连接超时（HttpURLConnection
+ * 不会像 curl 那样自动读 HTTPS_PROXY 环境变量，Windows 系统级代理也没配），实测 Bing 的
+ * 同类 RSS 端点无需代理即可直连，跟 BingNewsFetcher 里"热点新闻"功能用的是同一个端点模式。
  */
 @Component
 @RequiredArgsConstructor
@@ -37,6 +40,6 @@ public class RssNewsSearchProvider implements WebSearchProvider {
 
     String buildSearchUrl(String query, int limit) {
         String encoded = URLEncoder.encode(query, StandardCharsets.UTF_8);
-        return "https://news.google.com/rss/search?q=" + encoded + "&hl=zh-CN&gl=CN&ceid=CN:zh-Hans";
+        return "https://www.bing.com/search?q=" + encoded + "&format=rss&setlang=zh-CN&mkt=zh-CN";
     }
 }
