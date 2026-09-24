@@ -25,5 +25,7 @@ public interface NoteClipRefRepository extends JpaRepository<NoteClipRef, Long> 
 
     void deleteByNoteAndClip(Note note, SourceClip clip);
 
+    void deleteByNote(Note note);
+
     int countByNote(Note note);
 }

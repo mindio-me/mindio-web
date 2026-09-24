@@ -613,11 +613,12 @@ class BookmarkAgentServiceTest {
     }
 
     @Test
-    void replaceGeneratedNote_deletesNoteImageRefsBeforeDeletingOldNote() {
-        // note_image_refs.note_id的外键没有ON DELETE CASCADE（不同于V5给clip_search_messages
-        // 加的先例），如果用户手动编辑过一篇自动生成的笔记并贴了张已完成OCR的图，下次
-        // 自动重新生成时如果不先清note_image_refs，这里的delete会直接撞外键约束抛异常，
-        // 炸掉收藏摘要的定时生成任务。必须和NoteService.deleteNote一样先清再删。
+    void replaceGeneratedNote_deletesNoteImageRefsAndClipRefsBeforeDeletingOldNote() {
+        // note_image_refs.note_id 和 note_clip_refs.note_id 的外键都没有 ON DELETE CASCADE。
+        // note_clip_refs 这条是这个方法自己在插入新笔记时写入的（见下面的 refClips 循环）——
+        // 第一次生成时还没有旧记录不会触发，但只要用户点第二次"重新生成"，旧笔记就带着上一轮
+        // 写的 note_clip_refs，不先清掉这里 delete 就会直接撞外键约束，炸掉整个生成任务
+        // （这个 bug 真实发生过：第二次生成知识地图时报 FK 约束错误）。
         setUp();
         User owner = User.builder().id(1L).build();
         Note old = Note.builder().id(99L).owner(owner).generatedType(Note.GeneratedType.CLUSTER).build();
@@ -627,8 +628,9 @@ class BookmarkAgentServiceTest {
 
         service.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", "内容", List.of());
 
-        org.mockito.InOrder order = org.mockito.Mockito.inOrder(noteImageRefRepository, noteRepository);
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(noteImageRefRepository, noteClipRefRepository, noteRepository);
         order.verify(noteImageRefRepository).deleteByNote(old);
+        order.verify(noteClipRefRepository).deleteByNote(old);
         order.verify(noteRepository).delete(old);
     }
 

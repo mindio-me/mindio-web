@@ -231,10 +231,12 @@ public class BookmarkAgentService {
         for (Note old : olds) {
             // 必须先清掉旧笔记的语义索引分块再删笔记，否则 content_chunks 里会留下孤儿行，
             // 而 RetrievalService 不校验来源笔记是否还存在，已删除内容会被无限期当作 RAG 上下文召回。
-            // note_image_refs 同理必须先清：外键没有 ON DELETE CASCADE，用户如果手动编辑过
-            // 这篇生成笔记并贴了图，这里不清就会在下面 delete 时直接撞外键约束。
+            // note_image_refs、note_clip_refs 同理必须先清：两边外键都没有 ON DELETE CASCADE，
+            // 不清就会在下面 delete 时直接撞外键约束——note_clip_refs 这条是这个方法自己在下面
+            // insert 新笔记时写入的，第一次生成时还没有旧记录不会触发，第二次往后重新生成必炸。
             contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, old.getId());
             noteImageRefRepository.deleteByNote(old);
+            noteClipRefRepository.deleteByNote(old);
             noteRepository.delete(old);
         }
         if (!olds.isEmpty()) noteRepository.flush();
