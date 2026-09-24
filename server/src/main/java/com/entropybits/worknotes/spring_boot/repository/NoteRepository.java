@@ -104,9 +104,11 @@ public interface NoteRepository extends JpaRepository<Note, Long> {
     List<Note> findByProject(Project project);
 
     /**
-     * 查找用户当前有效的自动生成结果（知识地图/时间线回顾），每个用户每种类型最多一条
+     * 查找用户当前所有自动生成结果（知识地图/时间线回顾）。正常情况下每个用户每种类型最多一条，
+     * 但历史数据修复/迁移可能残留多条（曾因此触发 IncorrectResultSizeDataAccessException 导致生成任务硬失败），
+     * 用 List 而非 Optional 以便调用方兜底清理全部旧记录而不是假设唯一。
      */
-    Optional<Note> findByOwnerAndGeneratedType(User owner, Note.GeneratedType generatedType);
+    List<Note> findAllByOwnerAndGeneratedType(User owner, Note.GeneratedType generatedType);
 
     /**
      * 根据项目ID列表查找用户的笔记（支持多选筛选）

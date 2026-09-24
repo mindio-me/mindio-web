@@ -133,16 +133,20 @@ public class BookmarkAgentService {
     }
 
     /**
-     * 用新生成的内容覆盖用户当前该类型的有效结果：先删除旧 Note 并 flush，再插入新的。
+     * 用新生成的内容覆盖用户当前该类型的有效结果：先删除所有旧 Note 并 flush，再插入新的。
+     * 按 findAll 而非假设唯一：数据库并没有 (owner_id, generated_type) 唯一索引真正兜底这个不变式，
+     * 一旦历史数据修复/迁移残留了多条（曾实际发生过），这里必须能兜底全部清掉而不是让
+     * IncorrectResultSizeDataAccessException 直接炸掉整个生成任务。
      * 必须先 flush 删除——Hibernate 默认 flush 顺序是先 INSERT 后 DELETE，如果不先 flush，
-     * 新 Note 的 INSERT 会在旧 Note 的 DELETE 之前执行，触发 (owner_id, generated_type) 唯一索引冲突。
+     * 新 Note 的 INSERT 会在旧 Note 的 DELETE 之前执行。
      * 必须通过 self 代理调用（而不是 this. 直接调用）——@Transactional 依赖 Spring 的代理式 AOP，
      * 只拦截"经过代理"的外部调用，同一个 bean 内部的 this. 自调用会绕过代理，导致注解静默失效。
      */
     @Transactional
     public Note replaceGeneratedNote(User owner, Note.GeneratedType type, String title, String markdownContent,
                                       List<SourceClip> refClips) {
-        noteRepository.findByOwnerAndGeneratedType(owner, type).ifPresent(old -> {
+        List<Note> olds = noteRepository.findAllByOwnerAndGeneratedType(owner, type);
+        for (Note old : olds) {
             // 必须先清掉旧笔记的语义索引分块再删笔记，否则 content_chunks 里会留下孤儿行，
             // 而 RetrievalService 不校验来源笔记是否还存在，已删除内容会被无限期当作 RAG 上下文召回。
             // note_image_refs 同理必须先清：外键没有 ON DELETE CASCADE，用户如果手动编辑过
@@ -150,8 +154,8 @@ public class BookmarkAgentService {
             contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, old.getId());
             noteImageRefRepository.deleteByNote(old);
             noteRepository.delete(old);
-            noteRepository.flush();
-        });
+        }
+        if (!olds.isEmpty()) noteRepository.flush();
 
         Note note = noteRepository.save(Note.builder()
                 .title(title)

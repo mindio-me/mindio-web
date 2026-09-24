@@ -163,8 +163,8 @@ class BookmarkAgentServiceTest {
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(anthropicService.summarizeCluster(eq("AI"), any()))
                 .thenReturn("这是一组 AI 相关收藏。");
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(100L);
@@ -216,8 +216,8 @@ class BookmarkAgentServiceTest {
         when(anthropicService.summarizeCluster(eq("AI"), any())).thenReturn("AI 摘要。");
         when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(101L);
@@ -252,8 +252,8 @@ class BookmarkAgentServiceTest {
         when(tagRepository.findByNameAndOwner("AI", owner)).thenReturn(java.util.Optional.of(aiTag));
         when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(102L);
@@ -288,8 +288,8 @@ class BookmarkAgentServiceTest {
         when(tagRepository.findByNameAndOwner("其他", owner)).thenReturn(java.util.Optional.of(otherTag));
         when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(105L);
@@ -327,8 +327,8 @@ class BookmarkAgentServiceTest {
         when(anthropicService.summarizeCluster(any(), any())).thenReturn("摘要。");
         when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(103L);
@@ -368,8 +368,8 @@ class BookmarkAgentServiceTest {
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         // 旧标签删完这条链接后不再有任何生效链接 —— 不应留成僵尸标签
         when(clipTagLinkRepository.existsByTag(oldTag)).thenReturn(false);
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(104L);
@@ -396,8 +396,8 @@ class BookmarkAgentServiceTest {
         when(aiProperties.getProvider()).thenReturn("anthropic");
         when(anthropicService.summarizeTimelineBucket(eq("2023 年"), any()))
                 .thenReturn("这一年收藏了不少内容。");
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.TIMELINE))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.TIMELINE))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(200L);
@@ -482,8 +482,8 @@ class BookmarkAgentServiceTest {
         when(clipRepository.findByOwner(eq(owner), any()))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
         when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.empty());
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
         when(noteRepository.save(any())).thenAnswer(inv -> {
             Note n = inv.getArgument(0);
             n.setId(300L);
@@ -525,8 +525,8 @@ class BookmarkAgentServiceTest {
         setUp();
         User owner = User.builder().id(1L).build();
         Note old = Note.builder().id(99L).owner(owner).generatedType(Note.GeneratedType.CLUSTER).build();
-        when(noteRepository.findByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(java.util.Optional.of(old));
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of(old));
         when(noteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", "内容", List.of());
@@ -534,6 +534,32 @@ class BookmarkAgentServiceTest {
         org.mockito.InOrder order = org.mockito.Mockito.inOrder(noteImageRefRepository, noteRepository);
         order.verify(noteImageRefRepository).deleteByNote(old);
         order.verify(noteRepository).delete(old);
+    }
+
+    @Test
+    void replaceGeneratedNote_deletesAllStaleRows_whenMultipleExistFromDataCorruption() {
+        // 数据库并没有真正的 (owner_id, generated_type) 唯一索引兜底"每种类型最多一条"这个假设，
+        // 历史数据修复/迁移曾实际残留过同一用户同一类型的多条旧记录（例如一次崩库抢救后
+        // owner 3 的 CLUSTER 笔记残留了 9 条），此前用 Optional 单条查询会直接抛
+        // IncorrectResultSizeDataAccessException 炸掉整个生成任务。这里验证改为 List 后
+        // 每一条旧记录都会被清理，而不是假设至多一条。
+        setUp();
+        User owner = User.builder().id(1L).build();
+        Note old1 = Note.builder().id(1L).owner(owner).generatedType(Note.GeneratedType.CLUSTER).build();
+        Note old2 = Note.builder().id(2L).owner(owner).generatedType(Note.GeneratedType.CLUSTER).build();
+        Note old3 = Note.builder().id(3L).owner(owner).generatedType(Note.GeneratedType.CLUSTER).build();
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of(old1, old2, old3));
+        when(noteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", "内容", List.of());
+
+        for (Note old : List.of(old1, old2, old3)) {
+            verify(contentIndexingService).deleteChunksFor(ContentChunk.SourceType.NOTE, old.getId());
+            verify(noteImageRefRepository).deleteByNote(old);
+            verify(noteRepository).delete(old);
+        }
+        verify(noteRepository).flush();
     }
 
     @Test
