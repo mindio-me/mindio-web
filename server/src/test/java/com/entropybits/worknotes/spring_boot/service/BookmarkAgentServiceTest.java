@@ -7,8 +7,10 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
 import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
+import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
 import com.entropybits.worknotes.spring_boot.entity.*;
 import com.entropybits.worknotes.spring_boot.repository.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -17,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +50,12 @@ class BookmarkAgentServiceTest {
     @Mock AiTranslationService doubaoService;
     @Mock ContentIndexingService contentIndexingService;
     @Mock NoteImageRefRepository noteImageRefRepository;
+    @Mock ContentChunkRepository contentChunkRepository;
+    @Mock EmbeddingService embeddingService;
+
+    // 真实 ObjectMapper 而不是 mock：只是用来解析测试里自己拼的 embeddingJson 字符串，
+    // mock 出来还要逐条 stub 每个 chunk 的解析结果，不如直接用真的省事又不失真
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private BookmarkAgentService service;
 
@@ -54,7 +63,7 @@ class BookmarkAgentServiceTest {
         service = new BookmarkAgentService(jobRepository, clipRepository, noteRepository, noteClipRefRepository,
                 userRepository, tagRepository, clipTagLinkRepository, aiProperties,
                 anthropicService, openAiService, deepseekService, doubaoService, contentIndexingService,
-                noteImageRefRepository);
+                noteImageRefRepository, contentChunkRepository, embeddingService, objectMapper);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "self", service);
     }
 
@@ -62,66 +71,104 @@ class BookmarkAgentServiceTest {
         return SourceClip.builder().id(id).title(title).sourceType(SourceClip.SourceType.WEBPAGE).build();
     }
 
-    @Test
-    void partition_splitsListIntoChunksOfGivenSize() {
-        setUp();
-        List<SourceClip> clips = List.of(clip(1, "a"), clip(2, "b"), clip(3, "c"));
-
-        List<List<SourceClip>> result = BookmarkAgentService.partition(clips, 2);
-
-        assertThat(result).hasSize(2);
-        assertThat(result.get(0)).extracting(SourceClip::getId).containsExactly(1L, 2L);
-        assertThat(result.get(1)).extracting(SourceClip::getId).containsExactly(3L);
+    /** 内容分块，embeddingJson 直接传字符串形式的向量数组，比如 "[1.0,0.0]" */
+    private ContentChunk chunk(long sourceId, String embeddingJson) {
+        return ContentChunk.builder().sourceType(ContentChunk.SourceType.CLIP).sourceId(sourceId)
+                .chunkIndex(0).chunkText("x").contentHash("h").embeddingJson(embeddingJson).build();
     }
 
     @Test
-    void groupByTopic_groupsClipsByFirstCandidateTopic() {
-        setUp();
-        SourceClip c1 = clip(1, "标题一");
-        SourceClip c2 = clip(2, "标题二");
-        SourceClip c3 = clip(3, "标题三");
-        List<SourceClip> clips = List.of(c1, c2, c3);
-        List<List<String>> topics = List.of(List.of("AI", "编程"), List.of("AI"), List.of("旅行"));
+    void averageVectors_averagesElementwiseAcrossAllVectors() {
+        float[] result = BookmarkAgentService.averageVectors(List.of(
+                new float[]{1f, 3f}, new float[]{3f, 5f}));
 
-        LinkedHashMap<String, List<SourceClip>> groups = BookmarkAgentService.groupByTopic(clips, topics);
-
-        assertThat(groups.get("AI")).containsExactly(c1, c2);
+        assertThat(result).containsExactly(2f, 4f);
     }
 
     @Test
-    void groupByTopic_mergesGroupsWithFewerThanTwoMembersIntoOther() {
-        setUp();
-        SourceClip c1 = clip(1, "标题一");
-        SourceClip c2 = clip(2, "标题二");
-        SourceClip c3 = clip(3, "标题三");
-        SourceClip c4 = clip(4, "标题四");
-        // "AI" 有 2 条；"旅行"、"美食" 各只有 1 条 —— 两个 singleton 分组都应该并入同一个"其他"
-        List<SourceClip> clips = List.of(c1, c2, c3, c4);
-        List<List<String>> topics = List.of(List.of("AI"), List.of("AI"), List.of("旅行"), List.of("美食"));
+    void updateCentroid_computesTrueRunningMeanNotJustPairwiseAverage() {
+        // 簇里已有 2 个成员、质心是 [2,2]（比如 [1,1] 和 [3,3] 的均值），加入第 3 个成员 [4,4]：
+        // 三者真实均值是 (1+3+4)/3=8/3；如果简单跟新向量取一次 pairwise 平均 (2+4)/2=3 就算错了，
+        // 必须用 existingCount 加权
+        float[] updated = BookmarkAgentService.updateCentroid(new float[]{2f, 2f}, 2, new float[]{4f, 4f});
 
-        LinkedHashMap<String, List<SourceClip>> groups = BookmarkAgentService.groupByTopic(clips, topics);
-
-        assertThat(groups).containsKey("AI");
-        assertThat(groups).doesNotContainKey("旅行");
-        assertThat(groups).doesNotContainKey("美食");
-        assertThat(groups.get("其他")).containsExactlyInAnyOrder(c3, c4);
+        assertThat(updated[0]).isCloseTo(8f / 3f, org.assertj.core.data.Offset.offset(0.0001f));
+        assertThat(updated[1]).isCloseTo(8f / 3f, org.assertj.core.data.Offset.offset(0.0001f));
     }
 
     @Test
-    void groupByTopic_treatsClipWithNoTopicsAsOther() {
-        setUp();
-        SourceClip c1 = clip(1, "标题一");
-        List<SourceClip> clips = List.of(c1);
-        List<List<String>> topics = List.of(List.of());
+    void clusterBySimilarity_groupsClipsWithVectorsAboveThresholdAndSeparatesTheRest() {
+        SourceClip c1 = clip(1, "a");
+        SourceClip c2 = clip(2, "b");
+        SourceClip c3 = clip(3, "c");
+        Map<Long, float[]> vectors = Map.of(
+                1L, new float[]{1f, 0f},
+                2L, new float[]{1f, 0f},  // 跟 c1 完全同向，相似度 1.0，应该分到一簇
+                3L, new float[]{0f, 1f}); // 跟前两者正交，相似度 0.0，应该单独成簇
 
-        LinkedHashMap<String, List<SourceClip>> groups = BookmarkAgentService.groupByTopic(clips, topics);
+        List<List<SourceClip>> clusters = BookmarkAgentService.clusterBySimilarity(List.of(c1, c2, c3), vectors, 0.7);
 
-        assertThat(groups.get("其他")).containsExactly(c1);
+        assertThat(clusters).hasSize(2);
+        assertThat(clusters.get(0)).containsExactly(c1, c2);
+        assertThat(clusters.get(1)).containsExactly(c3);
+    }
+
+    @Test
+    void clusterBySimilarity_clipWithoutVectorFormsItsOwnCluster() {
+        SourceClip c1 = clip(1, "a");
+        SourceClip c2 = clip(2, "b"); // 没有向量：computeClipVectors 里 embedding 彻底失败的兜底情况
+
+        List<List<SourceClip>> clusters = BookmarkAgentService.clusterBySimilarity(
+                List.of(c1, c2), Map.of(1L, new float[]{1f, 0f}), 0.7);
+
+        assertThat(clusters).hasSize(2);
+        assertThat(clusters.get(0)).containsExactly(c1);
+        assertThat(clusters.get(1)).containsExactly(c2);
+    }
+
+    @Test
+    void foldSingletonClusters_foldsSizeOneClustersIntoOtherKeepsRestAsNamable() {
+        SourceClip c1 = clip(1, "a"), c2 = clip(2, "b"), c3 = clip(3, "c");
+        List<List<SourceClip>> clusters = List.of(List.of(c1, c2), List.of(c3));
+
+        BookmarkAgentService.FoldedClusters folded = BookmarkAgentService.foldSingletonClusters(clusters);
+
+        assertThat(folded.namable()).containsExactly(List.of(c1, c2));
+        assertThat(folded.other()).containsExactly(c3);
+    }
+
+    @Test
+    void pickClusterLabel_picksMostFrequentTopCandidateAcrossCluster() {
+        String label = BookmarkAgentService.pickClusterLabel(List.of(
+                List.of("AI", "编程"), List.of("AI"), List.of("旅行")));
+
+        assertThat(label).isEqualTo("AI");
+    }
+
+    @Test
+    void pickClusterLabel_fallsBackToOtherWhenAllCandidatesEmpty() {
+        String label = BookmarkAgentService.pickClusterLabel(List.of(List.of(), List.of()));
+
+        assertThat(label).isEqualTo("其他");
+    }
+
+    @Test
+    void foldSmallNamedGroups_foldsGroupsSmallerThanTwoIntoOtherAndKeepsExistingOther() {
+        SourceClip c1 = clip(1, "a"), c2 = clip(2, "b"), c3 = clip(3, "c"), c4 = clip(4, "d");
+        LinkedHashMap<String, List<SourceClip>> groups = new LinkedHashMap<>();
+        groups.put("AI", new ArrayList<>(List.of(c1, c2)));
+        groups.put("旅行", new ArrayList<>(List.of(c3))); // 只有 1 条，该被折叠
+        groups.put("其他", new ArrayList<>(List.of(c4))); // 已有的"其他"要保留并合并
+
+        LinkedHashMap<String, List<SourceClip>> result = BookmarkAgentService.foldSmallNamedGroups(groups);
+
+        assertThat(result).containsKey("AI");
+        assertThat(result).doesNotContainKey("旅行");
+        assertThat(result.get("其他")).containsExactlyInAnyOrder(c3, c4);
     }
 
     @Test
     void groupByYear_bucketsClipsByOriginalBookmarkedAtYearAscending() {
-        setUp();
         SourceClip c2019 = clip(1, "2019年的收藏");
         c2019.setOriginalBookmarkedAt(LocalDateTime.of(2019, 5, 1, 0, 0));
         SourceClip c2023 = clip(2, "2023年的收藏");
@@ -136,9 +183,7 @@ class BookmarkAgentServiceTest {
 
     @Test
     void groupByYear_fallsBackToCreatedAtWhenOriginalBookmarkedAtIsNull() {
-        setUp();
-        SourceClip clip = clip(1, "旧数据");
-        clip.setOriginalBookmarkedAt(null);
+        SourceClip clip = clip(1, "没有原始收藏时间");
         clip.setCreatedAt(LocalDateTime.of(2021, 6, 1, 0, 0));
 
         Map<Integer, List<SourceClip>> byYear = BookmarkAgentService.groupByYear(List.of(clip));
@@ -147,7 +192,7 @@ class BookmarkAgentServiceTest {
     }
 
     @Test
-    void runCluster_classifiesGroupsSummarizesAndReplacesNote() throws Exception {
+    void runCluster_semanticClustersSimilarClipsAndReplacesNote() throws Exception {
         setUp();
         User owner = User.builder().id(1L).build();
         SourceClip c1 = clip(1, "标题一");
@@ -157,6 +202,9 @@ class BookmarkAgentServiceTest {
         List<SourceClip> clips = List.of(c1, c2);
 
         when(aiProperties.getProvider()).thenReturn("anthropic");
+        // c1、c2 内容向量相同，语义聚类阶段会把它们分进同一簇
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(chunk(1, "[1.0,0.0]"), chunk(2, "[1.0,0.0]")));
         when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
                 .thenReturn(List.of(List.of("AI"), List.of("AI")));
         when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -180,18 +228,89 @@ class BookmarkAgentServiceTest {
                 .contains("这是一组 AI 相关收藏。")
                 .contains("- [标题一](https://example.com/a)")
                 .contains("- [标题二](https://example.com/b)");
-        verify(jobRepository).startPhase(1L, 1, "CLASSIFYING"); // 1 个批次
-        verify(jobRepository).startPhase(1L, 1, "SUMMARIZING"); // 1 个分组，各阶段单独计数
-        verify(jobRepository, times(2)).incrementCompletedSteps(1L); // 1 个批次 + 1 个分组
+        verify(jobRepository).startPhase(1L, 1, "CLASSIFYING"); // 语义聚类阶段固定 1 步
+        verify(jobRepository).startPhase(1L, 1, "SUMMARIZING"); // 1 个最终分组
+        verify(jobRepository, times(2)).incrementCompletedSteps(1L); // 聚类 1 步 + 1 个分组
         verify(noteClipRefRepository, times(2)).save(any());
+    }
+
+    @Test
+    void runCluster_singletonClusterSkipsNamingCallAndFoldsDirectlyIntoOtherTag() throws Exception {
+        // 只有 1 条待分类的收藏，语义聚类阶段必然是单独一簇，够不上命名门槛（<2 个成员），
+        // 直接并入"其他"——不该为它单独花一次 AI 调用去起名字
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceUrl("https://example.com/a");
+        c1.setOwner(owner);
+        List<SourceClip> clips = List.of(c1);
+        Tag otherTag = Tag.builder().id(11L).name("其他").owner(owner).usedByClips(false).build();
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(anthropicService.summarizeCluster(eq("其他"), any())).thenReturn("摘要。");
+        when(tagRepository.findByNameAndOwner("其他", owner)).thenReturn(java.util.Optional.of(otherTag));
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(105L);
+            return n;
+        });
+
+        service.runCluster(1L, owner, clips);
+
+        verify(anthropicService, org.mockito.Mockito.never()).classifyTopics(any(), any());
+        verify(clipTagLinkRepository).save(argThat(l ->
+                l.getClip() == c1 && l.getTag() == otherTag && Boolean.TRUE.equals(l.getAiSuggested())));
+    }
+
+    @Test
+    void runCluster_mergesTwoSeparateEmbeddingClustersWhenAiGivesThemTheSameLabel() throws Exception {
+        // 语义聚类只保证"向量够相似的分到一起"，不保证同义表述一定会被分到同一簇（比如两组内容
+        // 各自相似、但彼此向量正交）；命名阶段如果两个簇被独立起了同一个名字，应该直接合并成一个
+        // 分组输出，而不是各自单独出一节——这是这次改造要解决的"同义词碎片化"问题的核心验证
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一"); c1.setSourceUrl("https://example.com/a");
+        SourceClip c2 = clip(2, "标题二"); c2.setSourceUrl("https://example.com/b");
+        SourceClip c3 = clip(3, "标题三"); c3.setSourceUrl("https://example.com/c");
+        SourceClip c4 = clip(4, "标题四"); c4.setSourceUrl("https://example.com/d");
+        List<SourceClip> clips = List.of(c1, c2, c3, c4);
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        // c1、c2 向量相同分一簇；c3、c4 向量相同分另一簇；两簇彼此正交，向量层面绝不会合并到一起
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(
+                        chunk(1, "[1.0,0.0]"), chunk(2, "[1.0,0.0]"),
+                        chunk(3, "[0.0,1.0]"), chunk(4, "[0.0,1.0]")));
+        when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
+                .thenReturn(List.of(List.of("AI"), List.of("AI")));
+        when(anthropicService.classifyTopics(List.of("标题三", "标题四"), List.of()))
+                .thenReturn(List.of(List.of("AI"), List.of("AI")));
+        when(anthropicService.summarizeCluster(eq("AI"), any())).thenReturn("摘要。");
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(106L);
+            return n;
+        });
+
+        Note result = service.runCluster(1L, owner, clips);
+
+        assertThat(result.getContent()).containsOnlyOnce("## AI");
+        verify(jobRepository).startPhase(1L, 1, "SUMMARIZING"); // 合并后只剩 1 个分组
+        verify(noteClipRefRepository, times(4)).save(any());
     }
 
     @Test
     void runCluster_skipsClassificationForClipsWithManuallyAdjustedTags() throws Exception {
         setUp();
         User owner = User.builder().id(1L).build();
-        // groupByTopic 会把成员数 < 2 的分组并入"其他"，所以人工组和 AI 组都各造 2 条才能各自成组，
-        // 从而验证"人工分类"这个分组名确实来自 manualTopicFor 而不是被合并掉
         SourceClip manual1 = clip(1, "标题一");
         manual1.setSourceUrl("https://example.com/a1");
         manual1.setTagsManuallyAdjusted(true);
@@ -210,6 +329,9 @@ class BookmarkAgentServiceTest {
         when(aiProperties.getProvider()).thenReturn("anthropic");
         when(clipTagLinkRepository.findByClip(manual1)).thenReturn(List.of(manualLink1));
         when(clipTagLinkRepository.findByClip(manual2)).thenReturn(List.of(manualLink2));
+        // 只有 auto1、auto2（id=3,4）会被传去查向量：手动调整过标签的 clip 完全不参与语义聚类
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(chunk(3, "[1.0,0.0]"), chunk(4, "[1.0,0.0]")));
         when(anthropicService.classifyTopics(List.of("标题三", "标题四"), List.of()))
                 .thenReturn(List.of(List.of("AI"), List.of("AI")));
         when(anthropicService.summarizeCluster(eq("人工分类"), any())).thenReturn("人工分类摘要。");
@@ -232,13 +354,12 @@ class BookmarkAgentServiceTest {
     }
 
     @Test
-    void runCluster_upsertsAiSuggestedTagFromFirstCandidateTopic() throws Exception {
+    void runCluster_upsertsAiSuggestedTagFromClusterLabel() throws Exception {
         setUp();
         User owner = User.builder().id(1L).build();
         SourceClip c1 = clip(1, "标题一");
         c1.setSourceUrl("https://example.com/a");
         c1.setOwner(owner);
-        // groupByTopic 会把成员数 < 2 的分组并入"其他"，两条都归到 AI 才能让 AI 分组本身不被合并掉
         SourceClip c2 = clip(2, "标题二");
         c2.setSourceUrl("https://example.com/b");
         c2.setOwner(owner);
@@ -246,6 +367,8 @@ class BookmarkAgentServiceTest {
         Tag aiTag = Tag.builder().id(7L).name("AI").owner(owner).usedByClips(false).build();
 
         when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(chunk(1, "[1.0,0.0]"), chunk(2, "[1.0,0.0]")));
         when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
                 .thenReturn(List.of(List.of("AI"), List.of("AI")));
         when(anthropicService.summarizeCluster(eq("AI"), any())).thenReturn("摘要。");
@@ -270,58 +393,25 @@ class BookmarkAgentServiceTest {
     }
 
     @Test
-    void runCluster_foldsSingletonTopicIntoOtherTagToMatchKnowledgeMapDoc() throws Exception {
-        setUp();
-        User owner = User.builder().id(1L).build();
-        SourceClip c1 = clip(1, "标题一");
-        c1.setSourceUrl("https://example.com/a");
-        c1.setOwner(owner);
-        List<SourceClip> clips = List.of(c1);
-        // 单独一条 clip 命中的主题词在 groupByTopic 里成员数 < 2，会被并入"其他"；
-        // 标签落库必须用这个合并后的最终分组名，而不是 AI 原始候选词，否则左侧标签列表会和知识地图标题不一致
-        Tag otherTag = Tag.builder().id(11L).name("其他").owner(owner).usedByClips(false).build();
-
-        when(aiProperties.getProvider()).thenReturn("anthropic");
-        when(anthropicService.classifyTopics(List.of("标题一"), List.of()))
-                .thenReturn(List.of(List.of("小众话题")));
-        when(anthropicService.summarizeCluster(eq("其他"), any())).thenReturn("摘要。");
-        when(tagRepository.findByNameAndOwner("其他", owner)).thenReturn(java.util.Optional.of(otherTag));
-        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
-                .thenReturn(List.of());
-        when(noteRepository.save(any())).thenAnswer(inv -> {
-            Note n = inv.getArgument(0);
-            n.setId(105L);
-            return n;
-        });
-
-        service.runCluster(1L, owner, clips);
-
-        verify(clipTagLinkRepository).save(argThat(l ->
-                l.getClip() == c1 && l.getTag() == otherTag && Boolean.TRUE.equals(l.getAiSuggested())));
-        verify(tagRepository, org.mockito.Mockito.never()).findByNameAndOwner(eq("小众话题"), any());
-    }
-
-    @Test
     void runCluster_demotesStaleAiSuggestedLinkWhenManuallyAddedTooInsteadOfDeleting() throws Exception {
         setUp();
         User owner = User.builder().id(1L).build();
         SourceClip c1 = clip(1, "标题一");
         c1.setSourceUrl("https://example.com/a");
         c1.setOwner(owner);
-        // groupByTopic 会把成员数 < 2 的分组并入"其他"，加一条同样落在"新标签"的 clip 让该分组不被合并掉
         SourceClip c2 = clip(2, "标题二");
         c2.setSourceUrl("https://example.com/b");
         c2.setOwner(owner);
         List<SourceClip> clips = List.of(c1, c2);
         Tag oldTag = Tag.builder().id(8L).name("旧标签").owner(owner).usedByClips(true).build();
         // 上一轮生成的 aiSuggested 关联，同时被用户手动确认过（manuallyAdded=true），
-        // 这一轮 classifyTopics 命中了不同的词，旧关联应当被"降级"而不是删除
+        // 这一轮命中了不同的簇名，旧关联应当被"降级"而不是删除
         ClipTagLink staleLink = ClipTagLink.builder().clip(c1).tag(oldTag).aiSuggested(true).manuallyAdded(true).build();
 
         when(aiProperties.getProvider()).thenReturn("anthropic");
         when(clipTagLinkRepository.findByClip(c1)).thenReturn(List.of(staleLink));
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(chunk(1, "[1.0,0.0]"), chunk(2, "[1.0,0.0]")));
         when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
                 .thenReturn(List.of(List.of("新标签"), List.of("新标签")));
         when(anthropicService.summarizeCluster(any(), any())).thenReturn("摘要。");
@@ -349,18 +439,19 @@ class BookmarkAgentServiceTest {
         SourceClip c1 = clip(1, "标题一");
         c1.setSourceUrl("https://example.com/a");
         c1.setOwner(owner);
-        // groupByTopic 会把成员数 < 2 的分组并入"其他"，加一条同样落在"新标签"的 clip 让该分组不被合并掉
         SourceClip c2 = clip(2, "标题二");
         c2.setSourceUrl("https://example.com/b");
         c2.setOwner(owner);
         List<SourceClip> clips = List.of(c1, c2);
         Tag oldTag = Tag.builder().id(8L).name("旧标签").owner(owner).usedByClips(true).build();
-        // 上一轮纯 AI 建议、用户从未手动确认过（manuallyAdded=false），这一轮没再命中同一个词，
+        // 上一轮纯 AI 建议、用户从未手动确认过（manuallyAdded=false），这一轮没再命中同一个簇名，
         // 旧关联应当被直接删除而不是保留降级
         ClipTagLink staleLink = ClipTagLink.builder().clip(c1).tag(oldTag).aiSuggested(true).manuallyAdded(false).build();
 
         when(aiProperties.getProvider()).thenReturn("anthropic");
         when(clipTagLinkRepository.findByClip(c1)).thenReturn(List.of(staleLink));
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(chunk(1, "[1.0,0.0]"), chunk(2, "[1.0,0.0]")));
         when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
                 .thenReturn(List.of(List.of("新标签"), List.of("新标签")));
         when(anthropicService.summarizeCluster(any(), any())).thenReturn("摘要。");
@@ -502,10 +593,15 @@ class BookmarkAgentServiceTest {
     void runGenerate_catchesExceptionAndCallsFailJob() throws Exception {
         setUp();
         User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        SourceClip c2 = clip(2, "标题二");
         when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(owner));
         when(clipRepository.findByOwner(eq(owner), any()))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(clip(1, "标题一"))));
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(c1, c2)));
         when(aiProperties.getProvider()).thenReturn("anthropic");
+        // c1、c2 向量相同才会真的进到 nameClusters 触发 classifyTopics 调用
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(chunk(1, "[1.0,0.0]"), chunk(2, "[1.0,0.0]")));
         when(anthropicService.classifyTopics(any(), any())).thenThrow(new RuntimeException("AI 调用失败"));
         when(jobRepository.findById(1L)).thenReturn(java.util.Optional.of(
                 BookmarkAgentJob.builder().id(1L).status(BookmarkAgentJob.Status.RUNNING).build()));

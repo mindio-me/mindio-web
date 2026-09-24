@@ -7,8 +7,10 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
 import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
+import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
 import com.entropybits.worknotes.spring_boot.entity.*;
 import com.entropybits.worknotes.spring_boot.repository.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -23,6 +25,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -31,6 +34,9 @@ public class BookmarkAgentService {
     /** 进度阶段标识，原样透传给前端翻译成对应的阶段说明文案 */
     static final String PHASE_CLASSIFYING = "CLASSIFYING";
     static final String PHASE_SUMMARIZING = "SUMMARIZING";
+
+    /** 语义聚类相似度阈值，跟 RetrievalService 检索用的阈值口径一致，需要时独立调 */
+    private static final double CLUSTER_SIMILARITY_THRESHOLD = 0.7;
 
     private final BookmarkAgentJobRepository jobRepository;
     private final SourceClipRepository clipRepository;
@@ -46,6 +52,9 @@ public class BookmarkAgentService {
     private final AiTranslationService doubaoService;
     private final ContentIndexingService contentIndexingService;
     private final NoteImageRefRepository noteImageRefRepository;
+    private final ContentChunkRepository contentChunkRepository;
+    private final EmbeddingService embeddingService;
+    private final ObjectMapper objectMapper;
 
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
 
@@ -67,7 +76,10 @@ public class BookmarkAgentService {
             @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
             @Qualifier("doubaoTranslationService") AiTranslationService doubaoService,
             ContentIndexingService contentIndexingService,
-            NoteImageRefRepository noteImageRefRepository) {
+            NoteImageRefRepository noteImageRefRepository,
+            ContentChunkRepository contentChunkRepository,
+            EmbeddingService embeddingService,
+            ObjectMapper objectMapper) {
         this.jobRepository = jobRepository;
         this.clipRepository = clipRepository;
         this.noteRepository = noteRepository;
@@ -82,42 +94,112 @@ public class BookmarkAgentService {
         this.doubaoService = doubaoService;
         this.contentIndexingService = contentIndexingService;
         this.noteImageRefRepository = noteImageRefRepository;
+        this.contentChunkRepository = contentChunkRepository;
+        this.embeddingService = embeddingService;
+        this.objectMapper = objectMapper;
     }
 
-    /** 把 clips 按每批 size 条切分，用于分批调用 classifyTopics */
-    static List<List<SourceClip>> partition(List<SourceClip> list, int size) {
-        List<List<SourceClip>> result = new ArrayList<>();
-        for (int i = 0; i < list.size(); i += size) {
-            result.add(list.subList(i, Math.min(i + size, list.size())));
+    /**
+     * 把一条 clip 的多个分块向量平均成一个代表向量，反映全文的语义重心
+     * （比只取第一块更能代表长文章，短文里"标题+开场白"占比过大的问题也被稀释掉）。
+     */
+    static float[] averageVectors(List<float[]> vectors) {
+        int dim = vectors.get(0).length;
+        float[] result = new float[dim];
+        for (float[] v : vectors) {
+            for (int i = 0; i < dim; i++) result[i] += v[i];
+        }
+        for (int i = 0; i < dim; i++) result[i] /= vectors.size();
+        return result;
+    }
+
+    /** 簇质心的增量更新：加入一个新成员后的真实算术平均（existingCount 是加入前的成员数） */
+    static float[] updateCentroid(float[] centroid, int existingCount, float[] newVector) {
+        float[] result = new float[centroid.length];
+        for (int i = 0; i < centroid.length; i++) {
+            result[i] = (centroid[i] * existingCount + newVector[i]) / (existingCount + 1);
         }
         return result;
     }
 
     /**
-     * 每个 clip 取候选主题词列表的第一个作为主题词，按主题词精确字符串匹配分组；
-     * 成员数 < 2 的分组（含没有候选主题词的 clip）一律并入统一的"其他"分组。
+     * 贪心阈值聚类：按输入顺序把每条 clip 归入跟它相似度最高、且达到阈值的已有簇（比较簇质心），
+     * 否则新开一簇。没有向量的 clip（embedding 计算失败）单独成一簇，交给调用方按成员数兜底处理。
+     * 不在这里做"成员数 < 2 并入其他"的折叠——折叠前还要给簇命名，命名可能让原本独立的两个簇同名
+     * 合并到 >= 2 个成员，提前折叠会把这种后续可能达标的簇过早误判成孤例。
      */
-    static LinkedHashMap<String, List<SourceClip>> groupByTopic(List<SourceClip> clips, List<List<String>> topicsPerClip) {
-        LinkedHashMap<String, List<SourceClip>> byTopic = new LinkedHashMap<>();
-        for (int i = 0; i < clips.size(); i++) {
-            List<String> topics = topicsPerClip.get(i);
-            String topic = (topics != null && !topics.isEmpty()) ? topics.get(0).trim() : "";
-            if (topic.isEmpty()) topic = "其他";
-            byTopic.computeIfAbsent(topic, k -> new ArrayList<>()).add(clips.get(i));
-        }
-
-        LinkedHashMap<String, List<SourceClip>> result = new LinkedHashMap<>();
-        List<SourceClip> misc = new ArrayList<>();
-        for (Map.Entry<String, List<SourceClip>> entry : byTopic.entrySet()) {
-            if ("其他".equals(entry.getKey()) || entry.getValue().size() < 2) {
-                misc.addAll(entry.getValue());
+    static List<List<SourceClip>> clusterBySimilarity(List<SourceClip> clips, Map<Long, float[]> vectorsByClipId,
+                                                        double threshold) {
+        List<List<SourceClip>> clusters = new ArrayList<>();
+        List<float[]> centroids = new ArrayList<>();
+        for (SourceClip clip : clips) {
+            float[] vector = vectorsByClipId.get(clip.getId());
+            if (vector == null) {
+                clusters.add(new ArrayList<>(List.of(clip)));
+                centroids.add(null);
+                continue;
+            }
+            int bestIdx = -1;
+            double bestScore = threshold;
+            for (int i = 0; i < centroids.size(); i++) {
+                float[] centroid = centroids.get(i);
+                if (centroid == null) continue;
+                double score = RetrievalService.cosineSimilarity(vector, centroid);
+                if (score >= bestScore) {
+                    bestScore = score;
+                    bestIdx = i;
+                }
+            }
+            if (bestIdx >= 0) {
+                List<SourceClip> cluster = clusters.get(bestIdx);
+                centroids.set(bestIdx, updateCentroid(centroids.get(bestIdx), cluster.size(), vector));
+                cluster.add(clip);
             } else {
-                result.put(entry.getKey(), entry.getValue());
+                clusters.add(new ArrayList<>(List.of(clip)));
+                centroids.add(vector);
             }
         }
-        if (!misc.isEmpty()) {
-            result.put("其他", misc);
+        return clusters;
+    }
+
+    /** clusterBySimilarity 的折叠结果：namable 是够格命名的簇（成员数 >= 2），other 是待并入"其他"的散件 */
+    record FoldedClusters(List<List<SourceClip>> namable, List<SourceClip> other) {}
+
+    /** 成员数 < 2 的簇（含没有向量、单独成簇的）一律并入统一的"其他"，规则跟旧版分组逻辑一致 */
+    static FoldedClusters foldSingletonClusters(List<List<SourceClip>> clusters) {
+        List<List<SourceClip>> namable = new ArrayList<>();
+        List<SourceClip> other = new ArrayList<>();
+        for (List<SourceClip> cluster : clusters) {
+            if (cluster.size() < 2) other.addAll(cluster);
+            else namable.add(cluster);
         }
+        return new FoldedClusters(namable, other);
+    }
+
+    /** 一簇标题里出现次数最多的候选主题词当簇名；全空则退回"其他" */
+    static String pickClusterLabel(List<List<String>> candidatesPerTitle) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (List<String> candidates : candidatesPerTitle) {
+            if (candidates == null || candidates.isEmpty()) continue;
+            String top = candidates.get(0).trim();
+            if (!top.isEmpty()) counts.merge(top, 1, Integer::sum);
+        }
+        return counts.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("其他");
+    }
+
+    /** 不管来源是 AI 语义簇还是人工标签，成员数 < 2 且不是"其他"本身的一律并入"其他"（最终安全网） */
+    static LinkedHashMap<String, List<SourceClip>> foldSmallNamedGroups(LinkedHashMap<String, List<SourceClip>> groups) {
+        LinkedHashMap<String, List<SourceClip>> result = new LinkedHashMap<>();
+        List<SourceClip> misc = new ArrayList<>(groups.getOrDefault("其他", List.of()));
+        for (Map.Entry<String, List<SourceClip>> entry : groups.entrySet()) {
+            if ("其他".equals(entry.getKey())) continue;
+            if (entry.getValue().size() < 2) misc.addAll(entry.getValue());
+            else result.put(entry.getKey(), entry.getValue());
+        }
+        if (!misc.isEmpty()) result.put("其他", misc);
         return result;
     }
 
@@ -221,8 +303,11 @@ public class BookmarkAgentService {
         List<SourceClip> toClassify = clips.stream()
                 .filter(c -> !Boolean.TRUE.equals(c.getTagsManuallyAdjusted()))
                 .toList();
-        List<List<SourceClip>> batches = partition(toClassify, 50);
-        jobRepository.startPhase(jobId, batches.size(), PHASE_CLASSIFYING);
+
+        jobRepository.startPhase(jobId, 1, PHASE_CLASSIFYING);
+        Map<Long, float[]> vectors = computeClipVectors(toClassify);
+        List<List<SourceClip>> rawClusters = clusterBySimilarity(toClassify, vectors, CLUSTER_SIMILARITY_THRESHOLD);
+        jobRepository.incrementCompletedSteps(jobId);
 
         List<String> existingTopics = tagRepository.findByOwnerAndUsedByClipsTrue(owner).stream()
                 .map(Tag::getName)
@@ -231,28 +316,24 @@ public class BookmarkAgentService {
                 .limit(200)
                 .toList();
 
-        Map<Long, List<String>> topicsByClipId = new HashMap<>();
-        for (List<SourceClip> batch : batches) {
-            List<String> titles = batch.stream().map(SourceClip::getTitle).toList();
-            List<List<String>> batchTopics = ai.classifyTopics(titles, existingTopics);
-            for (int i = 0; i < batch.size(); i++) {
-                topicsByClipId.put(batch.get(i).getId(), batchTopics.get(i));
-            }
-            jobRepository.incrementCompletedSteps(jobId);
+        FoldedClusters folded = foldSingletonClusters(rawClusters);
+        LinkedHashMap<String, List<SourceClip>> groups = nameClusters(folded.namable(), existingTopics, ai);
+        if (!folded.other().isEmpty()) {
+            groups.merge("其他", folded.other(), (existing, toAdd) -> { existing.addAll(toAdd); return existing; });
         }
 
-        List<List<String>> topicsPerClip = new ArrayList<>();
+        // 手动调整过标签的 clip 不参与语义聚类，按它自己当前的人工标签归组，跟 AI 语义簇一起走最终折叠
         for (SourceClip clip : clips) {
-            topicsPerClip.add(topicsByClipId.containsKey(clip.getId())
-                    ? topicsByClipId.get(clip.getId())
-                    : manualTopicFor(clip));
+            if (!Boolean.TRUE.equals(clip.getTagsManuallyAdjusted())) continue;
+            String manual = manualTopicFor(clip).stream().findFirst().orElse("其他");
+            groups.merge(manual, new ArrayList<>(List.of(clip)), (existing, toAdd) -> { existing.addAll(toAdd); return existing; });
         }
+        groups = foldSmallNamedGroups(groups);
 
-        LinkedHashMap<String, List<SourceClip>> groups = groupByTopic(clips, topicsPerClip);
         jobRepository.startPhase(jobId, groups.size(), PHASE_SUMMARIZING);
 
-        // 标签落库必须用 groupByTopic 合并后的最终分组名（成员数 < 2 的已并入"其他"），
-        // 而不是 AI 原始候选词，否则左侧标签列表会比知识地图标题多出大量只关联 1 条收藏的零散标签
+        // 标签落库必须用最终折叠合并后的分组名（成员数 < 2 的已并入"其他"），
+        // 而不是语义簇命名前的候选词，否则左侧标签列表会比知识地图标题多出大量只关联 1 条收藏的零散标签
         Map<Long, String> finalTopicByClipId = new HashMap<>();
         for (Map.Entry<String, List<SourceClip>> entry : groups.entrySet()) {
             for (SourceClip clip : entry.getValue()) {
@@ -274,6 +355,62 @@ public class BookmarkAgentService {
         }
 
         return self.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", markdown.toString(), orderedRefs);
+    }
+
+    /**
+     * 给每条待分类的收藏算一个代表向量：有正文分块（reindexClip 已生成的 ContentChunk）就取全部
+     * 分块向量的平均；没有正文（仅链接/抓取失败）或分块向量解析失败，现算一次标题 embedding 兜底。
+     * 标题 embedding 也失败的极端情况：不放进结果 map，clusterBySimilarity 会把它当缺失向量单独
+     * 成簇，最终被并入"其他"，不会让整个生成任务失败。
+     */
+    private Map<Long, float[]> computeClipVectors(List<SourceClip> clips) {
+        List<Long> clipIds = clips.stream().map(SourceClip::getId).toList();
+        Map<Long, List<ContentChunk>> chunksByClipId = contentChunkRepository
+                .findBySourceTypeAndSourceIdIn(ContentChunk.SourceType.CLIP, clipIds).stream()
+                .collect(Collectors.groupingBy(ContentChunk::getSourceId));
+
+        Map<Long, float[]> vectors = new HashMap<>();
+        for (SourceClip clip : clips) {
+            List<float[]> chunkVectors = chunksByClipId.getOrDefault(clip.getId(), List.of()).stream()
+                    .map(this::parseEmbedding)
+                    .filter(v -> v.length > 0)
+                    .toList();
+            if (!chunkVectors.isEmpty()) {
+                vectors.put(clip.getId(), averageVectors(chunkVectors));
+                continue;
+            }
+            try {
+                vectors.put(clip.getId(), embeddingService.embed(clip.getTitle()));
+            } catch (Exception e) {
+                log.warn("为收藏 {} 计算标题 embedding 失败，聚类时归入待并入其他的组: {}", clip.getId(), e.getMessage());
+            }
+        }
+        return vectors;
+    }
+
+    private float[] parseEmbedding(ContentChunk chunk) {
+        try {
+            return objectMapper.readValue(chunk.getEmbeddingJson(), float[].class);
+        } catch (Exception e) {
+            return new float[0]; // 脏数据：这一块不参与平均，不影响整体向量计算
+        }
+    }
+
+    /**
+     * 给每个语义簇起名字：复用 classifyTopics（同一批标题、同一份已有标签词表），取簇内出现次数
+     * 最多的候选词当簇名。两个不同的语义簇如果被独立起了同一个名字，直接合并——这是符合直觉的
+     * 结果（说明它们在标签词表的粒度上其实是一类），不算异常。
+     */
+    private LinkedHashMap<String, List<SourceClip>> nameClusters(List<List<SourceClip>> clusters,
+                                                                   List<String> existingTopics,
+                                                                   AiTranslationService ai) throws Exception {
+        LinkedHashMap<String, List<SourceClip>> named = new LinkedHashMap<>();
+        for (List<SourceClip> cluster : clusters) {
+            List<String> titles = cluster.stream().map(SourceClip::getTitle).toList();
+            String label = pickClusterLabel(ai.classifyTopics(titles, existingTopics));
+            named.merge(label, new ArrayList<>(cluster), (existing, toAdd) -> { existing.addAll(toAdd); return existing; });
+        }
+        return named;
     }
 
     /** 手动调整过标签的 clip 不参与 AI 分类，文档分组时退回它自己当前的人工标签（没有则归入"其他"） */
