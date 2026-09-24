@@ -344,9 +344,9 @@
       <div v-show="!wsIsNarrow && !rightPanelCollapsed" class="col-resizer" @pointerdown="wsStartResize('right', $event)"></div>
 
       <!-- ========== 右侧信息 ========== -->
-      <aside v-show="!rightPanelCollapsed" class="workspace-right" :class="{ 'workspace-right--ai': aiPanelActive }">
-        <ChatPanel v-if="aiPanelActive" @close="aiPanelActive = false" />
-        <div class="right-panel" v-if="!aiPanelActive && selectedProject">
+      <aside v-show="!rightPanelCollapsed" class="workspace-right" :class="{ 'workspace-right--ai': aiPanelDocked }">
+        <ChatPanel v-if="aiPanelDocked" @close="aiPanelActive = false" />
+        <div class="right-panel" v-if="!aiPanelDocked && selectedProject">
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.projects.rightPanelTitle') }}</h3>
             <div class="right-meta-list">

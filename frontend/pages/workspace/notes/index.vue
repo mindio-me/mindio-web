@@ -455,10 +455,10 @@
       <aside
         v-show="!rightPanelCollapsed"
         class="workspace-right"
-        :class="{ 'workspace-right--ai': aiPanelActive }"
+        :class="{ 'workspace-right--ai': aiPanelDocked }"
       >
         <ChatPanel
-          v-if="aiPanelActive"
+          v-if="aiPanelDocked"
           :note-id="activeNote ? Number(activeNote.id) : null"
           @close="aiPanelActive = false"
         />
