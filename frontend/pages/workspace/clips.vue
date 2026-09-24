@@ -37,7 +37,7 @@
             <a
               v-if="agentJobs[type].status === 'DONE'"
               class="agent-last-generated-link"
-              @click="$router.push('/workspace/notes/' + agentJobs[type].resultNoteId)"
+              @click="$router.push('/workspace/notes?openNoteId=' + agentJobs[type].resultNoteId)"
             >{{ $t('workspace.clips.generateLastAt', { date: formatDate(agentJobs[type].finishedAt) }) }}</a>
           </div>
         </div>
