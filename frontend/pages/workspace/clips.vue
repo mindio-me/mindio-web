@@ -166,7 +166,12 @@
       <button type="button" class="rail-toggle rail-toggle-right" @click="rightRailOpen = !rightRailOpen">
         <i class="el-icon-time"></i>
       </button>
-      <aside class="workspace-right clips-right-rail" :class="{ 'is-open': rightRailOpen }">
+      <aside
+        class="workspace-right clips-right-rail"
+        :class="{ 'is-open': rightRailOpen, 'workspace-right--ai': aiPanelDocked }"
+      >
+        <ChatPanel v-if="aiPanelDocked" @close="aiPanelActive = false" />
+        <template v-if="!aiPanelDocked">
         <div class="rail-section-title">{{ $t('workspace.clips.recentClips') }}</div>
         <ul class="recent-list">
           <li v-for="clip in recentClips" :key="clip.id" class="recent-item" @click="openDetail(clip)">
@@ -175,6 +180,7 @@
           </li>
           <li v-if="recentClips.length === 0" class="tag-tile-empty">{{ $t('workspace.clips.noRecentClips') }}</li>
         </ul>
+        </template>
       </aside>
     </div>
 
@@ -346,11 +352,12 @@
 <script>
 import SourceClipCreateDialog from '~/components/SourceClipCreateDialog.vue'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
+import workspaceAiDock from '~/mixins/workspaceAiDock'
 
 export default {
   name: 'ClipsPage',
   layout: 'workspace',
-  mixins: [workspaceLayoutResize],
+  mixins: [workspaceLayoutResize, workspaceAiDock],
   components: { SourceClipCreateDialog },
   middleware: 'auth',
   data() {
