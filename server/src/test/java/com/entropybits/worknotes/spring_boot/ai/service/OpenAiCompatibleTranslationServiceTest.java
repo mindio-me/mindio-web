@@ -74,7 +74,9 @@ class OpenAiCompatibleTranslationServiceTest {
     void summarizeCluster_returnsRawMarkdownText() throws Exception {
         setUp("这是一组关于 AI 的收藏。\n- 标题一\n- 标题二");
 
-        String result = service.summarizeCluster("AI", List.of("标题一", "标题二"));
+        String result = service.summarizeCluster("AI", List.of(
+                new ClipContent("标题一", null, "正文一"),
+                new ClipContent("标题二", null, "正文二")));
 
         assertThat(result).isEqualTo("这是一组关于 AI 的收藏。\n- 标题一\n- 标题二");
     }

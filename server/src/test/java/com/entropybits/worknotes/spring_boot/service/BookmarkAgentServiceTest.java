@@ -7,6 +7,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
 import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
+import com.entropybits.worknotes.spring_boot.ai.service.ClipContent;
 import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
 import com.entropybits.worknotes.spring_boot.entity.*;
 import com.entropybits.worknotes.spring_boot.repository.*;
@@ -75,6 +76,16 @@ class BookmarkAgentServiceTest {
     private ContentChunk chunk(long sourceId, String embeddingJson) {
         return ContentChunk.builder().sourceType(ContentChunk.SourceType.CLIP).sourceId(sourceId)
                 .chunkIndex(0).chunkText("x").contentHash("h").embeddingJson(embeddingJson).build();
+    }
+
+    /**
+     * 只关心正文文本和顺序的分块（摘要相关测试用）；embeddingJson 固定给 2 维向量，跟其他测试里
+     * chunk() 用的维度一致——同一个 clip 的多个分块会被 averageVectors 按元素相加，维度不一致会
+     * 直接数组越界
+     */
+    private ContentChunk textChunk(long sourceId, int chunkIndex, String chunkText) {
+        return ContentChunk.builder().sourceType(ContentChunk.SourceType.CLIP).sourceId(sourceId)
+                .chunkIndex(chunkIndex).chunkText(chunkText).contentHash("h").embeddingJson("[0.0,0.0]").build();
     }
 
     @Test
@@ -168,6 +179,64 @@ class BookmarkAgentServiceTest {
     }
 
     @Test
+    void buildClipContents_joinsChunksInIndexOrderAndTruncatesLongExcerpts() {
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceAuthor("张三");
+        // 分块乱序传入，拼接结果必须按 chunkIndex 排序而不是传入顺序；第一块本身就超过截断上限，
+        // 用来确认截断确实发生在"按顺序拼接之后"而不是丢弃了排在后面的块
+        Map<Long, List<ContentChunk>> chunksByClipId = Map.of(1L, List.of(
+                textChunk(1, 1, "b".repeat(400)),
+                textChunk(1, 0, "a".repeat(700))));
+
+        List<ClipContent> contents = BookmarkAgentService.buildClipContents(List.of(c1), chunksByClipId);
+
+        assertThat(contents).hasSize(1);
+        ClipContent content = contents.get(0);
+        assertThat(content.title()).isEqualTo("标题一");
+        assertThat(content.author()).isEqualTo("张三");
+        // a 块在前（index 0），拼接后超过 600 字上限被截断并加省略号，不会把两块全量塞进 prompt
+        assertThat(content.excerpt()).startsWith("a".repeat(600));
+        assertThat(content.excerpt()).endsWith("...");
+        assertThat(content.excerpt()).hasSize(600 + 3);
+    }
+
+    @Test
+    void buildClipContents_treatsChunkZeroEqualToTitleAsNoRealExcerpt() {
+        // ContentChunkingService.chunkClip 不管有没有正文都会把标题单独存成第 0 块（标题检索不被
+        // 正文稀释）；仅链接/抓取失败的收藏因此也会有"1 条分块"，但那条分块除了标题本身没有任何
+        // 新信息。回填这类收藏后 excerpt 不该变成"标题的复读"，得继续判定为没有正文
+        SourceClip c1 = clip(1, "标题一");
+        Map<Long, List<ContentChunk>> chunksByClipId = Map.of(1L, List.of(textChunk(1, 0, "标题一")));
+
+        List<ClipContent> contents = BookmarkAgentService.buildClipContents(List.of(c1), chunksByClipId);
+
+        assertThat(contents.get(0).excerpt()).isEmpty();
+    }
+
+    @Test
+    void buildClipContents_keepsChunkZeroWhenItDiffersFromTitle() {
+        // 只有"第 0 块文本 == 标题"才特殊处理；万一某条 clip 第 0 块碰巧不是标题重复（理论上
+        // chunkClip 不会这样，但摘录构建逻辑本身不应该对此有隐藏假设），不该被误判掉
+        SourceClip c1 = clip(1, "标题一");
+        Map<Long, List<ContentChunk>> chunksByClipId = Map.of(1L, List.of(textChunk(1, 0, "这不是标题")));
+
+        List<ClipContent> contents = BookmarkAgentService.buildClipContents(List.of(c1), chunksByClipId);
+
+        assertThat(contents.get(0).excerpt()).isEqualTo("这不是标题");
+    }
+
+    @Test
+    void buildClipContents_emptyExcerptWhenClipHasNoChunks() {
+        // 仅链接/抓取失败的收藏：chunksByClipId 里没有它的分块，摘录应为空字符串，
+        // 让 prompt 只能靠标题推断，而不是抛异常或塞 null
+        SourceClip c1 = clip(1, "标题一");
+
+        List<ClipContent> contents = BookmarkAgentService.buildClipContents(List.of(c1), Map.of());
+
+        assertThat(contents.get(0).excerpt()).isEmpty();
+    }
+
+    @Test
     void groupByYear_bucketsClipsByOriginalBookmarkedAtYearAscending() {
         SourceClip c2019 = clip(1, "2019年的收藏");
         c2019.setOriginalBookmarkedAt(LocalDateTime.of(2019, 5, 1, 0, 0));
@@ -232,6 +301,43 @@ class BookmarkAgentServiceTest {
         verify(jobRepository).startPhase(1L, 1, "SUMMARIZING"); // 1 个最终分组
         verify(jobRepository, times(2)).incrementCompletedSteps(1L); // 聚类 1 步 + 1 个分组
         verify(noteClipRefRepository, times(2)).save(any());
+    }
+
+    @Test
+    void runCluster_passesRealClipExcerptsNotJustTitlesToSummarizeCluster() throws Exception {
+        // 回归测试：摘要这一步曾经只拿标题编一句话，完全不看正文。这里验证正文分块的真实文本
+        // 确实传到了 summarizeCluster，而不是空摘录或者干脆没传
+        setUp();
+        User owner = User.builder().id(1L).build();
+        SourceClip c1 = clip(1, "标题一");
+        c1.setSourceUrl("https://example.com/a");
+        SourceClip c2 = clip(2, "标题二");
+        c2.setSourceUrl("https://example.com/b");
+        List<SourceClip> clips = List.of(c1, c2);
+
+        when(aiProperties.getProvider()).thenReturn("anthropic");
+        when(contentChunkRepository.findBySourceTypeAndSourceIdIn(eq(ContentChunk.SourceType.CLIP), any()))
+                .thenReturn(List.of(
+                        chunk(1, "[1.0,0.0]"), textChunk(1, 1, "第一条收藏的真实正文"),
+                        chunk(2, "[1.0,0.0]"), textChunk(2, 1, "第二条收藏的真实正文")));
+        when(anthropicService.classifyTopics(List.of("标题一", "标题二"), List.of()))
+                .thenReturn(List.of(List.of("AI"), List.of("AI")));
+        when(anthropicService.summarizeCluster(eq("AI"), any())).thenReturn("摘要。");
+        when(tagRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(noteRepository.findAllByOwnerAndGeneratedType(owner, Note.GeneratedType.CLUSTER))
+                .thenReturn(List.of());
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(107L);
+            return n;
+        });
+
+        service.runCluster(1L, owner, clips);
+
+        verify(anthropicService).summarizeCluster(eq("AI"), argThat(contents ->
+                contents.stream().anyMatch(c -> c.excerpt().contains("第一条收藏的真实正文"))
+                        && contents.stream().anyMatch(c -> c.excerpt().contains("第二条收藏的真实正文"))));
     }
 
     @Test

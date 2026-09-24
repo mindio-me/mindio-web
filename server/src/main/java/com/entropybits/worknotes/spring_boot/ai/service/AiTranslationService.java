@@ -37,10 +37,12 @@ public interface AiTranslationService {
     List<List<String>> classifyTopics(List<String> titles, List<String> existingTopics) throws Exception;
 
     /**
-     * 给定一个主题下的标题列表，只返回一句话中文归纳（不含链接列表——链接列表由调用方
-     * BookmarkAgentService.buildLinkListMarkdown 根据真实 SourceClip 数据确定性拼接）。
+     * 给定一个主题下的收藏素材（标题+正文摘录，没正文的 excerpt 为空字符串），返回一段基于真实内容
+     * 的中文分析，而不是照标题编一句话；素材之间如果有明显关联或分歧，要点出来。
+     * 不含链接列表——链接列表由调用方 BookmarkAgentService.buildLinkListMarkdown
+     * 根据真实 SourceClip 数据确定性拼接。
      */
-    String summarizeCluster(String topicLabel, List<String> titlesInCluster) throws Exception;
+    String summarizeCluster(String topicLabel, List<ClipContent> clips) throws Exception;
 
     /**
      * 给定一个时间段（如"2023 年"）内的标题列表，返回一段叙述性文字，描述这段时间收藏的内容。

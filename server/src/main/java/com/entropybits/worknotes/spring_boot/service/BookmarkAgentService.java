@@ -7,6 +7,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
 import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
+import com.entropybits.worknotes.spring_boot.ai.service.ClipContent;
 import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
 import com.entropybits.worknotes.spring_boot.entity.*;
 import com.entropybits.worknotes.spring_boot.repository.*;
@@ -306,8 +307,12 @@ public class BookmarkAgentService {
                 .filter(c -> !Boolean.TRUE.equals(c.getTagsManuallyAdjusted()))
                 .toList();
 
+        // 全量 clips（不只 toClassify）查一次分块：摘要阶段连手动调整过标签、没参与语义聚类的
+        // clip 也要用到正文摘录，避免后面按需二次查库
+        Map<Long, List<ContentChunk>> chunksByClipId = fetchClipChunks(clips);
+
         jobRepository.startPhase(jobId, 1, PHASE_CLASSIFYING);
-        Map<Long, float[]> vectors = computeClipVectors(toClassify);
+        Map<Long, float[]> vectors = computeClipVectors(toClassify, chunksByClipId);
         List<List<SourceClip>> rawClusters = clusterBySimilarity(toClassify, vectors, CLUSTER_SIMILARITY_THRESHOLD);
         jobRepository.incrementCompletedSteps(jobId);
 
@@ -347,8 +352,8 @@ public class BookmarkAgentService {
         StringBuilder markdown = new StringBuilder();
         List<SourceClip> orderedRefs = new ArrayList<>();
         for (Map.Entry<String, List<SourceClip>> entry : groups.entrySet()) {
-            List<String> titles = entry.getValue().stream().map(SourceClip::getTitle).toList();
-            String summary = ai.summarizeCluster(entry.getKey(), titles);
+            List<ClipContent> contents = buildClipContents(entry.getValue(), chunksByClipId);
+            String summary = ai.summarizeCluster(entry.getKey(), contents);
             markdown.append("## ").append(entry.getKey()).append("\n\n")
                     .append(summary).append("\n\n")
                     .append(buildLinkListMarkdown(entry.getValue())).append("\n");
@@ -359,18 +364,22 @@ public class BookmarkAgentService {
         return self.replaceGeneratedNote(owner, Note.GeneratedType.CLUSTER, "知识地图", markdown.toString(), orderedRefs);
     }
 
+    private static final int EXCERPT_MAX_CHARS = 600;
+
+    /** 批量按 clip id 查分块，一次查完供聚类（算向量）和摘要（取正文摘录）两处复用，避免各自查一遍 */
+    private Map<Long, List<ContentChunk>> fetchClipChunks(List<SourceClip> clips) {
+        List<Long> clipIds = clips.stream().map(SourceClip::getId).toList();
+        return contentChunkRepository.findBySourceTypeAndSourceIdIn(ContentChunk.SourceType.CLIP, clipIds).stream()
+                .collect(Collectors.groupingBy(ContentChunk::getSourceId));
+    }
+
     /**
      * 给每条待分类的收藏算一个代表向量：有正文分块（reindexClip 已生成的 ContentChunk）就取全部
      * 分块向量的平均；没有正文（仅链接/抓取失败）或分块向量解析失败，现算一次标题 embedding 兜底。
      * 标题 embedding 也失败的极端情况：不放进结果 map，clusterBySimilarity 会把它当缺失向量单独
      * 成簇，最终被并入"其他"，不会让整个生成任务失败。
      */
-    private Map<Long, float[]> computeClipVectors(List<SourceClip> clips) {
-        List<Long> clipIds = clips.stream().map(SourceClip::getId).toList();
-        Map<Long, List<ContentChunk>> chunksByClipId = contentChunkRepository
-                .findBySourceTypeAndSourceIdIn(ContentChunk.SourceType.CLIP, clipIds).stream()
-                .collect(Collectors.groupingBy(ContentChunk::getSourceId));
-
+    private Map<Long, float[]> computeClipVectors(List<SourceClip> clips, Map<Long, List<ContentChunk>> chunksByClipId) {
         Map<Long, float[]> vectors = new HashMap<>();
         for (SourceClip clip : clips) {
             List<float[]> chunkVectors = chunksByClipId.getOrDefault(clip.getId(), List.of()).stream()
@@ -396,6 +405,31 @@ public class BookmarkAgentService {
         } catch (Exception e) {
             return new float[0]; // 脏数据：这一块不参与平均，不影响整体向量计算
         }
+    }
+
+    /**
+     * 给一组收藏拼出喂给 summarizeCluster 的素材：按 chunkIndex 顺序拼接正文分块，截断到
+     * EXCERPT_MAX_CHARS（避免大簇把 prompt 撑爆）。没有分块、或者分块里去掉标题重复块之后
+     * 什么都不剩（仅链接/抓取失败，只有 chunkClip 兜底存的标题块）——两种情况 excerpt 都是空
+     * 字符串，模型只能靠标题推断。
+     */
+    static List<ClipContent> buildClipContents(List<SourceClip> clips, Map<Long, List<ContentChunk>> chunksByClipId) {
+        return clips.stream().map(clip -> {
+            String title = clip.getTitle();
+            String titleTrimmed = title == null ? null : title.trim();
+            String excerpt = chunksByClipId.getOrDefault(clip.getId(), List.of()).stream()
+                    .sorted(Comparator.comparing(ContentChunk::getChunkIndex))
+                    // ContentChunkingService.chunkClip 不管有没有正文都会把标题单独存成第 0 块
+                    // （标题检索不被正文稀释），这块除了标题本身没有任何新信息；当成"正文摘录"喂
+                    // 给模型会让它误以为看到了真内容，反而不如老实留空、退化成仅标题推断
+                    .filter(c -> !(c.getChunkIndex() == 0 && c.getChunkText().trim().equals(titleTrimmed)))
+                    .map(ContentChunk::getChunkText)
+                    .collect(Collectors.joining("\n"));
+            if (excerpt.length() > EXCERPT_MAX_CHARS) {
+                excerpt = excerpt.substring(0, EXCERPT_MAX_CHARS) + "...";
+            }
+            return new ClipContent(title, clip.getSourceAuthor(), excerpt);
+        }).toList();
     }
 
     /**

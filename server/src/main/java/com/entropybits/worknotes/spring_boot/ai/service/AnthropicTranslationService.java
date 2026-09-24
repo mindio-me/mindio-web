@@ -131,12 +131,17 @@ public class AnthropicTranslationService implements AiTranslationService {
     }
 
     @Override
-    public String summarizeCluster(String topicLabel, List<String> titlesInCluster) throws Exception {
-        String inputJson = objectMapper.writeValueAsString(titlesInCluster);
-        String prompt = "The following is a JSON array of webpage/bookmark titles that all belong to the topic \""
-            + topicLabel + "\".\n"
-            + "Write ONE summary sentence in Chinese describing what this group of bookmarks is about.\n"
-            + "Return ONLY that single sentence, no bullet list, no markdown formatting, no extra commentary.\n\n"
+    public String summarizeCluster(String topicLabel, List<ClipContent> clips) throws Exception {
+        String inputJson = objectMapper.writeValueAsString(clips);
+        String prompt = "The following is a JSON array of bookmarks that all belong to the topic \""
+            + topicLabel + "\". Each item has a title, an optional author, and an \"excerpt\" of its actual "
+            + "content (empty string if the page's content couldn't be fetched — reason from the title alone "
+            + "for those).\n"
+            + "Write a short analysis in Chinese (2-4 sentences) of what this group is actually about, grounded "
+            + "in the excerpts, not just the titles. If the sources relate to or build on each other, or offer "
+            + "differing/conflicting perspectives, point that out explicitly. Don't invent claims the excerpts "
+            + "don't support.\n"
+            + "Return ONLY the analysis text, no bullet list, no markdown formatting, no extra commentary.\n\n"
             + inputJson;
 
         return callClaude(prompt).trim();
