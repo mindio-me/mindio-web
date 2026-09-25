@@ -70,6 +70,11 @@ export default class MarkdownBlock {
 
     // 缓存 renderMarkdown 函数
     this._renderMarkdownFn = null
+
+    // 监听 textarea 宽度变化，用于在宽度变化（如后续图片块异步加载撑高页面
+    // 触发滚动条）时重新计算高度
+    this._widthObserver = null
+    this._lastTextareaWidth = undefined
   }
 
   /**
@@ -155,6 +160,26 @@ export default class MarkdownBlock {
     // 监听输入
     this.textarea.addEventListener('input', () => this._onTextareaInput())
     this.textarea.addEventListener('input', () => this._autoResizeTextarea())
+
+    // 高度只在构造时和输入时重算，但 textarea 的可用宽度会因为跟它无关的原因
+    // 在那之后才变化——典型场景：块后面跟着一张图片，图片异步加载完成后撑高整个
+    // 页面，.editor-main 的纵向滚动条出现/消失，textarea 的实际宽度随之变化，
+    // 导致软换行行数变了，但内联 style.height 还停在旧宽度量出的值上，
+    // 于是 overflow:hidden 就把新增的换行内容裁掉，看起来像块「缩小」了。
+    // 用 ResizeObserver 盯 textarea 自身的宽度变化来重新量高度；只在宽度真的变了
+    // 才重算，避免我们自己写 style.height 触发的高度变化又反过来触发一轮重算。
+    if (typeof ResizeObserver !== 'undefined') {
+      this._widthObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const newWidth = entry.contentRect.width
+          if (this._lastTextareaWidth !== undefined && newWidth !== this._lastTextareaWidth) {
+            this._autoResizeTextarea()
+          }
+          this._lastTextareaWidth = newWidth
+        }
+      })
+      this._widthObserver.observe(this.textarea)
+    }
 
     editorPane.appendChild(this.textarea)
     contentArea.appendChild(editorPane)
@@ -364,6 +389,10 @@ export default class MarkdownBlock {
     if (this._debounceTimer) {
       clearTimeout(this._debounceTimer)
       this._debounceTimer = null
+    }
+    if (this._widthObserver) {
+      this._widthObserver.disconnect()
+      this._widthObserver = null
     }
   }
 
