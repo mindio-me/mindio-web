@@ -232,7 +232,7 @@
 
 <script>
 import { createEditorImageResizer } from '~/utils/editorjsImageResize'
-import { clipboardMayContainImage, getClipboardImagePayload } from '~/utils/clipboardImage'
+import { clipboardMayContainImage, getClipboardImagePayload, uploadClipboardImage } from '~/utils/clipboardImage'
 
 export default {
   name: 'NoteEditor',
@@ -900,9 +900,7 @@ export default {
         const sizeText = payload.file ? ` (${(payload.file.size / 1024 / 1024).toFixed(1)}MB)` : ''
         const loadingMsg = this.$message({ message: `正在上传图片${sizeText}...`, duration: 0 })
         try {
-          const result = payload.file
-            ? await uploadService.uploadLocal(payload.file, 'note', noteId || 0)
-            : await uploadService.uploadRemote(payload.url, 'note', noteId || 0)
+          const result = await uploadClipboardImage(uploadService, payload, 'note', noteId || 0)
           loadingMsg.close()
           const url = result.url || result.fileUrl || result
           await this.editor.blocks.insert('image', {

@@ -43,6 +43,13 @@ function extractImageSrcFromHtml(html) {
   return doc.querySelector('img')?.getAttribute('src') || ''
 }
 
+// 从网页"复制图片"时，clipboardData.files/items 里的位图通常是浏览器对当前渲染帧做的
+// 静态光栅化快照（type 多为 image/png），GIF 动画在这一步就已经丢失了；text/html 里的
+// <img src> 才指向原始文件，命中 gif 时要优先用它换取动画，而不是直接用光栅位图
+function looksLikeGif(src) {
+  return /^data:image\/gif/i.test(src) || /\.gif(?:[?#]|$)/i.test(src)
+}
+
 export function clipboardMayContainImage(clipboardData) {
   if (!clipboardData) return false
 
@@ -61,28 +68,62 @@ export async function getClipboardImagePayload(clipboardData) {
   if (!clipboardData) return null
 
   const files = Array.from(clipboardData.files || [])
-  const file = files.find(isImageFile)
-  if (file) return { file }
+  let file = files.find(isImageFile) || null
 
   const items = Array.from(clipboardData.items || [])
-  for (const item of items) {
-    if (item.kind !== 'file') continue
-    const type = item.type || ''
-    if (type && !type.startsWith('image/')) continue
-    const itemFile = item.getAsFile()
-    if (isImageFile(itemFile)) return { file: itemFile }
+  if (!file) {
+    for (const item of items) {
+      if (item.kind !== 'file') continue
+      const type = item.type || ''
+      if (type && !type.startsWith('image/')) continue
+      const itemFile = item.getAsFile()
+      if (isImageFile(itemFile)) {
+        file = itemFile
+        break
+      }
+    }
   }
 
   const htmlItem = items.find((item) => item.kind === 'string' && item.type === 'text/html')
-  if (htmlItem) {
-    const html = await getItemString(htmlItem)
-    const src = extractImageSrcFromHtml(html)
-    if (src.startsWith('data:image/')) {
-      const dataFile = dataUrlToFile(src)
+  const htmlSrc = htmlItem ? extractImageSrcFromHtml(await getItemString(htmlItem)) : ''
+
+  // 剪贴板位图不是 gif（说明它是光栅化快照），但 html 源指向 gif：优先取 html 源保留动画，
+  // 光栅位图留作 url 拉取失败时的兜底
+  if (htmlSrc && looksLikeGif(htmlSrc) && !(file && file.type === 'image/gif')) {
+    if (htmlSrc.startsWith('data:image/')) {
+      const dataFile = dataUrlToFile(htmlSrc)
+      if (dataFile) return { file: dataFile }
+    } else if (/^https?:\/\//i.test(htmlSrc)) {
+      return { url: htmlSrc, fallbackFile: file }
+    }
+  }
+
+  if (file) return { file }
+
+  if (htmlSrc) {
+    if (htmlSrc.startsWith('data:image/')) {
+      const dataFile = dataUrlToFile(htmlSrc)
       if (dataFile) return { file: dataFile }
     }
-    if (/^https?:\/\//i.test(src)) return { url: src }
+    if (/^https?:\/\//i.test(htmlSrc)) return { url: htmlSrc }
   }
 
   return null
+}
+
+/**
+ * 按 payload 上传：优先用 payload.file/url；url 拉取失败且有 fallbackFile（gif 优先场景的光栅快照）时降级重试
+ */
+export async function uploadClipboardImage(uploadService, payload, model, pid) {
+  if (payload.file) {
+    return uploadService.uploadLocal(payload.file, model, pid)
+  }
+  try {
+    return await uploadService.uploadRemote(payload.url, model, pid)
+  } catch (err) {
+    if (payload.fallbackFile) {
+      return uploadService.uploadLocal(payload.fallbackFile, model, pid)
+    }
+    throw err
+  }
 }
