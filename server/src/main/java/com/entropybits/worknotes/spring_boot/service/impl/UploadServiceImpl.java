@@ -175,6 +175,11 @@ public class UploadServiceImpl implements UploadService {
                     if (guessedExt != null && !guessedExt.isBlank()) {
                         extName = guessedExt;
                         isImage = ALLOWED_IMAGE_EXTENSIONS.contains(extName.toLowerCase());
+                        // 无扩展名的地址常来自 CDN，返回登录页/错误页时同样是 HTTP 200，
+                        // 这里认出不支持的类型就拒掉，让调用方走自己的兜底，别把网页存成图片
+                        if (!isImage && !ALLOWED_FILE_EXTENSIONS.contains(extName.toLowerCase())) {
+                            throw new BadRequestException("远程地址返回的不是可用的媒体文件: " + contentType);
+                        }
                     }
                 }
             }
