@@ -398,6 +398,20 @@ public class GlobalChatService {
                 .stream().map(this::toResponse).toList();
     }
 
+    public ConversationResponse renameConversation(String username, Long conversationId, String title) {
+        User user = getUser(username);
+        AiChatConversation conversation = loadOwnedConversationOrThrow(conversationId, user);
+        conversation.setTitle(title);
+        conversationRepository.save(conversation);
+        return toConversationResponse(conversation);
+    }
+
+    public void deleteConversation(String username, Long conversationId) {
+        User user = getUser(username);
+        AiChatConversation conversation = loadOwnedConversationOrThrow(conversationId, user);
+        conversationRepository.delete(conversation);
+    }
+
     private ConversationResponse toConversationResponse(AiChatConversation c) {
         String displayTitle = c.getTitle() != null ? c.getTitle() : fallbackTitle(c);
         return ConversationResponse.builder().id(c.getId()).title(displayTitle).lastMessageAt(c.getLastMessageAt()).build();

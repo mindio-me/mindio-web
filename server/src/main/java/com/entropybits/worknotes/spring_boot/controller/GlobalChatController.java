@@ -26,6 +26,12 @@ public class GlobalChatController {
 
     private final GlobalChatService chatService;
 
+    @GetMapping("/conversations")
+    public ResponseEntity<List<com.entropybits.worknotes.spring_boot.dto.ConversationResponse>> listConversations(
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(chatService.listConversations(user.getUsername()));
+    }
+
     @GetMapping("/conversations/{id}/messages")
     public ResponseEntity<List<ChatMessageResponse>> getConversationMessages(
             @PathVariable Long id,
@@ -59,5 +65,21 @@ public class GlobalChatController {
         new Thread(() -> chatService.resumeStream(
                 username, request.getConversationId(), request.getProposalId(), request.getDecision(), emitter)).start();
         return emitter;
+    }
+
+    @PatchMapping("/conversations/{id}")
+    public ResponseEntity<com.entropybits.worknotes.spring_boot.dto.ConversationResponse> renameConversation(
+            @PathVariable Long id,
+            @Valid @RequestBody com.entropybits.worknotes.spring_boot.dto.UpdateConversationTitleRequest request,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(chatService.renameConversation(user.getUsername(), id, request.getTitle()));
+    }
+
+    @DeleteMapping("/conversations/{id}")
+    public ResponseEntity<Void> deleteConversation(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails user) {
+        chatService.deleteConversation(user.getUsername(), id);
+        return ResponseEntity.noContent().build();
     }
 }

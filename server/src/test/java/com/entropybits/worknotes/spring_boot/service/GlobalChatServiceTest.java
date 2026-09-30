@@ -521,4 +521,66 @@ class GlobalChatServiceTest {
         assertThatThrownBy(() -> service.getConversationMessages("alice", 5L))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void listConversations_returnsNewestFirstWithFallbackTitleWhenTitleIsNull() {
+        AiChatConversation withTitle = AiChatConversation.builder().id(1L).owner(user)
+                .title("已有标题").lastMessageAt(java.time.Instant.parse("2026-02-01T00:00:00Z")).build();
+        AiChatConversation withoutTitle = AiChatConversation.builder().id(2L).owner(user)
+                .title(null).lastMessageAt(java.time.Instant.parse("2026-03-01T00:00:00Z")).build();
+        when(conversationRepository.findByOwnerOrderByLastMessageAtDesc(user))
+                .thenReturn(List.of(withoutTitle, withTitle));
+        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(withoutTitle)).thenReturn(List.of(
+                AiChatMessage.builder().conversation(withoutTitle).role(AiChatMessage.Role.USER)
+                        .content("这是一条比较长需要截断展示的第一条消息内容示例文本").build()));
+
+        List<com.entropybits.worknotes.spring_boot.dto.ConversationResponse> result = service.listConversations("alice");
+
+        assertThat(result).extracting(com.entropybits.worknotes.spring_boot.dto.ConversationResponse::getTitle)
+                .containsExactly("这是一条比较长需要截断展示的第一条消息内…", "已有标题");
+    }
+
+    @Test
+    void renameConversation_persistsNewTitleAndReturnsIt() {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).title("旧标题").build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+
+        com.entropybits.worknotes.spring_boot.dto.ConversationResponse result =
+                service.renameConversation("alice", 5L, "新标题");
+
+        assertThat(result.getTitle()).isEqualTo("新标题");
+        verify(conversationRepository).save(argThat(c -> "新标题".equals(c.getTitle())));
+    }
+
+    @Test
+    void renameConversation_withConversationOwnedByAnotherUserThrows() {
+        User bob = User.builder().id(2L).username("bob").build();
+        AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(bobsConversation));
+
+        assertThatThrownBy(() -> service.renameConversation("alice", 5L, "新标题"))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(conversationRepository, never()).save(any());
+    }
+
+    @Test
+    void deleteConversation_deletesOwnedConversation() {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+
+        service.deleteConversation("alice", 5L);
+
+        verify(conversationRepository).delete(conversation);
+    }
+
+    @Test
+    void deleteConversation_withConversationOwnedByAnotherUserThrowsAndDoesNotDelete() {
+        User bob = User.builder().id(2L).username("bob").build();
+        AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(bobsConversation));
+
+        assertThatThrownBy(() -> service.deleteConversation("alice", 5L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(conversationRepository, never()).delete(any());
+    }
 }

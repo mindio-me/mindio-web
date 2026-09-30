@@ -31,6 +31,23 @@ class AiChatConversationRepositoryTest {
 
     @Autowired private AiChatConversationRepository conversationRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private AiChatMessageRepository chatMessageRepository;
+
+    @Test
+    void deletingConversationCascadesToItsMessages() {
+        User alice = userRepository.save(User.builder().username("cascade-alice").password("x").role("USER").build());
+        AiChatConversation conversation = conversationRepository.save(
+                AiChatConversation.builder().owner(alice).build());
+        chatMessageRepository.save(com.entropybits.worknotes.spring_boot.entity.AiChatMessage.builder()
+                .conversation(conversation)
+                .role(com.entropybits.worknotes.spring_boot.entity.AiChatMessage.Role.USER)
+                .content("会被级联删除的消息").build());
+
+        conversationRepository.delete(conversation);
+        conversationRepository.flush();
+
+        assertThat(chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)).isEmpty();
+    }
 
     @Test
     void findByOwnerOrderByLastMessageAtDesc_returnsNewestFirstAndOnlyOwnersOwn() {

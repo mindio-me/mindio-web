@@ -104,4 +104,45 @@ class GlobalChatControllerTest {
                         org.mockito.ArgumentMatchers.eq("accept"),
                         org.mockito.ArgumentMatchers.any(SseEmitter.class));
     }
+
+    @Test
+    void listConversations_delegatesToService() {
+        GlobalChatController controller = new GlobalChatController(chatService);
+        when(principal.getUsername()).thenReturn("alice");
+        when(chatService.listConversations("alice")).thenReturn(List.of());
+
+        ResponseEntity<List<com.entropybits.worknotes.spring_boot.dto.ConversationResponse>> response =
+                controller.listConversations(principal);
+
+        assertThat(response.getBody()).isEmpty();
+        verify(chatService).listConversations("alice");
+    }
+
+    @Test
+    void renameConversation_delegatesToServiceWithNewTitle() {
+        GlobalChatController controller = new GlobalChatController(chatService);
+        when(principal.getUsername()).thenReturn("alice");
+        com.entropybits.worknotes.spring_boot.dto.UpdateConversationTitleRequest request =
+                new com.entropybits.worknotes.spring_boot.dto.UpdateConversationTitleRequest();
+        request.setTitle("新标题");
+        when(chatService.renameConversation("alice", 5L, "新标题"))
+                .thenReturn(com.entropybits.worknotes.spring_boot.dto.ConversationResponse.builder()
+                        .id(5L).title("新标题").build());
+
+        ResponseEntity<com.entropybits.worknotes.spring_boot.dto.ConversationResponse> response =
+                controller.renameConversation(5L, request, principal);
+
+        assertThat(response.getBody().getTitle()).isEqualTo("新标题");
+    }
+
+    @Test
+    void deleteConversation_delegatesToServiceAndReturnsNoContent() {
+        GlobalChatController controller = new GlobalChatController(chatService);
+        when(principal.getUsername()).thenReturn("alice");
+
+        ResponseEntity<Void> response = controller.deleteConversation(5L, principal);
+
+        assertThat(response.getStatusCode().value()).isEqualTo(204);
+        verify(chatService).deleteConversation("alice", 5L);
+    }
 }
