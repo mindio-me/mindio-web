@@ -62,4 +62,10 @@ public interface AiTranslationService {
      * 整理成最终结果列表（可丢弃不相关的，但不能编造新文章或改动 url/title）+ 一句自然语言回应。
      */
     CuratedSearchResult curateSearchResults(String userMessage, java.util.List<com.entropybits.worknotes.spring_boot.search.SearchResultItem> candidates) throws Exception;
+
+    /**
+     * 根据一轮问答（用户第一句 + 助手第一次回复）生成会话标题，不超过15个字的中文，
+     * 不要标点结尾、不要引号——直接可以显示在会话列表里。
+     */
+    String generateConversationTitle(String firstUserMessage, String firstAssistantReply) throws Exception;
 }

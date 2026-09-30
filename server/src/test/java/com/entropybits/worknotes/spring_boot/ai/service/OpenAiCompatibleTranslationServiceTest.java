@@ -148,4 +148,13 @@ class OpenAiCompatibleTranslationServiceTest {
         assertThat(result.results().get(0).title()).isEqualTo("标题一");
         assertThat(result.results().get(0).url()).isEqualTo("https://a.example.com");
     }
+
+    @Test
+    void generateConversationTitle_returnsTrimmedModelOutput() throws Exception {
+        setUp("如何用MySQL做增量迁移");
+
+        String title = service.generateConversationTitle("我要把SQLite迁移到MySQL，有什么坑？", "主要是……");
+
+        assertThat(title).isEqualTo("如何用MySQL做增量迁移");
+    }
 }

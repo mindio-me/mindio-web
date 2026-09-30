@@ -161,6 +161,16 @@ public class AnthropicTranslationService implements AiTranslationService {
     }
 
     @Override
+    public String generateConversationTitle(String firstUserMessage, String firstAssistantReply) throws Exception {
+        String prompt = "根据下面这轮问答，生成一个不超过15个字的中文标题，用来显示在对话列表里。"
+                + "只返回标题本身，不要标点结尾，不要加引号，不要任何解释。\n\n"
+                + "用户: " + firstUserMessage + "\n"
+                + "助手: " + firstAssistantReply;
+
+        return callClaude(prompt).trim();
+    }
+
+    @Override
     public String planSearchQuery(List<String> recentHistoryLines, String userMessage) throws Exception {
         StringBuilder prompt = new StringBuilder();
         prompt.append("You are helping a user search the web for articles. Below is the recent conversation ")
