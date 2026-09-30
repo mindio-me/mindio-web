@@ -772,8 +772,6 @@
       "timeHoursAgo": "{n}h ago",
       "timeDaysAgo": "{n}d ago"
     },
-    "noteDetail": {
-    },
     "chat": {
       "title": "AI Assistant",
       "placeholder": "Ask anything, or chat about your notes…",

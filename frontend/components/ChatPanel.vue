@@ -9,25 +9,27 @@
         <i class="el-icon-chat-dot-round"></i>
         {{ $t('workspace.chat.title') }}
       </span>
-      <button class="chat-header-new" :title="$t('workspace.chat.newConversation')" @click="startNewConversation">
-        <i class="el-icon-plus"></i>
-      </button>
-      <el-popover placement="bottom-end" trigger="click" width="280" v-model="conversationListOpen">
-        <ConversationList
-          :conversations="conversations"
-          :active-conversation-id="activeConversationId"
-          @select="onSelectFromList"
-          @new-conversation="onNewFromList"
-          @rename="onRenameFromList"
-          @delete="onDeleteFromList"
-        />
-        <button slot="reference" class="chat-header-history" :title="$t('workspace.chat.conversationList')">
-          <i class="el-icon-tickets"></i>
+      <div class="chat-header-actions">
+        <button class="chat-header-new" :title="$t('workspace.chat.newConversation')" @click="startNewConversation">
+          <i class="el-icon-plus"></i>
         </button>
-      </el-popover>
-      <button class="chat-header-close" @click="$emit('close')">
-        <i class="el-icon-close"></i>
-      </button>
+        <el-popover placement="bottom-end" trigger="click" width="280" v-model="conversationListOpen" @show="loadConversations">
+          <ConversationList
+            :conversations="conversations"
+            :active-conversation-id="activeConversationId"
+            @select="onSelectFromList"
+            @new-conversation="onNewFromList"
+            @rename="onRenameFromList"
+            @delete="onDeleteFromList"
+          />
+          <button slot="reference" class="chat-header-history" :title="$t('workspace.chat.conversationList')">
+            <i class="el-icon-tickets"></i>
+          </button>
+        </el-popover>
+        <button class="chat-header-close" @click="$emit('close')">
+          <i class="el-icon-close"></i>
+        </button>
+      </div>
     </div>
 
     <div v-if="currentNoteId" class="chat-note-hint">
@@ -692,6 +694,14 @@ export default {
   gap: 6px;
 }
 
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-header-new,
+.chat-header-history,
 .chat-header-close {
   border: none;
   background: transparent;
