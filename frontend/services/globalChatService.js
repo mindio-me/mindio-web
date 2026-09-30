@@ -6,8 +6,20 @@
 import ApiService from './api'
 
 class GlobalChatService extends ApiService {
-  getMessages(limit = 50) {
-    return this.get('/v1/chat/messages', { params: { limit }, suppressErrorToast: true })
+  listConversations() {
+    return this.get('/v1/chat/conversations', { suppressErrorToast: true })
+  }
+
+  getConversationMessages(conversationId) {
+    return this.get(`/v1/chat/conversations/${conversationId}/messages`, { suppressErrorToast: true })
+  }
+
+  renameConversation(conversationId, title) {
+    return this.patch(`/v1/chat/conversations/${conversationId}`, { title })
+  }
+
+  deleteConversation(conversationId) {
+    return this.delete(`/v1/chat/conversations/${conversationId}`)
   }
 
   // 流式请求：用现有 axios 实例的 onDownloadProgress 增量读取响应文本，不用 fetch，
@@ -45,12 +57,12 @@ class GlobalChatService extends ApiService {
     })
   }
 
-  sendMessageStream(content, currentNoteId, attachments, onEvent) {
-    return this._streamViaAxios('/v1/chat/messages', { content, currentNoteId, attachments }, onEvent)
+  sendMessageStream(content, conversationId, currentNoteId, attachments, onEvent) {
+    return this._streamViaAxios('/v1/chat/messages', { content, conversationId, currentNoteId, attachments }, onEvent)
   }
 
-  resumeStream(proposalId, decision, onEvent) {
-    return this._streamViaAxios('/v1/chat/resume', { proposalId, decision }, onEvent)
+  resumeStream(conversationId, proposalId, decision, onEvent) {
+    return this._streamViaAxios('/v1/chat/resume', { conversationId, proposalId, decision }, onEvent)
   }
 }
 

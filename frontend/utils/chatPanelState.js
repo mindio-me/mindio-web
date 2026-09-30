@@ -18,6 +18,14 @@ import Vue from 'vue'
 // 和旧页面的 beforeDestroy() 谁先谁后不保证；写在这个共享单例里而不是靠事件广播，
 // 是因为 GlobalChatDrawer 在 layout 里排在 <nuxt/> 后面挂载，首屏若直接落在有右栏的
 // 页面上，事件早就发完了它才开始监听，会错过——读这个响应式字段就没有先后顺序问题。
+//
+// activeConversationId：当前正在查看/发送消息的会话，null表示"新建会话但还没发第一条消息"
+// （懒创建——真正在服务端建会话记录发生在第一条消息随请求一起发出时）。conversations是
+// 会话列表缓存，conversationsLoaded避免每次挂载都重新拉取。conversationListOpen是会话
+// 列表下拉的展开状态。这四个字段和上面的messages/historyLoaded是同一层级的共享状态：
+// 不管从停靠还是抽屉打开，看到的都是同一个"当前会话"——包括下拉是否展开这个纯UI状态，
+// 这一点和messages/sending等既有字段的共享方式完全一致，data()不需要为它单独处理
+// （见Task 6：ChatPanel.vue的data()保持`return chatPanelState`不变，不额外拼装对象）。
 export default Vue.observable({
   open: false,
   dockMountCount: 0,
@@ -37,4 +45,8 @@ export default Vue.observable({
   broadcastNoteId: null,
   linkingCitationKey: null,
   copiedMessageId: null,
+  activeConversationId: null,
+  conversations: [],
+  conversationsLoaded: false,
+  conversationListOpen: false,
 })
