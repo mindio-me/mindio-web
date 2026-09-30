@@ -799,7 +799,15 @@
       "linkToNoteFailed": "Failed to link, please retry",
       "copy": "Copy",
       "copied": "Copied",
-      "copyFailed": "Copy failed, please retry"
+      "copyFailed": "Copy failed, please retry",
+      "newConversation": "New conversation",
+      "conversationList": "Conversations",
+      "conversationListEmpty": "No conversations yet",
+      "rename": "Rename",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this conversation? Its messages will be removed too.",
+      "renameFailed": "Rename failed, please try again",
+      "deleteFailed": "Delete failed, please try again"
     },
     "bookmarkImport": {
       "title": "Import Bookmarks",

@@ -9,6 +9,22 @@
         <i class="el-icon-chat-dot-round"></i>
         {{ $t('workspace.chat.title') }}
       </span>
+      <button class="chat-header-new" :title="$t('workspace.chat.newConversation')" @click="startNewConversation">
+        <i class="el-icon-plus"></i>
+      </button>
+      <el-popover placement="bottom-end" trigger="click" width="280" v-model="conversationListOpen">
+        <ConversationList
+          :conversations="conversations"
+          :active-conversation-id="activeConversationId"
+          @select="onSelectFromList"
+          @new-conversation="onNewFromList"
+          @rename="onRenameFromList"
+          @delete="onDeleteFromList"
+        />
+        <button slot="reference" class="chat-header-history" :title="$t('workspace.chat.conversationList')">
+          <i class="el-icon-tickets"></i>
+        </button>
+      </el-popover>
       <button class="chat-header-close" @click="$emit('close')">
         <i class="el-icon-close"></i>
       </button>
@@ -230,6 +246,7 @@ export default {
     this.speechSupported = process.client && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
     // 挂载即"首次可见"：抽屉用 v-if="hasOpened" 惰性挂载，笔记页用 v-if="aiPanelActive"
     if (!this.historyLoaded) this.loadHistory()
+    if (!this.conversationsLoaded) this.loadConversations()
   },
   beforeDestroy() {
     this.$nuxt.$off('workspace:current-note-id', this.onBroadcastNoteId)
@@ -239,11 +256,33 @@ export default {
     onBroadcastNoteId(noteId) {
       this.broadcastNoteId = noteId || null
     },
+    onSelectFromList(id) {
+      this.conversationListOpen = false
+      this.selectConversation(id)
+    },
+    onNewFromList() {
+      this.conversationListOpen = false
+      this.startNewConversation()
+    },
+    onRenameFromList({ id, title }) {
+      this.renameConversationTitle(id, title)
+    },
+    onDeleteFromList(id) {
+      this.deleteConversationById(id)
+    },
     async loadHistory() {
+      // activeConversationId为空表示"新建会话但还没发第一条消息"（懒创建），这种状态下
+      // 没有历史可加载，直接标记成"已加载完空列表"，不发请求。
+      if (this.activeConversationId == null) {
+        this.messages = []
+        this.historyLoaded = true
+        this.historyError = false
+        return
+      }
       this.loadingHistory = true
       this.historyError = false
       try {
-        const res = await this.$globalChatService.getMessages(50)
+        const res = await this.$globalChatService.getConversationMessages(this.activeConversationId)
         this.messages = res || []
         this.historyLoaded = true
         this.$nextTick(this.scrollToBottom)
@@ -251,6 +290,49 @@ export default {
         this.historyError = true
       } finally {
         this.loadingHistory = false
+      }
+    },
+    async loadConversations() {
+      try {
+        this.conversations = await this.$globalChatService.listConversations() || []
+        this.conversationsLoaded = true
+      } catch (e) {
+        // 会话列表加载失败不阻塞主聊天流程，列表面板自己会显示空态，用户可以重开面板重试
+      }
+    },
+    startNewConversation() {
+      this.activeConversationId = null
+      this.messages = []
+      this.historyLoaded = true
+      this.historyError = false
+      this.pendingConfirmations = []
+      this.liveAssistantText = ''
+    },
+    async selectConversation(conversationId) {
+      if (conversationId === this.activeConversationId) return
+      this.activeConversationId = conversationId
+      this.historyLoaded = false
+      this.pendingConfirmations = []
+      this.liveAssistantText = ''
+      await this.loadHistory()
+    },
+    async renameConversationTitle(conversationId, title) {
+      try {
+        await this.$globalChatService.renameConversation(conversationId, title)
+        await this.loadConversations()
+      } catch (e) {
+        this.$message.error(this.$t('workspace.chat.renameFailed'))
+      }
+    },
+    async deleteConversationById(conversationId) {
+      try {
+        await this.$globalChatService.deleteConversation(conversationId)
+        if (this.activeConversationId === conversationId) {
+          this.startNewConversation()
+        }
+        await this.loadConversations()
+      } catch (e) {
+        this.$message.error(this.$t('workspace.chat.deleteFailed'))
       }
     },
     async sendMessage() {
@@ -280,15 +362,23 @@ export default {
 
       let userMessageConfirmed = false
       try {
-        await this.$globalChatService.sendMessageStream(content, this.currentNoteId, attachmentsToSend, (event) => {
-          if (event.type === 'user_message') {
-            userMessageConfirmed = true
-            optimisticUser.id = event.id
-            optimisticUser.createdAt = event.createdAt
-            return
-          }
-          this.handleStreamEvent(event)
-        })
+        await this.$globalChatService.sendMessageStream(
+          content, this.activeConversationId, this.currentNoteId, attachmentsToSend, (event) => {
+            if (event.type === 'user_message') {
+              userMessageConfirmed = true
+              optimisticUser.id = event.id
+              optimisticUser.createdAt = event.createdAt
+              // 懒创建场景下这是前端第一次知道新会话id——写回共享状态并刷新会话列表，
+              // 让它出现在列表里；非懒创建场景 event.conversationId 本来就等于
+              // this.activeConversationId，这个判断是no-op。
+              if (event.conversationId != null && event.conversationId !== this.activeConversationId) {
+                this.activeConversationId = event.conversationId
+                this.loadConversations()
+              }
+              return
+            }
+            this.handleStreamEvent(event)
+          })
 
         if (this.liveAssistantText) {
           this.messages.push({
@@ -378,7 +468,7 @@ export default {
       confirmation.responding = true
       this.sending = true
       try {
-        await this.$globalChatService.resumeStream(confirmation.proposalId, decision, (event) => {
+        await this.$globalChatService.resumeStream(this.activeConversationId, confirmation.proposalId, decision, (event) => {
           this.handleStreamEvent(event)
         })
         const idx = this.pendingConfirmations.indexOf(confirmation)

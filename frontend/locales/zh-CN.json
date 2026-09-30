@@ -799,7 +799,15 @@
       "linkToNoteFailed": "关联失败，请重试",
       "copy": "复制",
       "copied": "已复制",
-      "copyFailed": "复制失败，请重试"
+      "copyFailed": "复制失败，请重试",
+      "newConversation": "新建会话",
+      "conversationList": "会话列表",
+      "conversationListEmpty": "还没有会话",
+      "rename": "改名",
+      "delete": "删除",
+      "deleteConfirm": "确定删除这个会话吗？聊天记录也会一并删除。",
+      "renameFailed": "改名失败，请重试",
+      "deleteFailed": "删除失败，请重试"
     },
     "bookmarkImport": {
       "title": "导入收藏夹",
