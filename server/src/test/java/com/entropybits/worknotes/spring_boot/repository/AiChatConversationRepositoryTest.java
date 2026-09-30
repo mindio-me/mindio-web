@@ -4,6 +4,7 @@
  */
 package com.entropybits.worknotes.spring_boot.repository;
 
+import com.entropybits.worknotes.spring_boot.entity.AgentConversationState;
 import com.entropybits.worknotes.spring_boot.entity.AiChatConversation;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,6 +34,7 @@ class AiChatConversationRepositoryTest {
     @Autowired private AiChatConversationRepository conversationRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private AiChatMessageRepository chatMessageRepository;
+    @Autowired private AgentConversationStateRepository agentConversationStateRepository;
 
     @Test
     void deletingConversationCascadesToItsMessages() {
@@ -66,5 +69,67 @@ class AiChatConversationRepositoryTest {
         List<AiChatConversation> result = conversationRepository.findByOwnerOrderByLastMessageAtDesc(alice);
 
         assertThat(result).extracting(AiChatConversation::getTitle).containsExactly("新会话", "旧会话");
+    }
+
+    @Test
+    void findFirstByConversationOrderByCreatedAtAsc_returnsOnlyEarliestMessage() {
+        // 覆盖finding#3：fallbackTitle()现在用这个衍生查询代替"查全部消息再取第一条"，
+        // 这里在真实H2 JPA环境下验证它确实只返回最早一条，而不是整个列表的第一个元素
+        // （防止将来有人把方法名拼错、退化成等价于findFirst...().get(0)的O(n)版本）。
+        User alice = userRepository.save(User.builder().username("first-msg-alice").password("x").role("USER").build());
+        AiChatConversation conversation = conversationRepository.save(AiChatConversation.builder().owner(alice).build());
+        chatMessageRepository.save(com.entropybits.worknotes.spring_boot.entity.AiChatMessage.builder()
+                .conversation(conversation).role(com.entropybits.worknotes.spring_boot.entity.AiChatMessage.Role.USER)
+                .content("最早的消息").build());
+        chatMessageRepository.save(com.entropybits.worknotes.spring_boot.entity.AiChatMessage.builder()
+                .conversation(conversation).role(com.entropybits.worknotes.spring_boot.entity.AiChatMessage.Role.ASSISTANT)
+                .content("后面的回复").build());
+
+        Optional<com.entropybits.worknotes.spring_boot.entity.AiChatMessage> result =
+                chatMessageRepository.findFirstByConversationOrderByCreatedAtAsc(conversation);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().getContent()).isEqualTo("最早的消息");
+    }
+
+    @Test
+    void findFirstByConversationOrderByCreatedAtAsc_returnsEmptyWhenConversationHasNoMessages() {
+        User alice = userRepository.save(User.builder().username("no-msg-alice").password("x").role("USER").build());
+        AiChatConversation conversation = conversationRepository.save(AiChatConversation.builder().owner(alice).build());
+
+        assertThat(chatMessageRepository.findFirstByConversationOrderByCreatedAtAsc(conversation)).isEmpty();
+    }
+
+    @Test
+    void updateLastMessageAt_updatesOnlyThatColumnAndLeavesTitleUntouched() {
+        // 覆盖finding#1里touchConversation的竞态修复：定向update只能碰lastMessageAt，
+        // 不能把title列带着一起覆盖——哪怕调用时根本没传title。
+        User alice = userRepository.save(User.builder().username("touch-alice").password("x").role("USER").build());
+        AiChatConversation conversation = conversationRepository.save(
+                AiChatConversation.builder().owner(alice).title("已生成的标题").build());
+        Instant newTimestamp = Instant.parse("2026-05-01T00:00:00Z");
+
+        conversationRepository.updateLastMessageAt(conversation.getId(), newTimestamp);
+        conversationRepository.flush();
+        AiChatConversation reloaded = conversationRepository.findById(conversation.getId()).orElseThrow();
+
+        assertThat(reloaded.getLastMessageAt()).isEqualTo(newTimestamp);
+        assertThat(reloaded.getTitle()).isEqualTo("已生成的标题");
+    }
+
+    @Test
+    void agentConversationStateRepository_deleteByConversationId_removesMatchingRowOnly() {
+        // 覆盖finding#4：deleteConversation()按conversationId字符串清理agent_conversation_state，
+        // 这里验证衍生delete方法本身行为正确、且不会误删其它会话的状态行。
+        agentConversationStateRepository.save(AgentConversationState.builder()
+                .conversationId("5").stateBlob("{\"keep\":false}").build());
+        agentConversationStateRepository.save(AgentConversationState.builder()
+                .conversationId("6").stateBlob("{\"keep\":true}").build());
+
+        agentConversationStateRepository.deleteByConversationId("5");
+        agentConversationStateRepository.flush();
+
+        assertThat(agentConversationStateRepository.findByConversationId("5")).isEmpty();
+        assertThat(agentConversationStateRepository.findByConversationId("6")).isPresent();
     }
 }

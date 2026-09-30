@@ -14,6 +14,7 @@ import com.entropybits.worknotes.spring_boot.entity.AiChatMessage;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatConversationRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
@@ -46,6 +47,7 @@ class GlobalChatServiceTest {
 
     @Mock AiChatMessageRepository chatMessageRepository;
     @Mock AiChatConversationRepository conversationRepository;
+    @Mock AgentConversationStateRepository agentConversationStateRepository;
     @Mock UserRepository userRepository;
     @Mock NoteRepository noteRepository;
     @Mock SourceClipRepository sourceClipRepository;
@@ -64,7 +66,8 @@ class GlobalChatServiceTest {
     void setUp() {
         AiProperties aiProperties = new AiProperties();
         aiProperties.setProvider("anthropic");
-        service = new GlobalChatService(chatMessageRepository, conversationRepository, userRepository, noteRepository,
+        service = new GlobalChatService(chatMessageRepository, conversationRepository, agentConversationStateRepository,
+                userRepository, noteRepository,
                 sourceClipRepository, chunkingService, agentServiceClient, extractionService, new ObjectMapper(),
                 aiProperties, anthropicService, openAiService, deepseekService, doubaoService);
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
@@ -211,6 +214,50 @@ class GlobalChatServiceTest {
         service.sendMessageStream("alice", "第二轮问题", 5L, null, List.of(), captureEmitter(new RecordingEmitterListener()));
 
         verify(anthropicService, never()).generateConversationTitle(anyString(), anyString());
+    }
+
+    @Test
+    void sendMessageStream_existingConversationWithNullTitleTriggersTitleGenerationOnThisTurn() throws Exception {
+        // 覆盖finding#1的核心bug：conversationId不为空（不是这次请求里新建的会话——比如
+        // V20迁移出来的存量会话，或者上一轮标题生成失败过）但title仍是null，按spec要求
+        // 任意一轮问答后title还是null都要重试生成，老代码用"conversationId==null"当门槛，
+        // 这种场景永远不会触发。
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).title(null).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        when(anthropicService.generateConversationTitle(anyString(), anyString())).thenReturn("补生成的标题");
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("这轮的回复", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        service.sendMessageStream("alice", "这轮的问题", 5L, null, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        verify(anthropicService, timeout(2000)).generateConversationTitle(eq("这轮的问题"), eq("这轮的回复"));
+        verify(conversationRepository, timeout(2000).atLeastOnce()).save(argThat(c -> "补生成的标题".equals(c.getTitle())));
+    }
+
+    @Test
+    void sendMessageStream_touchConversationUsesTargetedUpdateAndNeverFullSavesConversation() throws Exception {
+        // 覆盖finding#1里touchConversation的竞态：旧实现touchConversation()对
+        // conversationRepository调用save(conversation)，把整个内存实体（可能还带着过时的
+        // title=null）存盘——如果同一会话有并发的标题生成线程已经写库成功，这次save()会把
+        // 刚生成好的标题覆盖回null。新实现只应该对lastMessageAt做定向update，全程不应该
+        // 对这条会话调用save(conversation)，这样不管title在DB里实际是什么，都不会被这次
+        // "只是想更新lastMessageAt"的操作意外清空。这里用title已存在（非null）的会话，
+        // 让标题生成分支不触发，从而能单独断言touchConversation自己的行为。
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).title("已有标题").build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("回复内容", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        service.sendMessageStream("alice", "问题", 5L, null, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        verify(conversationRepository).updateLastMessageAt(eq(5L), any());
+        verify(conversationRepository, never()).save(any(AiChatConversation.class));
     }
 
     @Test
@@ -433,6 +480,30 @@ class GlobalChatServiceTest {
     }
 
     @Test
+    void resumeStream_titleStillNullTriggersTitleGenerationEvenWithPriorAssistantMessages() throws Exception {
+        // 覆盖finding#1里resumeStream那部分：旧的isFirstTurn用"这条会话此前是否已经有过
+        // ASSISTANT消息"来判断是不是第一轮，对title仍是null但已经有过往消息的会话（比如
+        // 上一次标题生成失败过）不会重试。新门槛统一为"title是否还是null"。
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).title(null).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)).thenReturn(List.of(
+                AiChatMessage.builder().conversation(conversation).role(AiChatMessage.Role.USER).content("最早的问题").build(),
+                AiChatMessage.builder().conversation(conversation).role(AiChatMessage.Role.ASSISTANT).content("最早的回复").build(),
+                AiChatMessage.builder().conversation(conversation).role(AiChatMessage.Role.USER).content("加一条").build()));
+        when(anthropicService.generateConversationTitle(anyString(), anyString())).thenReturn("补生成的标题");
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(3);
+            listener.onDone("已经加好了", List.of());
+            return null;
+        }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
+
+        service.resumeStream("alice", 5L, "p1", "accept", captureEmitter(new RecordingEmitterListener()));
+
+        verify(anthropicService, timeout(2000)).generateConversationTitle(eq("最早的问题"), eq("已经加好了"));
+        verify(conversationRepository, timeout(2000).atLeastOnce()).save(argThat(c -> "补生成的标题".equals(c.getTitle())));
+    }
+
+    @Test
     void resumeStream_withConversationIdOwnedByAnotherUserThrowsBeforeCallingAgentService() {
         User bob = User.builder().id(2L).username("bob").build();
         AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
@@ -530,7 +601,7 @@ class GlobalChatServiceTest {
                 .title(null).lastMessageAt(java.time.Instant.parse("2026-03-01T00:00:00Z")).build();
         when(conversationRepository.findByOwnerOrderByLastMessageAtDesc(user))
                 .thenReturn(List.of(withoutTitle, withTitle));
-        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(withoutTitle)).thenReturn(List.of(
+        when(chatMessageRepository.findFirstByConversationOrderByCreatedAtAsc(withoutTitle)).thenReturn(Optional.of(
                 AiChatMessage.builder().conversation(withoutTitle).role(AiChatMessage.Role.USER)
                         .content("这是一条比较长需要截断展示的第一条消息内容示例文本").build()));
 
@@ -538,6 +609,24 @@ class GlobalChatServiceTest {
 
         assertThat(result).extracting(com.entropybits.worknotes.spring_boot.dto.ConversationResponse::getTitle)
                 .containsExactly("这是一条比较长需要截断展示的第一条消息内…", "已有标题");
+        // 覆盖finding#3：fallbackTitle只需要第一条消息，不应该为了读一行就把整个会话的
+        // 消息历史都查出来。
+        verify(chatMessageRepository, never()).findByConversationOrderByCreatedAtAsc(any());
+    }
+
+    @Test
+    void listConversations_fallbackTitleReturnsDefaultWhenConversationHasNoMessagesYet() {
+        // 懒创建但还没发第一条消息的会话——findFirstByConversationOrderByCreatedAtAsc
+        // 应该返回empty而不是抛异常，fallbackTitle兜底成"新对话"。
+        AiChatConversation empty = AiChatConversation.builder().id(3L).owner(user).title(null)
+                .lastMessageAt(null).build();
+        when(conversationRepository.findByOwnerOrderByLastMessageAtDesc(user)).thenReturn(List.of(empty));
+        when(chatMessageRepository.findFirstByConversationOrderByCreatedAtAsc(empty)).thenReturn(Optional.empty());
+
+        List<com.entropybits.worknotes.spring_boot.dto.ConversationResponse> result = service.listConversations("alice");
+
+        assertThat(result).extracting(com.entropybits.worknotes.spring_boot.dto.ConversationResponse::getTitle)
+                .containsExactly("新对话");
     }
 
     @Test
@@ -571,6 +660,30 @@ class GlobalChatServiceTest {
         service.deleteConversation("alice", 5L);
 
         verify(conversationRepository).delete(conversation);
+    }
+
+    @Test
+    void deleteConversation_alsoDeletesMatchingAgentConversationStateRow() {
+        // 覆盖finding#4：agent_conversation_state不受AiChatConversation删除时的FK级联影响，
+        // 必须显式按conversationId字符串清理，否则LangGraph checkpointer序列化的对话内容
+        // 副本会一直留在这张表里。
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+
+        service.deleteConversation("alice", 5L);
+
+        verify(agentConversationStateRepository).deleteByConversationId("5");
+    }
+
+    @Test
+    void deleteConversation_withConversationOwnedByAnotherUserDoesNotDeleteAgentConversationState() {
+        User bob = User.builder().id(2L).username("bob").build();
+        AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(bobsConversation));
+
+        assertThatThrownBy(() -> service.deleteConversation("alice", 5L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(agentConversationStateRepository);
     }
 
     @Test

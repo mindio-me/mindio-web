@@ -19,6 +19,7 @@ import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatConversationRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
@@ -45,6 +46,7 @@ public class GlobalChatService {
 
     private final AiChatMessageRepository chatMessageRepository;
     private final AiChatConversationRepository conversationRepository;
+    private final AgentConversationStateRepository agentConversationStateRepository;
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
     private final SourceClipRepository sourceClipRepository;
@@ -60,6 +62,7 @@ public class GlobalChatService {
 
     public GlobalChatService(AiChatMessageRepository chatMessageRepository,
                               AiChatConversationRepository conversationRepository,
+                              AgentConversationStateRepository agentConversationStateRepository,
                               UserRepository userRepository,
                               NoteRepository noteRepository,
                               SourceClipRepository sourceClipRepository,
@@ -74,6 +77,7 @@ public class GlobalChatService {
                               @Qualifier("doubaoTranslationService") AiTranslationService doubaoService) {
         this.chatMessageRepository = chatMessageRepository;
         this.conversationRepository = conversationRepository;
+        this.agentConversationStateRepository = agentConversationStateRepository;
         this.userRepository = userRepository;
         this.noteRepository = noteRepository;
         this.sourceClipRepository = sourceClipRepository;
@@ -100,7 +104,6 @@ public class GlobalChatService {
             AiChatConversation conversation = conversationId == null
                     ? conversationRepository.save(AiChatConversation.builder().owner(user).build())
                     : loadOwnedConversationOrThrow(conversationId, user);
-            boolean isFirstTurn = conversationId == null;
 
             List<ChatAttachmentRef> attachmentRefs = attachments == null ? List.of() : attachments.stream()
                     .map(a -> new ChatAttachmentRef(a.type(), a.url(), a.fileName()))
@@ -200,7 +203,10 @@ public class GlobalChatService {
                     .citationsJson(citationsJson).build());
 
             touchConversation(conversation);
-            if (isFirstTurn) {
+            // 门槛是"title是否还是null"，不是"是不是这次请求里新建的会话"——V20迁移出来的
+            // 存量会话conversationId永远不为null，如果只在conversationId==null时触发，这些
+            // 会话就永远生不出标题；同理上一次生成失败（title仍是null）也要在下一轮问答后重试。
+            if (conversation.getTitle() == null) {
                 triggerTitleGeneration(conversation.getId(), content, reply);
             }
 
@@ -227,11 +233,6 @@ public class GlobalChatService {
         try {
             User user = getUser(username);
             AiChatConversation conversation = loadOwnedConversationOrThrow(conversationId, user);
-            // resume之前这条会话是否已经有过至少一轮完整问答——用于判断这次落库的assistant
-            // 消息是不是"第一轮"，需要在resume之前查，因为confirm_request场景下上一轮
-            // sendMessageStream只落了用户消息、没落assistant消息。
-            boolean isFirstTurn = chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation).stream()
-                    .noneMatch(m -> m.getRole() == AiChatMessage.Role.ASSISTANT);
 
             StringBuilder finalReplyText = new StringBuilder();
             List<ChatCitation>[] resolvedCitations = new List[]{List.of()};
@@ -302,7 +303,11 @@ public class GlobalChatService {
                     .citationsJson(citationsJson).build());
 
             touchConversation(conversation);
-            if (isFirstTurn) {
+            // 门槛同sendMessageStream：title是否还是null，而不是"这轮是不是结构上的第一轮"——
+            // 旧的"没有ASSISTANT消息"判断对title已非null的旧会话会漏触发重试。resume场景下
+            // 这轮请求本身没有新的用户文本（只有proposalId/decision），仍然用会话最早一条
+            // 用户消息作为生成标题的素材。
+            if (conversation.getTitle() == null) {
                 String firstUserMessage = chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)
                         .stream().filter(m -> m.getRole() == AiChatMessage.Role.USER)
                         .findFirst().map(AiChatMessage::getContent).orElse("");
@@ -325,9 +330,15 @@ public class GlobalChatService {
         }
     }
 
+    // 只更新lastMessageAt这一列（定向update），不走conversationRepository.save(conversation)
+    // 整体落盘——调用方手里的conversation对象是这次请求一开始加载/创建的，如果同一会话的
+    // 异步标题生成线程（triggerTitleGeneration）在此期间已经把title写进了数据库，save()整个
+    // 实体会把内存里还是null的title覆盖回去，把刚生成好的标题静默冲掉。定向update从根上避免
+    // 这个字段被牵连。
     private void touchConversation(AiChatConversation conversation) {
-        conversation.setLastMessageAt(Instant.now());
-        conversationRepository.save(conversation);
+        Instant now = Instant.now();
+        conversation.setLastMessageAt(now);
+        conversationRepository.updateLastMessageAt(conversation.getId(), now);
     }
 
     // 标题生成失败不能影响主对话流程已经返回给用户——用独立线程异步跑，风格对齐
@@ -410,6 +421,10 @@ public class GlobalChatService {
         User user = getUser(username);
         AiChatConversation conversation = loadOwnedConversationOrThrow(conversationId, user);
         conversationRepository.delete(conversation);
+        // agent_conversation_state不受AiChatConversation的FK级联影响（按conversationId字符串
+        // 独立存取，见AgentConversationState类注释），LangGraph checkpointer的序列化状态里
+        // 复制了一份对话内容，不清掉的话用户删会话后这份内容副本会一直留在这张表里。
+        agentConversationStateRepository.deleteByConversationId(String.valueOf(conversationId));
     }
 
     private ConversationResponse toConversationResponse(AiChatConversation c) {
@@ -420,9 +435,8 @@ public class GlobalChatService {
     // title为空时（还没生成完，或V20迁移出来的存量会话本来就没有title）用第一条用户消息
     // 截断展示——纯展示层兜底，不回写数据库，真正的title只在首轮问答后异步生成一次。
     private String fallbackTitle(AiChatConversation c) {
-        List<AiChatMessage> messages = chatMessageRepository.findByConversationOrderByCreatedAtAsc(c);
-        if (messages.isEmpty()) return "新对话";
-        String firstContent = messages.get(0).getContent();
+        String firstContent = chatMessageRepository.findFirstByConversationOrderByCreatedAtAsc(c)
+                .map(AiChatMessage::getContent).orElse(null);
         if (firstContent == null || firstContent.isBlank()) return "新对话";
         return firstContent.length() > FALLBACK_TITLE_CHAR_CAP
                 ? firstContent.substring(0, FALLBACK_TITLE_CHAR_CAP) + "…"
