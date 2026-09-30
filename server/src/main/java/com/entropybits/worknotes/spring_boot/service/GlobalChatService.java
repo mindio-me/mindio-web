@@ -4,17 +4,22 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
+import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
 import com.entropybits.worknotes.spring_boot.dto.AttachmentPayload;
 import com.entropybits.worknotes.spring_boot.dto.ChatAttachmentRef;
 import com.entropybits.worknotes.spring_boot.dto.ChatCitation;
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChatStreamEvent;
+import com.entropybits.worknotes.spring_boot.dto.ConversationResponse;
+import com.entropybits.worknotes.spring_boot.entity.AiChatConversation;
 import com.entropybits.worknotes.spring_boot.entity.AiChatMessage;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AiChatConversationRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
@@ -22,11 +27,12 @@ import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +41,10 @@ import java.util.Map;
 @Service
 public class GlobalChatService {
 
+    private static final int FALLBACK_TITLE_CHAR_CAP = 20;
+
     private final AiChatMessageRepository chatMessageRepository;
+    private final AiChatConversationRepository conversationRepository;
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
     private final SourceClipRepository sourceClipRepository;
@@ -43,16 +52,28 @@ public class GlobalChatService {
     private final AgentServiceClient agentServiceClient;
     private final LocalFileExtractionService extractionService;
     private final ObjectMapper objectMapper;
+    private final AiProperties aiProperties;
+    private final AiTranslationService anthropicService;
+    private final AiTranslationService openAiService;
+    private final AiTranslationService deepseekService;
+    private final AiTranslationService doubaoService;
 
     public GlobalChatService(AiChatMessageRepository chatMessageRepository,
+                              AiChatConversationRepository conversationRepository,
                               UserRepository userRepository,
                               NoteRepository noteRepository,
                               SourceClipRepository sourceClipRepository,
                               ContentChunkingService chunkingService,
                               AgentServiceClient agentServiceClient,
                               LocalFileExtractionService extractionService,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              AiProperties aiProperties,
+                              @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
+                              @Qualifier("openAiTranslationService") AiTranslationService openAiService,
+                              @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
+                              @Qualifier("doubaoTranslationService") AiTranslationService doubaoService) {
         this.chatMessageRepository = chatMessageRepository;
+        this.conversationRepository = conversationRepository;
         this.userRepository = userRepository;
         this.noteRepository = noteRepository;
         this.sourceClipRepository = sourceClipRepository;
@@ -60,16 +81,26 @@ public class GlobalChatService {
         this.agentServiceClient = agentServiceClient;
         this.extractionService = extractionService;
         this.objectMapper = objectMapper;
+        this.aiProperties = aiProperties;
+        this.anthropicService = anthropicService;
+        this.openAiService = openAiService;
+        this.deepseekService = deepseekService;
+        this.doubaoService = doubaoService;
     }
 
-    // agent推理逻辑整体搬到独立的Python/LangGraph服务（AgentServiceClient），这里只做：
-    // 持久化用户消息 -> 调用Agent服务并把事件原样转发给前端 -> 持久化最终回复。
-    // conversationId 目前等同于username（延续"单一连续会话"的既有决定）。
-    public void sendMessageStream(String username, String content, Long currentNoteId,
+    // agent推理逻辑整体在独立的Python/LangGraph服务（AgentServiceClient），这里只做：
+    // 解析/懒创建会话 -> 持久化用户消息 -> 调用Agent服务并把事件原样转发给前端 -> 持久化
+    // 最终回复 -> 首轮问答后异步生成标题。conversationId为空表示"新建会话"，在这次请求里
+    // 和第一条用户消息一起创建，不单独开一个"创建会话"的接口（懒创建，见设计文档）。
+    public void sendMessageStream(String username, String content, Long conversationId, Long currentNoteId,
                                    List<AttachmentPayload> attachments, SseEmitter emitter) {
         java.util.concurrent.atomic.AtomicBoolean disconnected = new java.util.concurrent.atomic.AtomicBoolean(false);
         try {
             User user = getUser(username);
+            AiChatConversation conversation = conversationId == null
+                    ? conversationRepository.save(AiChatConversation.builder().owner(user).build())
+                    : loadOwnedConversationOrThrow(conversationId, user);
+            boolean isFirstTurn = conversationId == null;
 
             List<ChatAttachmentRef> attachmentRefs = attachments == null ? List.of() : attachments.stream()
                     .map(a -> new ChatAttachmentRef(a.type(), a.url(), a.fileName()))
@@ -78,14 +109,14 @@ public class GlobalChatService {
 
             Note currentNote = loadOwnedNoteOrNull(currentNoteId, user);
             // currentNoteId本身不代表调用者拥有这条笔记（可能是别人的笔记ID、已删除的ID，或压根没传）。
-            // 下游（agent服务的note-references工具、持久化的消息记录）一旦拿到这个ID就会按它去查内容，
-            // 所以只有在currentNote非空（即真正属于user）时才允许把ID继续往下传，否则一律传null。
+            // 下游（agent服务的note-references工具）一旦拿到这个ID就会按它去查内容，所以只有在
+            // currentNote非空（即真正属于user）时才允许把ID继续往下传，否则一律传null。
             Long ownedNoteId = currentNote == null ? null : currentNoteId;
 
             AiChatMessage userMessage = chatMessageRepository.save(AiChatMessage.builder()
-                    .owner(user).role(AiChatMessage.Role.USER).content(content)
-                    .attachmentsJson(attachmentsJson).noteId(ownedNoteId).build());
-            sendEvent(emitter, ChatStreamEvent.userMessage(toResponse(userMessage)), disconnected);
+                    .conversation(conversation).role(AiChatMessage.Role.USER).content(content)
+                    .attachmentsJson(attachmentsJson).build());
+            sendEvent(emitter, ChatStreamEvent.userMessage(toResponse(userMessage), conversation.getId()), disconnected);
 
             String currentNoteContext = currentNote == null ? null
                     : "标题：" + currentNote.getTitle() + "\n正文：\n" + currentNoteBodyText(currentNote);
@@ -94,9 +125,10 @@ public class GlobalChatService {
             List<ChatCitation>[] resolvedCitations = new List[]{List.of()};
             boolean[] chatSucceeded = {false};
             boolean[] awaitingConfirm = {false};
+            String conversationIdStr = String.valueOf(conversation.getId());
 
             try {
-                agentServiceClient.streamChat(username, content, username, currentNoteContext, attachments,
+                agentServiceClient.streamChat(username, content, conversationIdStr, currentNoteContext, attachments,
                         ownedNoteId,
                         new AgentServiceClient.StreamListener() {
                             @Override
@@ -112,8 +144,6 @@ public class GlobalChatService {
 
                             @Override
                             public void onDone(String finalContent, List<ChatCitation> citations) {
-                                // Agent服务已经给出权威的最终文本（不是靠拼接text_delta），
-                                // 用它覆盖，避免因为某个provider不支持逐token流式而拼不出完整内容。
                                 finalReplyText.setLength(0);
                                 finalReplyText.append(finalContent);
                                 resolvedCitations[0] = resolveCitationTitles(citations);
@@ -122,9 +152,6 @@ public class GlobalChatService {
 
                             @Override
                             public void onError(String message) {
-                                // 保留已经流出去的部分文本（用户已经在界面上看到了），只在后面
-                                // 追加一句提示，而不是整段替换掉——和迁移前"生成中途失败"的
-                                // 行为保持一致。
                                 if (finalReplyText.length() == 0) {
                                     finalReplyText.append(message);
                                 } else {
@@ -169,14 +196,25 @@ public class GlobalChatService {
                     ? writeJson(resolvedCitations[0]) : null;
 
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
-                    .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply)
-                    .citationsJson(citationsJson).noteId(ownedNoteId).build());
+                    .conversation(conversation).role(AiChatMessage.Role.ASSISTANT).content(reply)
+                    .citationsJson(citationsJson).build());
+
+            touchConversation(conversation);
+            if (isFirstTurn) {
+                triggerTitleGeneration(conversation.getId(), content, reply);
+            }
 
             sendEvent(emitter, ChatStreamEvent.done(toResponse(assistantMessage)), disconnected);
-            // 无论disconnected与否都调用：Spring对已经complete/error过的emitter再次complete()是安全的no-op，
-            // 这样即使sendEvent是因为非断连原因（而非真实的客户端断开）设置的disconnected，emitter也不会
-            // 因为SseEmitter(0L)没有超时而永远挂起。
             emitter.complete();
+        } catch (ResourceNotFoundException e) {
+            // 会话归属校验失败（不存在/不属于当前用户）——按现有其他owner校验的写法，应该是
+            // 一个可观察到的404级错误，不能被下面的通用catch吞掉变成一条"抱歉没能回复"的
+            // 普通对话错误。emitter仍然要收尾（发error帧+completeWithError），但异常本身要
+            // 继续往外抛，调用方（含单测）能感知到这是一次无效请求而不是一次对话失败。
+            log.warn("conversation lookup failed for user {}", username, e);
+            sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
+            emitter.completeWithError(e);
+            throw e;
         } catch (Exception e) {
             log.error("unexpected error in sendMessageStream for user {}", username, e);
             sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
@@ -184,20 +222,24 @@ public class GlobalChatService {
         }
     }
 
-    // 已知的小遗留（不是这次要解决的，只是让实现者知情）：resumeStream 持久化的 assistant 消息
-    // 没有设置 noteId（不像 sendMessageStream 那样能拿到 ownedNoteId），所以这条回复不会出现在
-    // "按笔记筛选聊天记录"（getMessagesForNote）的结果里——只影响历史记录筛选，不影响写入流程本身。
-    public void resumeStream(String username, String proposalId, String decision, SseEmitter emitter) {
+    public void resumeStream(String username, Long conversationId, String proposalId, String decision, SseEmitter emitter) {
         java.util.concurrent.atomic.AtomicBoolean disconnected = new java.util.concurrent.atomic.AtomicBoolean(false);
         try {
             User user = getUser(username);
+            AiChatConversation conversation = loadOwnedConversationOrThrow(conversationId, user);
+            // resume之前这条会话是否已经有过至少一轮完整问答——用于判断这次落库的assistant
+            // 消息是不是"第一轮"，需要在resume之前查，因为confirm_request场景下上一轮
+            // sendMessageStream只落了用户消息、没落assistant消息。
+            boolean isFirstTurn = chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation).stream()
+                    .noneMatch(m -> m.getRole() == AiChatMessage.Role.ASSISTANT);
+
             StringBuilder finalReplyText = new StringBuilder();
             List<ChatCitation>[] resolvedCitations = new List[]{List.of()};
             boolean[] chatSucceeded = {false};
             boolean[] awaitingConfirm = {false};
 
             try {
-                agentServiceClient.resumeChat(username, proposalId, decision,
+                agentServiceClient.resumeChat(String.valueOf(conversation.getId()), proposalId, decision,
                         new AgentServiceClient.StreamListener() {
                             @Override
                             public void onTextDelta(String text) {
@@ -256,16 +298,64 @@ public class GlobalChatService {
                     ? writeJson(resolvedCitations[0]) : null;
 
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
-                    .owner(user).role(AiChatMessage.Role.ASSISTANT).content(reply)
+                    .conversation(conversation).role(AiChatMessage.Role.ASSISTANT).content(reply)
                     .citationsJson(citationsJson).build());
+
+            touchConversation(conversation);
+            if (isFirstTurn) {
+                String firstUserMessage = chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)
+                        .stream().filter(m -> m.getRole() == AiChatMessage.Role.USER)
+                        .findFirst().map(AiChatMessage::getContent).orElse("");
+                triggerTitleGeneration(conversation.getId(), firstUserMessage, reply);
+            }
 
             sendEvent(emitter, ChatStreamEvent.done(toResponse(assistantMessage)), disconnected);
             emitter.complete();
+        } catch (ResourceNotFoundException e) {
+            // 理由同 sendMessageStream 里的同名catch：会话归属校验失败要能被调用方感知到，
+            // 不能被下面的通用catch吞掉。
+            log.warn("conversation lookup failed for user {}", username, e);
+            sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
+            emitter.completeWithError(e);
+            throw e;
         } catch (Exception e) {
             log.error("unexpected error in resumeStream for user {}", username, e);
             sendEvent(emitter, ChatStreamEvent.error("抱歉，这次没能回复，换个说法试试？"), disconnected);
             emitter.completeWithError(e);
         }
+    }
+
+    private void touchConversation(AiChatConversation conversation) {
+        conversation.setLastMessageAt(Instant.now());
+        conversationRepository.save(conversation);
+    }
+
+    // 标题生成失败不能影响主对话流程已经返回给用户——用独立线程异步跑，风格对齐
+    // GlobalChatController里"new Thread(...).start()"驱动SSE流的既有写法，不引入新的
+    // 线程池/@Async机制。竞态：如果用户在标题生成完成前又极快发了第二轮消息，两轮都可能
+    // 判断出"title还是null"各自触发一次生成——无害，以后写入的为准，不做互斥。
+    private void triggerTitleGeneration(Long conversationId, String firstUserMessage, String firstAssistantReply) {
+        new Thread(() -> {
+            try {
+                AiTranslationService ai = resolveService();
+                String title = ai.generateConversationTitle(firstUserMessage, firstAssistantReply);
+                conversationRepository.findById(conversationId).ifPresent(c -> {
+                    c.setTitle(title);
+                    conversationRepository.save(c);
+                });
+            } catch (Exception e) {
+                log.warn("title generation failed for conversation {}, will keep title null", conversationId, e);
+            }
+        }).start();
+    }
+
+    private AiTranslationService resolveService() {
+        return switch (aiProperties.getProvider().toLowerCase()) {
+            case "openai" -> openAiService;
+            case "deepseek" -> deepseekService;
+            case "doubao" -> doubaoService;
+            default -> anthropicService;
+        };
     }
 
     // Agent服务只知道sourceType/sourceId，人类可读的标题按ID反查（复用现有lookupTitle逻辑）。
@@ -275,7 +365,7 @@ public class GlobalChatService {
         return citations.stream()
                 .map(c -> {
                     if ("WEB".equals(c.sourceType())) {
-                        return c; // Python已经给好了title，网络资料不需要反查
+                        return c;
                     }
                     ContentChunk.SourceType sourceType = ContentChunk.SourceType.valueOf(c.sourceType());
                     String key = titleKey(sourceType, c.sourceId());
@@ -295,21 +385,43 @@ public class GlobalChatService {
         }
     }
 
-    public List<ChatMessageResponse> listHistory(String username, int limit) {
-        int safeLimit = Math.max(0, limit);
+    public List<ConversationResponse> listConversations(String username) {
         User user = getUser(username);
-        List<AiChatMessage> messages = new ArrayList<>(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user));
-        Collections.reverse(messages);
-        if (messages.size() > safeLimit) {
-            messages = messages.subList(messages.size() - safeLimit, messages.size());
-        }
-        return messages.stream().map(this::toResponse).toList();
+        return conversationRepository.findByOwnerOrderByLastMessageAtDesc(user).stream()
+                .map(this::toConversationResponse).toList();
     }
 
-    public List<ChatMessageResponse> getMessagesForNote(String username, Long noteId) {
+    public List<ChatMessageResponse> getConversationMessages(String username, Long conversationId) {
         User user = getUser(username);
-        return chatMessageRepository.findByOwnerAndNoteIdOrderByCreatedAtAsc(user, noteId)
+        AiChatConversation conversation = loadOwnedConversationOrThrow(conversationId, user);
+        return chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)
                 .stream().map(this::toResponse).toList();
+    }
+
+    private ConversationResponse toConversationResponse(AiChatConversation c) {
+        String displayTitle = c.getTitle() != null ? c.getTitle() : fallbackTitle(c);
+        return ConversationResponse.builder().id(c.getId()).title(displayTitle).lastMessageAt(c.getLastMessageAt()).build();
+    }
+
+    // title为空时（还没生成完，或V20迁移出来的存量会话本来就没有title）用第一条用户消息
+    // 截断展示——纯展示层兜底，不回写数据库，真正的title只在首轮问答后异步生成一次。
+    private String fallbackTitle(AiChatConversation c) {
+        List<AiChatMessage> messages = chatMessageRepository.findByConversationOrderByCreatedAtAsc(c);
+        if (messages.isEmpty()) return "新对话";
+        String firstContent = messages.get(0).getContent();
+        if (firstContent == null || firstContent.isBlank()) return "新对话";
+        return firstContent.length() > FALLBACK_TITLE_CHAR_CAP
+                ? firstContent.substring(0, FALLBACK_TITLE_CHAR_CAP) + "…"
+                : firstContent;
+    }
+
+    AiChatConversation loadOwnedConversationOrThrow(Long conversationId, User user) {
+        AiChatConversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new ResourceNotFoundException("会话不存在"));
+        if (!conversation.getOwner().getId().equals(user.getId())) {
+            throw new ResourceNotFoundException("会话不存在");
+        }
+        return conversation;
     }
 
     private Note loadOwnedNoteOrNull(Long noteId, User user) {
@@ -319,8 +431,6 @@ public class GlobalChatService {
                 .orElse(null);
     }
 
-    // 当前笔记的正文经由 ContentChunkingService 归一化为纯文本（去掉 EditorJS/HTML 结构噪音），
-    // 并做长度硬截断，避免超长笔记把系统提示词撑爆模型的上下文窗口。
     private static final int CURRENT_NOTE_BODY_CHAR_CAP = 4000;
 
     private String currentNoteBodyText(Note note) {

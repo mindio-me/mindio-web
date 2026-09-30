@@ -26,18 +26,11 @@ public class GlobalChatController {
 
     private final GlobalChatService chatService;
 
-    @GetMapping("/messages")
-    public ResponseEntity<List<ChatMessageResponse>> listMessages(
-            @RequestParam(defaultValue = "50") int limit,
+    @GetMapping("/conversations/{id}/messages")
+    public ResponseEntity<List<ChatMessageResponse>> getConversationMessages(
+            @PathVariable Long id,
             @AuthenticationPrincipal UserDetails user) {
-        return ResponseEntity.ok(chatService.listHistory(user.getUsername(), limit));
-    }
-
-    @GetMapping("/notes/{noteId}/messages")
-    public ResponseEntity<List<ChatMessageResponse>> getMessagesForNote(
-            @PathVariable Long noteId,
-            @AuthenticationPrincipal UserDetails user) {
-        return ResponseEntity.ok(chatService.getMessagesForNote(user.getUsername(), noteId));
+        return ResponseEntity.ok(chatService.getConversationMessages(user.getUsername(), id));
     }
 
     @PostMapping(value = "/messages", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -52,7 +45,8 @@ public class GlobalChatController {
         SseEmitter emitter = new SseEmitter(0L);
         String username = user.getUsername();
         new Thread(() -> chatService.sendMessageStream(
-                username, request.getContent(), request.getCurrentNoteId(), request.getAttachments(), emitter)).start();
+                username, request.getContent(), request.getConversationId(), request.getCurrentNoteId(),
+                request.getAttachments(), emitter)).start();
         return emitter;
     }
 
@@ -62,7 +56,8 @@ public class GlobalChatController {
             @AuthenticationPrincipal UserDetails user) {
         SseEmitter emitter = new SseEmitter(0L);
         String username = user.getUsername();
-        new Thread(() -> chatService.resumeStream(username, request.getProposalId(), request.getDecision(), emitter)).start();
+        new Thread(() -> chatService.resumeStream(
+                username, request.getConversationId(), request.getProposalId(), request.getDecision(), emitter)).start();
         return emitter;
     }
 }

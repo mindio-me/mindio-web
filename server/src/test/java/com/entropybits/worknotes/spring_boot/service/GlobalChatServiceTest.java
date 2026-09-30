@@ -4,12 +4,17 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
+import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
 import com.entropybits.worknotes.spring_boot.dto.ChatCitation;
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChatStreamEvent;
+import com.entropybits.worknotes.spring_boot.entity.AiChatConversation;
 import com.entropybits.worknotes.spring_boot.entity.AiChatMessage;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
+import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AiChatConversationRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
@@ -28,69 +33,55 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
- * GlobalChatService 现在只做"持久化用户消息 -> 调用AgentServiceClient并转发事件 ->
- * 持久化最终回复"，agent推理循环本身已经搬到独立的Python/LangGraph服务，所以这里
- * mock的是 AgentServiceClient，不再是四个 ChatService provider bean。
+ * GlobalChatService 现在按会话（AiChatConversation）而不是按用户存取历史；agent推理循环
+ * 本身在独立的Python/LangGraph服务，这里mock的是 AgentServiceClient。
  */
 @ExtendWith(MockitoExtension.class)
 class GlobalChatServiceTest {
 
     @Mock AiChatMessageRepository chatMessageRepository;
+    @Mock AiChatConversationRepository conversationRepository;
     @Mock UserRepository userRepository;
     @Mock NoteRepository noteRepository;
     @Mock SourceClipRepository sourceClipRepository;
     @Mock ContentChunkingService chunkingService;
     @Mock AgentServiceClient agentServiceClient;
     @Mock LocalFileExtractionService extractionService;
+    @Mock AiTranslationService anthropicService;
+    @Mock AiTranslationService openAiService;
+    @Mock AiTranslationService deepseekService;
+    @Mock AiTranslationService doubaoService;
 
     private GlobalChatService service;
     private final User user = User.builder().id(1L).username("alice").build();
 
     @BeforeEach
     void setUp() {
-        service = new GlobalChatService(chatMessageRepository, userRepository, noteRepository, sourceClipRepository,
-                chunkingService, agentServiceClient, extractionService, new ObjectMapper());
+        AiProperties aiProperties = new AiProperties();
+        aiProperties.setProvider("anthropic");
+        service = new GlobalChatService(chatMessageRepository, conversationRepository, userRepository, noteRepository,
+                sourceClipRepository, chunkingService, agentServiceClient, extractionService, new ObjectMapper(),
+                aiProperties, anthropicService, openAiService, deepseekService, doubaoService);
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
-        // lenient：listHistory 这类只读方法不会调用 save，避免 Mockito 严格桩报 UnnecessaryStubbing
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> {
             AiChatMessage m = inv.getArgument(0);
-            if (m.getId() == null) m.setId(System.nanoTime());
+            // null防御：某些测试方法内额外用 argThat(...) 给 save(...) 注册更具体的stub时，
+            // Mockito在注册那一刻会用argThat的null占位符实际"调用"一次mock，如果这个调用落到
+            // 了这里（因为any()也匹配null），thenAnswer就会拿到null参数——不加保护会在stub
+            // 注册阶段就NPE，而不是在真正的业务调用时才失败。
+            if (m != null && m.getId() == null) m.setId(System.nanoTime());
             return m;
         });
-    }
-
-    @Test
-    void listHistory_returnsChronologicalOrderTruncatedToLimit() {
-        List<AiChatMessage> chronological = new java.util.ArrayList<>();
-        for (int i = 0; i < 5; i++) {
-            chronological.add(AiChatMessage.builder().owner(user)
-                    .role(i % 2 == 0 ? AiChatMessage.Role.USER : AiChatMessage.Role.ASSISTANT)
-                    .content("历史消息" + i).build());
-        }
-        List<AiChatMessage> descendingOrder = new java.util.ArrayList<>(chronological);
-        java.util.Collections.reverse(descendingOrder);
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(descendingOrder);
-
-        List<ChatMessageResponse> result = service.listHistory("alice", 3);
-
-        assertThat(result).extracting(ChatMessageResponse::getContent)
-                .containsExactly("历史消息2", "历史消息3", "历史消息4");
-    }
-
-    @Test
-    void listHistory_withNegativeLimitReturnsEmptyListWithoutThrowing() {
-        List<AiChatMessage> descendingOrder = List.of(
-                AiChatMessage.builder().owner(user).role(AiChatMessage.Role.USER).content("消息").build());
-        when(chatMessageRepository.findTop50ByOwnerOrderByCreatedAtDesc(user)).thenReturn(descendingOrder);
-
-        List<ChatMessageResponse> result = service.listHistory("alice", -1);
-
-        assertThat(result).isEmpty();
+        lenient().when(conversationRepository.save(any())).thenAnswer(inv -> {
+            AiChatConversation c = inv.getArgument(0);
+            if (c != null && c.getId() == null) c.setId(System.nanoTime());
+            return c;
+        });
     }
 
     private static class RecordingEmitterListener {
@@ -111,27 +102,119 @@ class GlobalChatServiceTest {
     }
 
     @Test
-    void sendMessageStream_persistsAndForwardsPlainTextReply() throws Exception {
+    void sendMessageStream_withNullConversationIdCreatesNewConversation() throws Exception {
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(6);
-            listener.onTextDelta("你好呀");
             listener.onDone("你好呀", List.of());
             return null;
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        SseEmitter emitter = captureEmitter(recorder);
+        service.sendMessageStream("alice", "你好", null, null, List.of(), captureEmitter(recorder));
 
-        service.sendMessageStream("alice", "你好", null, List.of(), emitter);
+        ArgumentCaptor<AiChatConversation> captor = ArgumentCaptor.forClass(AiChatConversation.class);
+        verify(conversationRepository, atLeastOnce()).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getOwner()).isEqualTo(user);
 
-        assertThat(recorder.events).extracting(ChatStreamEvent::type)
-                .containsExactly("user_message", "text_delta", "done");
-        assertThat(recorder.events.get(1).text()).isEqualTo("你好呀");
-        assertThat(recorder.events.get(2).content()).isEqualTo("你好呀");
+        ChatStreamEvent userMessageEvent = recorder.events.get(0);
+        assertThat(userMessageEvent.type()).isEqualTo("user_message");
+        assertThat(userMessageEvent.conversationId()).isNotNull();
     }
 
     @Test
-    void sendMessageStream_passesConversationIdEqualToUsernameAndCurrentNoteContext() throws Exception {
+    void sendMessageStream_withExistingConversationIdAppendsToIt() throws Exception {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("继续聊", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "接着上次说", 5L, null, List.of(), captureEmitter(recorder));
+
+        assertThat(recorder.events.get(0).conversationId()).isEqualTo(5L);
+        verify(agentServiceClient).streamChat(eq("alice"), eq("接着上次说"), eq("5"), any(), any(), any(), any());
+    }
+
+    @Test
+    void sendMessageStream_withConversationIdOwnedByAnotherUserThrows() {
+        User bob = User.builder().id(2L).username("bob").build();
+        AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(bobsConversation));
+
+        assertThatThrownBy(() -> service.sendMessageStream(
+                "alice", "偷看一下", 5L, null, List.of(), captureEmitter(new RecordingEmitterListener())))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(agentServiceClient);
+    }
+
+    @Test
+    void sendMessageStream_withNonExistentConversationIdThrows() {
+        when(conversationRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.sendMessageStream(
+                "alice", "问个问题", 99L, null, List.of(), captureEmitter(new RecordingEmitterListener())))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void sendMessageStream_firstTurnTriggersTitleGenerationAndPersistsIt() throws Exception {
+        when(anthropicService.generateConversationTitle(anyString(), anyString())).thenReturn("生成的标题");
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("回复内容", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+        ArgumentCaptor<AiChatConversation> savedConversation = ArgumentCaptor.forClass(AiChatConversation.class);
+        AiChatConversation created = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.save(argThat(c -> c.getId() == null))).thenReturn(created);
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(created));
+
+        service.sendMessageStream("alice", "问题", null, null, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        // 标题生成在独立线程里异步跑，给它一点时间完成再断言
+        verify(anthropicService, timeout(2000)).generateConversationTitle(eq("问题"), eq("回复内容"));
+        verify(conversationRepository, timeout(2000).atLeastOnce()).save(argThat(c -> "生成的标题".equals(c.getTitle())));
+    }
+
+    @Test
+    void sendMessageStream_titleGenerationFailureDoesNotBreakMainFlow() throws Exception {
+        when(anthropicService.generateConversationTitle(anyString(), anyString()))
+                .thenThrow(new RuntimeException("模型调用超时"));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("回复内容", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        RecordingEmitterListener recorder = new RecordingEmitterListener();
+        service.sendMessageStream("alice", "问题", null, null, List.of(), captureEmitter(recorder));
+
+        ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
+        assertThat(done.type()).isEqualTo("done");
+        assertThat(done.content()).isEqualTo("回复内容");
+    }
+
+    @Test
+    void sendMessageStream_secondTurnDoesNotTriggerTitleGeneration() throws Exception {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).title("已有标题").build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(6);
+            listener.onDone("第二轮回复", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+        service.sendMessageStream("alice", "第二轮问题", 5L, null, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        verify(anthropicService, never()).generateConversationTitle(anyString(), anyString());
+    }
+
+    @Test
+    void sendMessageStream_passesCurrentNoteContext() throws Exception {
         Note currentNote = Note.builder().id(9L).owner(user).title("我的笔记").build();
         when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
         when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文内容"));
@@ -141,35 +224,16 @@ class GlobalChatServiceTest {
             return null;
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
-        service.sendMessageStream("alice", "问题", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
+        service.sendMessageStream("alice", "问题", null, 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
 
         verify(agentServiceClient).streamChat(
-                eq("alice"), eq("问题"), eq("alice"),
+                eq("alice"), eq("问题"), anyString(),
                 argThat(ctx -> ctx != null && ctx.contains("我的笔记") && ctx.contains("正文内容")),
                 any(), any(), any());
     }
 
     @Test
-    void sendMessageStream_persistsCurrentNoteIdOnBothMessages() throws Exception {
-        Note currentNote = Note.builder().id(9L).owner(user).title("我的笔记").build();
-        when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
-        when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文"));
-        doAnswer(inv -> {
-            AgentServiceClient.StreamListener listener = inv.getArgument(6);
-            listener.onDone("好的", List.of());
-            return null;
-        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
-
-        service.sendMessageStream("alice", "问题", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
-
-        ArgumentCaptor<AiChatMessage> captor = ArgumentCaptor.forClass(AiChatMessage.class);
-        verify(chatMessageRepository, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(AiChatMessage::getNoteId).containsExactly(9L, 9L);
-    }
-
-    @Test
-    void sendMessageStream_neverThreadsUnownedNoteIdToAgentServiceOrPersistedMessages() throws Exception {
-        // 9L是真实存在的笔记，但属于别人（bob），不是调用者alice——不能因为ID合法就当成alice拥有。
+    void sendMessageStream_neverThreadsUnownedNoteIdToAgentService() throws Exception {
         User bob = User.builder().id(2L).username("bob").build();
         Note othersNote = Note.builder().id(9L).owner(bob).title("别人的笔记").build();
         when(noteRepository.findById(9L)).thenReturn(Optional.of(othersNote));
@@ -179,14 +243,10 @@ class GlobalChatServiceTest {
             return null;
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
-        service.sendMessageStream("alice", "关联的资料", 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
+        service.sendMessageStream("alice", "关联的资料", null, 9L, List.of(), captureEmitter(new RecordingEmitterListener()));
 
         verify(agentServiceClient).streamChat(
-                eq("alice"), eq("关联的资料"), eq("alice"), any(), any(), isNull(), any());
-
-        ArgumentCaptor<AiChatMessage> captor = ArgumentCaptor.forClass(AiChatMessage.class);
-        verify(chatMessageRepository, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues()).extracting(AiChatMessage::getNoteId).containsExactly(null, null);
+                eq("alice"), eq("关联的资料"), anyString(), any(), any(), isNull(), any());
     }
 
     @Test
@@ -199,7 +259,7 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "帮我看看笔记", null, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "帮我看看笔记", null, null, List.of(), captureEmitter(recorder));
 
         assertThat(recorder.events).extracting(ChatStreamEvent::type)
                 .containsExactly("user_message", "tool_call", "done");
@@ -218,7 +278,7 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "帮我看看用户增长的笔记", null, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "帮我看看用户增长的笔记", null, null, List.of(), captureEmitter(recorder));
 
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.citations()).hasSize(1);
@@ -235,12 +295,12 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "帮我查点资料", null, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "帮我查点资料", null, null, List.of(), captureEmitter(recorder));
 
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.citations()).hasSize(1);
         assertThat(done.citations().get(0).title()).isEqualTo("示例标题");
-        verifyNoInteractions(noteRepository, sourceClipRepository);
+        verifyNoInteractions(sourceClipRepository);
     }
 
     @Test
@@ -254,7 +314,7 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "这张截图说了什么", null, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "这张截图说了什么", null, null, List.of(), captureEmitter(recorder));
 
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.citations()).hasSize(1);
@@ -271,7 +331,7 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "问个问题", null, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "问个问题", null, null, List.of(), captureEmitter(recorder));
 
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.type()).isEqualTo("done");
@@ -285,7 +345,7 @@ class GlobalChatServiceTest {
                 .when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "你好", null, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "你好", null, null, List.of(), captureEmitter(recorder));
 
         ChatStreamEvent done = recorder.events.get(recorder.events.size() - 1);
         assertThat(done.type()).isEqualTo("done");
@@ -305,7 +365,7 @@ class GlobalChatServiceTest {
         org.mockito.Mockito.doThrow(new java.io.IOException("client gone"))
                 .when(emitter).send(org.mockito.ArgumentMatchers.anyString());
 
-        service.sendMessageStream("alice", "你好", null, List.of(), emitter);
+        service.sendMessageStream("alice", "你好", null, null, List.of(), emitter);
 
         org.mockito.ArgumentCaptor<AiChatMessage> captor = org.mockito.ArgumentCaptor.forClass(AiChatMessage.class);
         verify(chatMessageRepository, times(2)).save(captor.capture());
@@ -327,11 +387,9 @@ class GlobalChatServiceTest {
                         "image", "image/png", "aGVsbG8=", "https://cdn.example.com/a.png", "a.png"));
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "这是什么", null, attachments, captureEmitter(recorder));
+        service.sendMessageStream("alice", "这是什么", null, null, attachments, captureEmitter(recorder));
 
-        verify(agentServiceClient).streamChat(eq("alice"), eq("这是什么"), eq("alice"), any(), eq(attachments), any(), any());
-
-        // user_message 事件里应该带着落库的附件引用（ChatAttachmentRef 本身就不含base64字段）
+        verify(agentServiceClient).streamChat(eq("alice"), eq("这是什么"), anyString(), any(), eq(attachments), any(), any());
         assertThat(recorder.events.get(0).attachments()).hasSize(1);
         assertThat(recorder.events.get(0).attachments().get(0).url()).isEqualTo("https://cdn.example.com/a.png");
         assertThat(recorder.events.get(0).attachments().get(0).fileName()).isEqualTo("a.png");
@@ -346,16 +404,19 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.sendMessageStream("alice", "加一条", 9L, List.of(), captureEmitter(recorder));
+        service.sendMessageStream("alice", "加一条", null, 9L, List.of(), captureEmitter(recorder));
 
         assertThat(recorder.events).extracting(ChatStreamEvent::type)
                 .containsExactly("user_message", "confirm_request");
-        // 只持久化了用户消息，没有额外的assistant消息（等resume之后才会有真正的回复）
         verify(chatMessageRepository, times(1)).save(any());
     }
 
     @Test
     void resumeStream_acceptPersistsAssistantMessageAndSendsDone() throws Exception {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)).thenReturn(List.of(
+                AiChatMessage.builder().conversation(conversation).role(AiChatMessage.Role.USER).content("加一条").build()));
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(3);
             listener.onDone("已经加好了", List.of());
@@ -363,15 +424,44 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.resumeStream("alice", "p1", "accept", captureEmitter(recorder));
+        service.resumeStream("alice", 5L, "p1", "accept", captureEmitter(recorder));
 
         assertThat(recorder.events).extracting(ChatStreamEvent::type).containsExactly("done");
         assertThat(recorder.events.get(0).content()).isEqualTo("已经加好了");
         verify(chatMessageRepository, times(1)).save(any());
+        verify(agentServiceClient).resumeChat(eq("5"), eq("p1"), eq("accept"), any());
+    }
+
+    @Test
+    void resumeStream_withConversationIdOwnedByAnotherUserThrowsBeforeCallingAgentService() {
+        User bob = User.builder().id(2L).username("bob").build();
+        AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(bobsConversation));
+
+        assertThatThrownBy(() -> service.resumeStream(
+                "alice", 5L, "p1", "accept", captureEmitter(new RecordingEmitterListener())))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(agentServiceClient);
+    }
+
+    @Test
+    void resumeStream_withNonExistentConversationIdThrowsBeforeCallingAgentService() {
+        when(conversationRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.resumeStream(
+                "alice", 404L, "p1", "accept", captureEmitter(new RecordingEmitterListener())))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        verifyNoInteractions(agentServiceClient);
     }
 
     @Test
     void resumeStream_blockUpdatedEventIsForwardedToClient() throws Exception {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)).thenReturn(List.of(
+                AiChatMessage.builder().conversation(conversation).role(AiChatMessage.Role.USER).content("加一条").build()));
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(3);
             listener.onBlockUpdated(9L, "block-1", "timeline", List.of(Map.of("date", "2024-01", "title", "事件一")));
@@ -380,7 +470,7 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.resumeStream("alice", "p1", "accept", captureEmitter(recorder));
+        service.resumeStream("alice", 5L, "p1", "accept", captureEmitter(recorder));
 
         assertThat(recorder.events).extracting(ChatStreamEvent::type).containsExactly("block_updated", "done");
         assertThat(recorder.events.get(0).noteId()).isEqualTo(9L);
@@ -389,6 +479,10 @@ class GlobalChatServiceTest {
 
     @Test
     void resumeStream_mediaBlockUpdatedEventIsForwardedToClient() throws Exception {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)).thenReturn(List.of(
+                AiChatMessage.builder().conversation(conversation).role(AiChatMessage.Role.USER).content("这张图").build()));
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(3);
             listener.onMediaBlockUpdated(9L, "b1", "image", Map.of("url", "a.png", "caption", "一张图片描述"));
@@ -397,11 +491,34 @@ class GlobalChatServiceTest {
         }).when(agentServiceClient).resumeChat(anyString(), anyString(), anyString(), any());
 
         RecordingEmitterListener recorder = new RecordingEmitterListener();
-        service.resumeStream("alice", "p1", "accept", captureEmitter(recorder));
+        service.resumeStream("alice", 5L, "p1", "accept", captureEmitter(recorder));
 
         assertThat(recorder.events).extracting(ChatStreamEvent::type).containsExactly("media_block_updated", "done");
         assertThat(recorder.events.get(0).noteId()).isEqualTo(9L);
         assertThat(recorder.events.get(0).blockId()).isEqualTo("b1");
         assertThat(recorder.events.get(0).data()).containsEntry("caption", "一张图片描述");
+    }
+
+    @Test
+    void getConversationMessages_returnsChronologicalOrder() {
+        AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
+        when(chatMessageRepository.findByConversationOrderByCreatedAtAsc(conversation)).thenReturn(List.of(
+                AiChatMessage.builder().id(1L).conversation(conversation).role(AiChatMessage.Role.USER).content("第一条").build(),
+                AiChatMessage.builder().id(2L).conversation(conversation).role(AiChatMessage.Role.ASSISTANT).content("第一条回复").build()));
+
+        List<ChatMessageResponse> result = service.getConversationMessages("alice", 5L);
+
+        assertThat(result).extracting(ChatMessageResponse::getContent).containsExactly("第一条", "第一条回复");
+    }
+
+    @Test
+    void getConversationMessages_withConversationOwnedByAnotherUserThrows() {
+        User bob = User.builder().id(2L).username("bob").build();
+        AiChatConversation bobsConversation = AiChatConversation.builder().id(5L).owner(bob).build();
+        when(conversationRepository.findById(5L)).thenReturn(Optional.of(bobsConversation));
+
+        assertThatThrownBy(() -> service.getConversationMessages("alice", 5L))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

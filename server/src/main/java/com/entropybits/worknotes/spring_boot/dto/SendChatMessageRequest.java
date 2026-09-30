@@ -16,6 +16,10 @@ public class SendChatMessageRequest {
     // 不再用 @NotBlank：允许"只发一张图不带文字"这种用法。
     private String content;
 
+    // 可空=懒创建新会话（在第一条消息落库的同一次请求里创建）；非空=追加到已有会话，
+    // 必须属于当前用户，否则GlobalChatService会抛404。
+    private Long conversationId;
+
     private Long currentNoteId;
 
     // 客户端也有10MB/单附件的限制（见AttachmentPayload.base64Data上的@Size），这里的数量上限

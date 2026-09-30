@@ -28,9 +28,9 @@ public class AiChatMessage {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id", nullable = false)
+    @JoinColumn(name = "conversation_id", nullable = false)
     @JsonIgnore
-    private User owner;
+    private AiChatConversation conversation;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -44,8 +44,6 @@ public class AiChatMessage {
 
     @Column(columnDefinition = "TEXT")
     private String attachmentsJson;
-
-    private Long noteId;
 
     @Column(nullable = false)
     private Instant createdAt;

@@ -158,9 +158,9 @@ public class AgentServiceClient {
         return value instanceof List<?> ? (List<Map<String, Object>>) value : List.of();
     }
 
-    public void resumeChat(String username, String proposalId, String decision, StreamListener listener) throws Exception {
+    public void resumeChat(String conversationId, String proposalId, String decision, StreamListener listener) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("conversationId", username);
+        body.put("conversationId", conversationId);
         body.put("proposalId", proposalId);
         body.put("decision", decision);
 

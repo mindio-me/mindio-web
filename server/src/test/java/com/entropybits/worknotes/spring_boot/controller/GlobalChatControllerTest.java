@@ -35,6 +35,7 @@ class GlobalChatControllerTest {
 
         SendChatMessageRequest request = new SendChatMessageRequest();
         request.setContent("你好");
+        request.setConversationId(7L);
         request.setCurrentNoteId(42L);
 
         SseEmitter emitter = controller.sendMessage(request, principal);
@@ -44,32 +45,42 @@ class GlobalChatControllerTest {
                 .sendMessageStream(
                         org.mockito.ArgumentMatchers.eq("alice"),
                         org.mockito.ArgumentMatchers.eq("你好"),
+                        org.mockito.ArgumentMatchers.eq(7L),
                         org.mockito.ArgumentMatchers.eq(42L),
                         org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.any(SseEmitter.class));
     }
 
     @Test
-    void listMessages_defaultsLimitTo50WhenNotProvided() {
+    void sendMessage_withNullConversationIdDelegatesNullThrough() {
         GlobalChatController controller = new GlobalChatController(chatService);
         when(principal.getUsername()).thenReturn("alice");
-        when(chatService.listHistory("alice", 50)).thenReturn(List.of());
 
-        controller.listMessages(50, principal);
+        SendChatMessageRequest request = new SendChatMessageRequest();
+        request.setContent("新话题");
 
-        org.mockito.Mockito.verify(chatService).listHistory("alice", 50);
+        controller.sendMessage(request, principal);
+
+        org.mockito.Mockito.verify(chatService, org.mockito.Mockito.timeout(2000))
+                .sendMessageStream(
+                        org.mockito.ArgumentMatchers.eq("alice"),
+                        org.mockito.ArgumentMatchers.eq("新话题"),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.any(SseEmitter.class));
     }
 
     @Test
-    void getMessagesForNote_delegatesToServiceWithNoteId() {
+    void getConversationMessages_delegatesToServiceWithConversationId() {
         GlobalChatController controller = new GlobalChatController(chatService);
         when(principal.getUsername()).thenReturn("alice");
-        when(chatService.getMessagesForNote("alice", 9L)).thenReturn(List.of());
+        when(chatService.getConversationMessages("alice", 9L)).thenReturn(List.of());
 
-        ResponseEntity<List<ChatMessageResponse>> response = controller.getMessagesForNote(9L, principal);
+        ResponseEntity<List<ChatMessageResponse>> response = controller.getConversationMessages(9L, principal);
 
         assertThat(response.getBody()).isEmpty();
-        verify(chatService).getMessagesForNote("alice", 9L);
+        verify(chatService).getConversationMessages("alice", 9L);
     }
 
     @Test
@@ -78,6 +89,7 @@ class GlobalChatControllerTest {
         when(principal.getUsername()).thenReturn("alice");
 
         ChatResumeRequest request = new ChatResumeRequest();
+        request.setConversationId(7L);
         request.setProposalId("p1");
         request.setDecision("accept");
 
@@ -87,6 +99,7 @@ class GlobalChatControllerTest {
         org.mockito.Mockito.verify(chatService, org.mockito.Mockito.timeout(2000))
                 .resumeStream(
                         org.mockito.ArgumentMatchers.eq("alice"),
+                        org.mockito.ArgumentMatchers.eq(7L),
                         org.mockito.ArgumentMatchers.eq("p1"),
                         org.mockito.ArgumentMatchers.eq("accept"),
                         org.mockito.ArgumentMatchers.any(SseEmitter.class));
