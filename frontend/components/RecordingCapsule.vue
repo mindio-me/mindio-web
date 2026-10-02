@@ -100,7 +100,6 @@ export default {
       const path = this.$route.path
       let m = path.match(/^\/workspace\/notes\/(\d+)\/edit$/)
       if (m) return Number(m[1])
-      if (path === '/workspace/editor' && this.$route.query.id) return Number(this.$route.query.id)
       m = path.match(/^\/workspace\/notes\/(\d+)$/)
       if (m) return Number(m[1])
       return this.broadcastNoteId

@@ -714,10 +714,6 @@ export default {
       activeNoteId: null,
       activeNote: null,
       clipCount: 0,
-      aiSearchMessages: [],
-      aiSearchInput: '',
-      aiSearchLoading: false,
-      savingResult: null,
       outline: [],
       editor: null,
       editorUndo: null,
@@ -1238,8 +1234,6 @@ export default {
         this.$clipService.getNoteClipCount(this.activeNoteId)
           .then(count => { this.clipCount = count })
           .catch(() => { this.clipCount = 0 })
-        this.aiSearchMessages = []
-        this.loadAiSearchHistory()
         this.$wechatService.getLogs(Number(this.activeNoteId))
           .then(logs => { this.wechatPublished = logs.some(l => l.status === 'SUCCESS') })
           .catch(() => { /* 微信未配置时静默忽略 */ })
@@ -2040,53 +2034,9 @@ export default {
       if (!this.activeNoteId) return
       this.$router.push(`/workspace/clips?linkTo=${this.activeNoteId}`)
     },
-    async loadAiSearchHistory() {
-      if (!this.activeNoteId) return
-      const noteId = this.activeNoteId
-      try {
-        const res = await this.$clipSearchService.getMessages(Number(noteId))
-        if (noteId !== this.activeNoteId) return // 切换笔记期间返回的旧请求，丢弃
-        this.aiSearchMessages = (res || []).map(m => ({ ...m, results: m.results || [] }))
-        this.$nextTick(this.scrollAiSearchToBottom)
-      } catch (e) {
-        // 历史加载失败不阻塞主流程，静默忽略
-      }
-    },
-    async sendAiSearchMessage() {
-      const content = this.aiSearchInput.trim()
-      if (!content || this.aiSearchLoading || !this.activeNoteId) return
-      this.aiSearchInput = ''
-      this.aiSearchLoading = true
-      try {
-        const res = await this.$clipSearchService.sendMessage(content, Number(this.activeNoteId))
-        this.aiSearchMessages.push(...(res || []).map(m => ({ ...m, results: m.results || [] })))
-        this.$nextTick(this.scrollAiSearchToBottom)
-      } catch (e) {
-        this.$message.error(this.$t('workspace.clips.aiSearchFailed'))
-      } finally {
-        this.aiSearchLoading = false
-      }
-    },
-    async saveAiSearchResult(msg, idx) {
-      const key = msg.id + '-' + idx
-      this.savingResult = key
-      try {
-        const res = await this.$clipSearchService.saveResult(msg.id, idx)
-        this.$set(msg.results[idx], 'sourceClipId', res.sourceClipId)
-      } catch (e) {
-        this.$message.error(this.$t('workspace.clips.aiSearchSaveFailed'))
-      } finally {
-        this.savingResult = null
-      }
-    },
-    scrollAiSearchToBottom() {
-      const el = this.$refs.aiSearchMessages
-      if (el) el.scrollTop = el.scrollHeight
-    },
     openInEditor() {
       if (!this.activeNote || !this.activeNote.id) return
-      if (this.activeNote.contentType === 'editorjs') this.$router.push(`/workspace/editor?id=${this.activeNote.id}`)
-      else this.$router.push(`/workspace/notes/${this.activeNote.id}/edit`)
+      this.$router.push(`/workspace/notes/${this.activeNote.id}/edit`)
     },
     handleNoteAction(command, note) {
       if (command === 'toggle-public') this.toggleNotePublic(note)
@@ -3390,34 +3340,6 @@ export default {
   border-bottom: 1px solid var(--border-color);
   &:last-child { border-bottom: none; }
 }
-
-.ai-search-chat { display: flex; flex-direction: column; }
-.ai-search-messages { max-height: 320px; overflow-y: auto; padding-right: 4px; }
-.ai-search-msg { margin-bottom: 12px; display: flex; flex-direction: column; }
-.ai-search-msg.is-user { align-items: flex-end; }
-.ai-search-msg.is-assistant { align-items: flex-start; }
-.ai-search-bubble {
-  max-width: 92%;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.ai-search-msg.is-user .ai-search-bubble { background: #409eff; color: #fff; }
-.ai-search-msg.is-assistant .ai-search-bubble { background: var(--bg-secondary); color: var(--text-color); }
-.ai-search-typing { opacity: .6; }
-.ai-search-results { margin-top: 6px; width: 100%; display: flex; flex-direction: column; gap: 8px; }
-.ai-search-result-card {
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-.ai-search-result-title { font-size: 13px; font-weight: 600; color: #409eff; text-decoration: none; display: block; margin-bottom: 4px; }
-.ai-search-result-excerpt { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; line-height: 1.5; }
-.ai-search-input-row { display: flex; gap: 8px; align-items: flex-end; margin-top: 8px; }
-.ai-search-input-row .el-textarea { flex: 1; }
 
 .right-title {
   font-size: 13px;

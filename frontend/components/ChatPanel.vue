@@ -222,16 +222,10 @@ export default {
     currentNoteId() {
       // 传入 noteId 优先（笔记页停靠时用）
       if (this.noteId != null) return this.noteId
-      // 笔记有三种独立路由页面：富文本/Markdown的编辑页(/workspace/notes/{id}/edit)、
-      // EditorJS笔记的编辑页(/workspace/editor?id={id}，id是查询参数不是路径段)、
-      // 以及只读查看页(/workspace/notes/{id})——三种都算"当前笔记"，路由能直接识别。
+      // 笔记有两种独立路由页面：富文本/Markdown的编辑页(/workspace/notes/{id}/edit)、
+      // 以及只读查看页(/workspace/notes/{id})——两种都算"当前笔记"，路由能直接识别。
       const editRouteMatch = this.$route.path.match(/^\/workspace\/notes\/(\d+)\/edit$/)
       if (editRouteMatch) return Number(editRouteMatch[1])
-
-      if (this.$route.path === '/workspace/editor' && this.$route.query.id) {
-        const editorJsId = Number(this.$route.query.id)
-        if (!Number.isNaN(editorJsId)) return editorJsId
-      }
 
       const viewRouteMatch = this.$route.path.match(/^\/workspace\/notes\/(\d+)$/)
       if (viewRouteMatch) return Number(viewRouteMatch[1])
