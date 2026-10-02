@@ -55,6 +55,54 @@
           @toggle="leftPanelCollapsed = !leftPanelCollapsed"
         />
         <div v-if="selectedProject" class="entity-form-wrapper">
+          <div class="project-cover" :class="{ 'is-empty': !projectForm.imageUrl }" @click="triggerCoverUpload">
+            <img v-if="projectForm.imageUrl" :src="projectForm.imageUrl" alt="cover" class="project-cover-img" />
+            <span class="project-cover-hint">
+              {{ selectedProject.id ? (projectForm.imageUrl ? $t('workspace.projects.coverUploadChange') : $t('workspace.projects.coverUploadEmpty')) : $t('workspace.projects.coverUploadNeedSaveFirst') }}
+            </span>
+          </div>
+          <input ref="coverFileInput" type="file" accept="image/*" style="display:none" @change="handleCoverFileChange" />
+
+          <div class="project-icon-block" :title="$t('workspace.projects.iconEditHint')">
+            <i v-if="projectForm.icon" :class="projectForm.icon"></i>
+            <el-popover placement="bottom" width="240" trigger="click">
+              <el-input v-model="projectForm.icon" :placeholder="$t('workspace.projects.iconPlaceholder')" size="small" />
+              <i slot="reference" class="el-icon-edit project-icon-edit-trigger"></i>
+            </el-popover>
+          </div>
+
+          <div class="project-title-block">
+            <input
+              type="text"
+              class="project-title-input"
+              v-model="projectForm.name"
+              :placeholder="$t('workspace.projects.namePlaceholder')"
+            />
+            <input
+              type="text"
+              class="project-subtitle-input"
+              v-model="projectForm.subtitle"
+              :placeholder="$t('workspace.projects.subtitlePlaceholder')"
+            />
+          </div>
+
+          <div v-if="projectForm.highlightMetric || highlightBannerEditing" class="project-highlight-banner">
+            <i class="el-icon-star-on"></i>
+            <el-input
+              v-model="projectForm.highlightMetric"
+              size="small"
+              :placeholder="$t('workspace.projects.highlightMetricPlaceholder')"
+              @blur="highlightBannerEditing = false"
+            />
+          </div>
+          <el-button
+            v-else
+            size="mini"
+            type="text"
+            class="project-highlight-add-btn"
+            @click="highlightBannerEditing = true"
+          >+ {{ $t('workspace.projects.highlightMetricEn') }}</el-button>
+
           <div class="entity-form-header">
             <h2 class="entity-form-title">{{ selectedProject.name }}</h2>
             <div class="entity-form-actions">
@@ -67,33 +115,6 @@
             </div>
           </div>
             <el-form :model="projectForm" label-position="top" class="entity-form">
-              <el-row :gutter="16">
-                <el-col :span="16">
-                  <el-form-item :label="$t('workspace.projects.nameEnLabel')">
-                    <el-input v-model="projectForm.name" :placeholder="$t('workspace.projects.namePlaceholder')" />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="8">
-                  <el-form-item :label="$t('workspace.projects.shortName')">
-                    <el-input v-model="projectForm.shortName" :placeholder="$t('workspace.projects.shortNamePlaceholder')" maxlength="20" show-word-limit />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-form-item :label="$t('workspace.projects.nameZh')">
-                <el-input v-model="projectForm.nameZh" :placeholder="$t('workspace.projects.nameZhPlaceholder')" />
-              </el-form-item>
-              <el-form-item :label="$t('workspace.projects.subtitleEn')">
-                <el-input v-model="projectForm.subtitle" :placeholder="$t('workspace.projects.subtitlePlaceholder')" />
-              </el-form-item>
-              <el-form-item :label="$t('workspace.projects.subtitleZh')">
-                <el-input v-model="projectForm.subtitleZh" :placeholder="$t('workspace.projects.subtitleZhPlaceholder')" />
-              </el-form-item>
-              <el-form-item :label="$t('workspace.projects.highlightMetricEn')">
-                <el-input v-model="projectForm.highlightMetric" :placeholder="$t('workspace.projects.highlightMetricPlaceholder')" maxlength="300" show-word-limit />
-              </el-form-item>
-              <el-form-item :label="$t('workspace.projects.highlightMetricZh')">
-                <el-input v-model="projectForm.highlightMetricZh" :placeholder="$t('workspace.projects.highlightMetricZhPlaceholder')" maxlength="300" show-word-limit />
-              </el-form-item>
               <el-form-item :label="$t('workspace.projects.descriptionEn')">
                 <el-input v-model="projectForm.description" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionPlaceholder')" />
               </el-form-item>
@@ -109,15 +130,7 @@
                     <el-input v-model="projectForm.category" :placeholder="$t('workspace.projects.categoryPlaceholder')" />
                   </el-form-item>
                 </el-col>
-                <el-col :span="12">
-                  <el-form-item :label="$t('workspace.projects.icon')">
-                    <el-input v-model="projectForm.icon" :placeholder="$t('workspace.projects.iconPlaceholder')" />
-                  </el-form-item>
-                </el-col>
               </el-row>
-              <el-form-item :label="$t('workspace.projects.coverImageLabel')">
-                <el-input v-model="projectForm.imageUrl" placeholder="https://..." />
-              </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="12">
                   <el-form-item :label="$t('workspace.projects.projectUrl')">
@@ -246,6 +259,7 @@ export default {
       saveTimeout: null,
       hasUnsavedChanges: false,
       _suppressAutosave: false,
+      highlightBannerEditing: false,
 
       // 布局控制
       leftPanelCollapsed: false,
@@ -426,6 +440,22 @@ export default {
     saveFieldsImmediately() {
       clearTimeout(this.saveTimeout)
       this.saveToBackend()
+    },
+    triggerCoverUpload() {
+      if (!this.selectedProject) return
+      this.$refs.coverFileInput.click()
+    },
+    async handleCoverFileChange(e) {
+      const file = e.target.files && e.target.files[0]
+      e.target.value = '' // 允许连续选同一个文件也能触发 change
+      if (!file || !this.selectedProject) return
+      try {
+        const result = await this.$uploadService.uploadLocal(file, 'project', this.selectedProject.id)
+        this.projectForm.imageUrl = result.url || result.fileUrl || result
+        this.saveFieldsImmediately()
+      } catch (error) {
+        this.$message.error(this.$t('workspace.projects.coverUploadFailed'))
+      }
     },
     deleteProject() {
       if (!this.selectedProject) return
@@ -1113,6 +1143,115 @@ export default {
   &.is-error {
     color: #f56c6c;
   }
+}
+
+.project-cover {
+  height: 120px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  margin-bottom: 16px;
+
+  &.is-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .project-cover-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .project-cover-hint {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    font-size: 11px;
+    background: rgba(0, 0, 0, 0.4);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  &.is-empty .project-cover-hint {
+    position: static;
+    background: transparent;
+  }
+}
+
+.project-icon-block {
+  width: 44px;
+  height: 44px;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  margin-top: -38px;
+  margin-left: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  position: relative;
+
+  .project-icon-edit-trigger {
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    font-size: 12px;
+    background: var(--bg-secondary);
+    border-radius: 50%;
+    padding: 2px;
+    cursor: pointer;
+  }
+}
+
+.project-title-block {
+  margin-top: 10px;
+
+  .project-title-input {
+    display: block;
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-color);
+  }
+
+  .project-subtitle-input {
+    display: block;
+    width: 100%;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+}
+
+.project-highlight-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 193, 7, 0.12);
+  color: #b8860b;
+
+  .el-input {
+    flex: 1;
+  }
+}
+
+.project-highlight-add-btn {
+  margin-top: 10px;
 }
 </style>
 
