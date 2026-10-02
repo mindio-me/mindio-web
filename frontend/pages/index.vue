@@ -168,8 +168,13 @@ export default {
     }
   },
 
-  // fetch() 在 SSR 阶段就会执行完，首屏 HTML 直接带上最终文案，
-  // 避免 hero 标题/副标题先渲染成空再被数据填充导致的跳变。
+  // 自部署走的是 nuxt generate 纯静态产物：fetch() 若在"服务端"(即 generate 构建时)执行，
+  // 结果会被原样烘焙进 HTML 里的 window.__NUXT__，之后客户端首次挂载会直接复用这份构建时快照、
+  // 不会重新请求——个人资料是后台随时可编辑的数据，一旦构建后再改资料，首屏就会一直显示
+  // 构建时的旧值(甚至是空值)，只有做一次客户端路由跳转(离开再回来)触发真实 fetch() 才会更新。
+  // 本地 `npm run dev` 走真 SSR，每次请求都现查，不会复现这个问题。
+  // 用 fetchOnServer:false 关掉这条"复用构建快照"的路径，让 hero 数据每次都在客户端现查。
+  fetchOnServer: false,
   async fetch() {
     this.$store.commit('isHeader', false);
     this.$store.commit('isFooter', false);
