@@ -6,12 +6,16 @@ package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.AgentStateResponse;
 import com.entropybits.worknotes.spring_boot.dto.InternalRetrieveRequest;
+import com.entropybits.worknotes.spring_boot.dto.ProjectNoteSummaryResponse;
+import com.entropybits.worknotes.spring_boot.dto.ProjectResponse;
 import com.entropybits.worknotes.spring_boot.dto.PutAgentStateRequest;
 import com.entropybits.worknotes.spring_boot.entity.AgentConversationState;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
+import com.entropybits.worknotes.spring_boot.service.ProjectNoteContextService;
+import com.entropybits.worknotes.spring_boot.service.ProjectService;
 import com.entropybits.worknotes.spring_boot.service.RetrievalService;
 import com.entropybits.worknotes.spring_boot.service.RetrievedChunk;
 import com.entropybits.worknotes.spring_boot.service.TopicBlockService;
@@ -38,6 +42,8 @@ public class InternalAgentController {
     private final AgentConversationStateRepository stateRepository;
     private final TopicBlockService topicBlockService;
     private final MediaBlockService mediaBlockService;
+    private final ProjectNoteContextService projectNoteContextService;
+    private final ProjectService projectService;
 
     @PostMapping("/retrieve")
     public List<RetrievedChunk> retrieve(@RequestBody InternalRetrieveRequest request) throws Exception {
@@ -85,5 +91,15 @@ public class InternalAgentController {
             @PathVariable String blockId,
             @RequestBody Map<String, Object> fields) {
         return mediaBlockService.patchBlock(noteId, blockId, fields);
+    }
+
+    @GetMapping("/projects/{projectId}/notes")
+    public List<ProjectNoteSummaryResponse> projectNotes(@PathVariable Long projectId) {
+        return projectNoteContextService.getNoteSummaries(projectId);
+    }
+
+    @PatchMapping("/projects/{projectId}/fields")
+    public ProjectResponse patchProjectField(@PathVariable Long projectId, @RequestBody Map<String, String> fields) {
+        return projectService.updateProjectField(projectId, fields.get("field"), fields.get("value"));
     }
 }

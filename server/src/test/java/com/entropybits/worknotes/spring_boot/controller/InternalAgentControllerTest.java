@@ -6,6 +6,8 @@ package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.AgentStateResponse;
 import com.entropybits.worknotes.spring_boot.dto.InternalRetrieveRequest;
+import com.entropybits.worknotes.spring_boot.dto.ProjectNoteSummaryResponse;
+import com.entropybits.worknotes.spring_boot.dto.ProjectResponse;
 import com.entropybits.worknotes.spring_boot.dto.PutAgentStateRequest;
 import com.entropybits.worknotes.spring_boot.entity.AgentConversationState;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
@@ -13,6 +15,8 @@ import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
+import com.entropybits.worknotes.spring_boot.service.ProjectNoteContextService;
+import com.entropybits.worknotes.spring_boot.service.ProjectService;
 import com.entropybits.worknotes.spring_boot.service.RetrievalService;
 import com.entropybits.worknotes.spring_boot.service.RetrievedChunk;
 import com.entropybits.worknotes.spring_boot.service.TopicBlockService;
@@ -43,9 +47,12 @@ class InternalAgentControllerTest {
     @Mock AgentConversationStateRepository stateRepository;
     @Mock TopicBlockService topicBlockService;
     @Mock MediaBlockService mediaBlockService;
+    @Mock ProjectNoteContextService projectNoteContextService;
+    @Mock ProjectService projectService;
 
     InternalAgentController controller() {
-        return new InternalAgentController(retrievalService, userRepository, stateRepository, topicBlockService, mediaBlockService);
+        return new InternalAgentController(retrievalService, userRepository, stateRepository, topicBlockService,
+                mediaBlockService, projectNoteContextService, projectService);
     }
 
     @Test
@@ -141,6 +148,29 @@ class InternalAgentControllerTest {
         when(mediaBlockService.patchBlock(9L, "b1", fields)).thenReturn(expected);
 
         Map<String, Object> result = controller().patchBlock(9L, "b1", fields);
+
+        assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void projectNotes_delegatesToProjectNoteContextService() {
+        List<ProjectNoteSummaryResponse> expected = List.of(new ProjectNoteSummaryResponse(1L, "标题", "正文"));
+        when(projectNoteContextService.getNoteSummaries(9L)).thenReturn(expected);
+
+        List<ProjectNoteSummaryResponse> result = controller().projectNotes(9L);
+
+        assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
+    void patchProjectField_delegatesToProjectService() {
+        // ProjectResponse 只有 @Data，没有 @Builder（和 Project 实体不一样），用 setter 构造。
+        ProjectResponse expected = new ProjectResponse();
+        expected.setId(9L);
+        expected.setDescriptionZh("新简介");
+        when(projectService.updateProjectField(9L, "descriptionZh", "新简介")).thenReturn(expected);
+
+        ProjectResponse result = controller().patchProjectField(9L, Map.of("field", "descriptionZh", "value", "新简介"));
 
         assertThat(result).isEqualTo(expected);
     }
