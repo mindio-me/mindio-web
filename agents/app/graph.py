@@ -35,6 +35,7 @@ from tools.read_note_references import make_read_note_references_tool
 from tools.search_web import make_search_web_tool
 from tools.search_workspace import make_search_workspace_tool
 from tools.transcribe_audio import make_transcribe_audio_tool
+from tools.update_project_field import make_update_project_field_tool
 from tools.update_todo_list import update_todo_list
 
 SYSTEM_PROMPT = (
@@ -52,6 +53,11 @@ SYSTEM_PROMPT = (
     '如果用户想把笔记里的一段音频/录音转成文字（比如"帮我转录一下这段录音"、"这段语音'
     '说了什么"），调用 transcribe_audio；这个工具会直接把逐字稿和摘要写进音频下方，'
     "不需要用户额外确认。"
+    '\n\n关于项目页：当用户正在编辑某个项目（系统提示里会出现"【当前正在编辑的项目】"这段）'
+    "并要求起草/润色项目简介时，优先调用 get_project_notes 看有没有显式关联的笔记；"
+    "没有或不够时可以再用 search_workspace 按项目名/关键词搜索可能相关但未显式关联的笔记；"
+    "确实找不到任何相关材料就如实告诉用户，不要凭空编造。写入时只调用 update_project_field，"
+    "且只写用户当前对话语言对应的那个字段（中文对话写 descriptionZh，英文对话写 description）。"
 )
 
 RECURSION_LIMIT = 30  # 兜底熔断，正常深度研究不应该触碰到这个上限
@@ -101,6 +107,7 @@ def build_default_graph_builder(
         make_analyze_image_tool(java_client, media_block_update_sink),
         make_transcribe_audio_tool(java_client, default_asr_client, media_block_update_sink),
         make_get_project_notes_tool(java_client),
+        make_update_project_field_tool(java_client, project_field_update_sink),
     ]
     model = resolve_chat_model(provider).bind_tools(tools, parallel_tool_calls=False)
     return build_graph_builder(model, tools), tools
