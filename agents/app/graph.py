@@ -29,6 +29,7 @@ from tools.add_reference_item import make_add_reference_item_tool
 from tools.add_timeline_item import make_add_timeline_item_tool
 from tools.analyze_image import make_analyze_image_tool
 from tools.content_cache import ContentCache
+from tools.get_project_notes import make_get_project_notes_tool
 from tools.read_cached_content import make_read_cached_content_tool
 from tools.read_note_references import make_read_note_references_tool
 from tools.search_web import make_search_web_tool
@@ -99,6 +100,7 @@ def build_default_graph_builder(
         make_add_checklist_item_tool(java_client, block_update_sink),
         make_analyze_image_tool(java_client, media_block_update_sink),
         make_transcribe_audio_tool(java_client, default_asr_client, media_block_update_sink),
+        make_get_project_notes_tool(java_client),
     ]
     model = resolve_chat_model(provider).bind_tools(tools, parallel_tool_calls=False)
     return build_graph_builder(model, tools), tools
