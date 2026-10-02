@@ -115,4 +115,11 @@ public interface NoteRepository extends JpaRepository<Note, Long> {
      */
     @Query("SELECT n FROM Note n WHERE n.owner = :owner AND n.project.id IN :projectIds")
     Page<Note> findByOwnerAndProjectIdIn(@Param("owner") User owner, @Param("projectIds") List<Long> projectIds, Pageable pageable);
+
+    /**
+     * 项目页 AI 助手"读关联笔记起草文案"用——不按 owner 过滤，调用方（ProjectNoteContextService）
+     * 只在 currentProjectId 已经在 GlobalChatService 里做过 owner 校验之后才会被调用，
+     * 和 appendBlockItem 等现有内部接口同一信任边界，这里不重复校验。
+     */
+    List<Note> findByProjectId(Long projectId);
 }
