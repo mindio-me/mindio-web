@@ -929,11 +929,12 @@ export default {
   }
 }
 
-.entity-form-wrapper {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
+// .entity-form-wrapper 之前是 height:100% + flex column——在只有"头部+表单"两块、
+// 内容高度可控时没问题。加了封面/图标/标题/属性面板这些新区块后，内容总高度经常
+// 超过这个 100%，flex 子项默认 flex-shrink:1 会把所有没设 min-height 的子项（尤其
+// 是封面）按比例压缩，正文一长，封面能被压成 0 高度直接消失。改成普通块级流动，
+// 交给已经 overflow-y:auto 的 .workspace-main 统一滚动（和下面 .entity-form 规则的
+// 注释"由父容器 .workspace-main 管理滚动"是同一个假设，这里 wrapper 本身也改一致）
 
 .entity-form-header {
   display: flex;
