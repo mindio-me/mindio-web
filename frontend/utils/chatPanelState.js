@@ -43,6 +43,7 @@ export default Vue.observable({
   recognizing: false,
   recognition: null,
   broadcastNoteId: null,
+  broadcastProjectId: null,
   linkingCitationKey: null,
   copiedMessageId: null,
   activeConversationId: null,

@@ -211,6 +211,7 @@ export default {
   name: 'ChatPanel',
   props: {
     noteId: { type: Number, default: null },
+    projectId: { type: Number, default: null },
   },
   data() {
     // 笔记页停靠 / 其它页面抽屉是两处独立的模板挂载点，共用同一个 Vue.observable 单例
@@ -232,6 +233,10 @@ export default {
 
       // 上面都没匹配到，说明是笔记列表主界面这种不换路由的场景，用广播值兜底
       return this.broadcastNoteId
+    },
+    currentProjectId() {
+      if (this.projectId != null) return this.projectId
+      return this.broadcastProjectId
     }
   },
   mounted() {
@@ -239,6 +244,8 @@ export default {
     // current-note-id 只在切换笔记时广播一次、不回放；惰性挂载的本面板会错过挂载前
     // 的那次广播，主动问一声让页面把当前值回传过来
     this.$nuxt.$emit('workspace:request-current-note-id')
+    this.$nuxt.$on('workspace:current-project-id', this.onBroadcastProjectId)
+    this.$nuxt.$emit('workspace:request-current-project-id')
     this.speechSupported = process.client && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
     // 挂载即"首次可见"：抽屉用 v-if="hasOpened" 惰性挂载，笔记页用 v-if="aiPanelActive"
     if (!this.historyLoaded) this.loadHistory()
@@ -246,11 +253,15 @@ export default {
   },
   beforeDestroy() {
     this.$nuxt.$off('workspace:current-note-id', this.onBroadcastNoteId)
+    this.$nuxt.$off('workspace:current-project-id', this.onBroadcastProjectId)
     if (this.recognition) this.recognition.stop()
   },
   methods: {
     onBroadcastNoteId(noteId) {
       this.broadcastNoteId = noteId || null
+    },
+    onBroadcastProjectId(id) {
+      this.broadcastProjectId = id || null
     },
     onSelectFromList(id) {
       this.conversationListOpen = false
@@ -359,7 +370,7 @@ export default {
       let userMessageConfirmed = false
       try {
         await this.$globalChatService.sendMessageStream(
-          content, this.activeConversationId, this.currentNoteId, attachmentsToSend, (event) => {
+          content, this.activeConversationId, this.currentNoteId, this.currentProjectId, attachmentsToSend, (event) => {
             if (event.type === 'user_message') {
               userMessageConfirmed = true
               optimisticUser.id = event.id

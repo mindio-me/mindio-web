@@ -57,8 +57,9 @@ class GlobalChatService extends ApiService {
     })
   }
 
-  sendMessageStream(content, conversationId, currentNoteId, attachments, onEvent) {
-    return this._streamViaAxios('/v1/chat/messages', { content, conversationId, currentNoteId, attachments }, onEvent)
+  sendMessageStream(content, conversationId, currentNoteId, currentProjectId, attachments, onEvent) {
+    return this._streamViaAxios('/v1/chat/messages',
+      { content, conversationId, currentNoteId, currentProjectId, attachments }, onEvent)
   }
 
   resumeStream(conversationId, proposalId, decision, onEvent) {

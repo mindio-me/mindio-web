@@ -225,7 +225,7 @@
 
       <!-- ========== 右侧信息 ========== -->
       <aside v-show="!rightPanelCollapsed" class="workspace-right" :class="{ 'workspace-right--ai': aiPanelDocked }">
-        <ChatPanel v-if="aiPanelDocked" @close="aiPanelActive = false" />
+        <ChatPanel v-if="aiPanelDocked" :project-id="selectedProject ? Number(selectedProject.id) : null" @close="aiPanelActive = false" />
         <div class="right-panel" v-if="!aiPanelDocked && selectedProject">
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.projects.rightPanelTitle') }}</h3>
@@ -335,12 +335,18 @@ export default {
     // ESC 退出全屏
     this._onEsc = (e) => { if (e.key === 'Escape' && this.isFullscreen) this.isFullscreen = false }
     document.addEventListener('keydown', this._onEsc)
+    // AI 助手（ChatPanel）惰性挂载时可能错过了下面 selectProject 里的广播，
+    // 主动问一声让它拿到当前选中项目的 id（见 Spec B）
+    this.$nuxt.$on('workspace:request-current-project-id', this.replyCurrentProjectId)
   },
   beforeDestroy() {
     this.destroyEditorJsHost()
     // 移除事件监听器
     this.$nuxt.$off('workspace:create:projects', this.createProject)
     if (this._onEsc) document.removeEventListener('keydown', this._onEsc)
+    this.$nuxt.$off('workspace:request-current-project-id', this.replyCurrentProjectId)
+    // 离开项目页清空广播，避免切到笔记页等其它页面时 AI 助手还以为"当前项目"是刚才那个
+    this.$nuxt.$emit('workspace:current-project-id', null)
   },
   methods: {
     wsLayoutOptions() {
@@ -361,6 +367,9 @@ export default {
         this.loading = false
       }
     },
+    replyCurrentProjectId() {
+      this.$nuxt.$emit('workspace:current-project-id', this.selectedProject ? Number(this.selectedProject.id) : null)
+    },
     async selectProject(item) {
       // 如果上一个项目还有未落盘的防抖改动（2 秒窗口内就切走了），先同步存掉，
       // 不然 selectedProject/projectForm 一旦被下面的赋值替换成新项目，原来挂起的
@@ -373,6 +382,7 @@ export default {
       }
       this._suppressAutosave = true
       this.selectedProject = item
+      this.$nuxt.$emit('workspace:current-project-id', item ? Number(item.id) : null)
 
       // 预填充编辑表单
       this.projectForm = {
