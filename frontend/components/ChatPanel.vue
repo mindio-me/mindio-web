@@ -467,6 +467,12 @@ export default {
           blockId: event.blockId,
           data: event.data
         })
+      } else if (event.type === 'project_field_updated') {
+        this.$nuxt.$emit('project-field-updated', {
+          projectId: event.projectId,
+          field: event.field,
+          value: event.value
+        })
       }
       this.$nextTick(this.scrollToBottom)
     },

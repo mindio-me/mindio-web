@@ -338,6 +338,8 @@ export default {
     // AI 助手（ChatPanel）惰性挂载时可能错过了下面 selectProject 里的广播，
     // 主动问一声让它拿到当前选中项目的 id（见 Spec B）
     this.$nuxt.$on('workspace:request-current-project-id', this.replyCurrentProjectId)
+    // AI 助手写入项目字段后的实时回推（见 Spec B）
+    this.$nuxt.$on('project-field-updated', this.onProjectFieldUpdated)
   },
   beforeDestroy() {
     this.destroyEditorJsHost()
@@ -347,6 +349,7 @@ export default {
     this.$nuxt.$off('workspace:request-current-project-id', this.replyCurrentProjectId)
     // 离开项目页清空广播，避免切到笔记页等其它页面时 AI 助手还以为"当前项目"是刚才那个
     this.$nuxt.$emit('workspace:current-project-id', null)
+    this.$nuxt.$off('project-field-updated', this.onProjectFieldUpdated)
   },
   methods: {
     wsLayoutOptions() {
@@ -444,6 +447,19 @@ export default {
         error: { icon: 'el-icon-warning', text: this.$t('workspace.notes.saveFailed') }
       }
       this.saveStatus = map[status] || { icon: 'el-icon-edit', text: '' }
+    },
+    /**
+     * AI 助手通过 ChatPanel 把起草好的字段直接写进了当前项目（见 Spec B），后端已经
+     * 真实落库——这里只是把已落库的值同步显示到表单。必须套 _suppressAutosave 护栏，
+     * 否则会触发 projectForm 的深度 watcher 再发一次自动保存，重演 Spec A 修过的那次
+     * "自动保存无限循环"（内容已经在服务端了，没必要原样再 PUT 一次）。
+     */
+    onProjectFieldUpdated({ projectId, field, value }) {
+      if (!this.selectedProject || String(this.selectedProject.id) !== String(projectId)) return
+      this._suppressAutosave = true
+      this.projectForm[field] = value
+      this.$nextTick(() => { this._suppressAutosave = false })
+      this.updateSaveStatus('saved')
     },
     debouncedSave() {
       clearTimeout(this.saveTimeout)
