@@ -16,6 +16,7 @@ import com.entropybits.worknotes.spring_boot.entity.AiChatConversation;
 import com.entropybits.worknotes.spring_boot.entity.AiChatMessage;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.Project;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
@@ -23,6 +24,7 @@ import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRe
 import com.entropybits.worknotes.spring_boot.repository.AiChatConversationRepository;
 import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
+import com.entropybits.worknotes.spring_boot.repository.ProjectRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -49,6 +51,7 @@ public class GlobalChatService {
     private final AgentConversationStateRepository agentConversationStateRepository;
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
+    private final ProjectRepository projectRepository;
     private final SourceClipRepository sourceClipRepository;
     private final ContentChunkingService chunkingService;
     private final AgentServiceClient agentServiceClient;
@@ -65,6 +68,7 @@ public class GlobalChatService {
                               AgentConversationStateRepository agentConversationStateRepository,
                               UserRepository userRepository,
                               NoteRepository noteRepository,
+                              ProjectRepository projectRepository,
                               SourceClipRepository sourceClipRepository,
                               ContentChunkingService chunkingService,
                               AgentServiceClient agentServiceClient,
@@ -80,6 +84,7 @@ public class GlobalChatService {
         this.agentConversationStateRepository = agentConversationStateRepository;
         this.userRepository = userRepository;
         this.noteRepository = noteRepository;
+        this.projectRepository = projectRepository;
         this.sourceClipRepository = sourceClipRepository;
         this.chunkingService = chunkingService;
         this.agentServiceClient = agentServiceClient;
@@ -97,7 +102,7 @@ public class GlobalChatService {
     // 最终回复 -> 首轮问答后异步生成标题。conversationId为空表示"新建会话"，在这次请求里
     // 和第一条用户消息一起创建，不单独开一个"创建会话"的接口（懒创建，见设计文档）。
     public void sendMessageStream(String username, String content, Long conversationId, Long currentNoteId,
-                                   List<AttachmentPayload> attachments, SseEmitter emitter) {
+                                   Long currentProjectId, List<AttachmentPayload> attachments, SseEmitter emitter) {
         java.util.concurrent.atomic.AtomicBoolean disconnected = new java.util.concurrent.atomic.AtomicBoolean(false);
         try {
             User user = getUser(username);
@@ -116,6 +121,13 @@ public class GlobalChatService {
             // currentNote非空（即真正属于user）时才允许把ID继续往下传，否则一律传null。
             Long ownedNoteId = currentNote == null ? null : currentNoteId;
 
+            Project currentProject = loadOwnedProjectOrNull(currentProjectId, user);
+            // 和 ownedNoteId 同样的道理：currentProjectId 不代表调用者拥有这个项目，
+            // 只有真正属于 user 的才允许继续往 agent 服务传，否则一律传 null——防止
+            // 伪造 projectId 让 AI 读写别人的项目。
+            Long ownedProjectId = currentProject == null ? null : currentProjectId;
+            String currentProjectContext = currentProject == null ? null : buildProjectContext(currentProject);
+
             AiChatMessage userMessage = chatMessageRepository.save(AiChatMessage.builder()
                     .conversation(conversation).role(AiChatMessage.Role.USER).content(content)
                     .attachmentsJson(attachmentsJson).build());
@@ -131,8 +143,8 @@ public class GlobalChatService {
             String conversationIdStr = String.valueOf(conversation.getId());
 
             try {
-                agentServiceClient.streamChat(username, content, conversationIdStr, currentNoteContext, attachments,
-                        ownedNoteId,
+                agentServiceClient.streamChat(username, content, conversationIdStr, currentNoteContext,
+                        currentProjectContext, attachments, ownedNoteId, ownedProjectId,
                         new AgentServiceClient.StreamListener() {
                             @Override
                             public void onTextDelta(String text) {
@@ -457,6 +469,30 @@ public class GlobalChatService {
         return noteRepository.findById(noteId)
                 .filter(n -> n.getOwner().getId().equals(user.getId()))
                 .orElse(null);
+    }
+
+    private Project loadOwnedProjectOrNull(Long projectId, User user) {
+        if (projectId == null) return null;
+        return projectRepository.findById(projectId)
+                .filter(p -> p.getOwner().getId().equals(user.getId()))
+                .orElse(null);
+    }
+
+    private String buildProjectContext(Project project) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("名称：").append(project.getName());
+        if (project.getCategory() != null) sb.append("\n分类：").append(project.getCategory());
+        if (project.getTechnologies() != null && !project.getTechnologies().isBlank()) {
+            // Project.technologies 本身就是逗号分隔的单个字符串（不是 List），直接拼接。
+            sb.append("\n技术栈：").append(project.getTechnologies());
+        }
+        if (project.getDescription() != null && !project.getDescription().isBlank()) {
+            sb.append("\n现有描述（英文）：").append(project.getDescription());
+        }
+        if (project.getDescriptionZh() != null && !project.getDescriptionZh().isBlank()) {
+            sb.append("\n现有描述（中文）：").append(project.getDescriptionZh());
+        }
+        return sb.toString();
     }
 
     private static final int CURRENT_NOTE_BODY_CHAR_CAP = 4000;

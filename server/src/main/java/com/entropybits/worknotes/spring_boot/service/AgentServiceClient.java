@@ -69,8 +69,9 @@ public class AgentServiceClient {
     }
 
     public void streamChat(String username, String content, String conversationId,
-                            String currentNoteContext, List<AttachmentPayload> attachments,
-                            Long currentNoteId, StreamListener listener) throws Exception {
+                            String currentNoteContext, String currentProjectContext,
+                            List<AttachmentPayload> attachments, Long currentNoteId, Long currentProjectId,
+                            StreamListener listener) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("username", username);
         body.put("content", content);
@@ -80,6 +81,12 @@ public class AgentServiceClient {
         }
         if (currentNoteId != null) {
             body.put("currentNoteId", currentNoteId);
+        }
+        if (currentProjectContext != null) {
+            body.put("currentProjectContext", currentProjectContext);
+        }
+        if (currentProjectId != null) {
+            body.put("currentProjectId", currentProjectId);
         }
         if (attachments != null && !attachments.isEmpty()) {
             body.put("attachments", attachments);

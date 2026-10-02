@@ -22,6 +22,8 @@ public class SendChatMessageRequest {
 
     private Long currentNoteId;
 
+    private Long currentProjectId;
+
     // 客户端也有10MB/单附件的限制（见AttachmentPayload.base64Data上的@Size），这里的数量上限
     // 只是为了不让恶意客户端绕开前端、一次塞几十个大附件把内存和大模型调用成本都打爆。
     @Valid

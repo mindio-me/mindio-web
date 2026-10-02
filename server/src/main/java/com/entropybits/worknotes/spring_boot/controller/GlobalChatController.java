@@ -52,7 +52,7 @@ public class GlobalChatController {
         String username = user.getUsername();
         new Thread(() -> chatService.sendMessageStream(
                 username, request.getContent(), request.getConversationId(), request.getCurrentNoteId(),
-                request.getAttachments(), emitter)).start();
+                request.getCurrentProjectId(), request.getAttachments(), emitter)).start();
         return emitter;
     }
 

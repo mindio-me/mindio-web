@@ -48,6 +48,7 @@ class GlobalChatControllerTest {
                         org.mockito.ArgumentMatchers.eq(7L),
                         org.mockito.ArgumentMatchers.eq(42L),
                         org.mockito.ArgumentMatchers.isNull(),
+                        org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.any(SseEmitter.class));
     }
 
@@ -65,6 +66,7 @@ class GlobalChatControllerTest {
                 .sendMessageStream(
                         org.mockito.ArgumentMatchers.eq("alice"),
                         org.mockito.ArgumentMatchers.eq("新话题"),
+                        org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.isNull(),
                         org.mockito.ArgumentMatchers.isNull(),
