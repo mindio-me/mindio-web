@@ -114,66 +114,96 @@
               <el-button size="small" type="danger" plain @click="deleteProject">{{ $t('common.delete') }}</el-button>
             </div>
           </div>
+            <div class="project-properties">
+              <div class="properties-summary" @click="propertiesExpanded = !propertiesExpanded">
+                <el-tag size="mini" effect="plain">{{ projectForm.category || $t('workspace.projects.category') }}</el-tag>
+                <el-tag size="mini" :type="projectForm.isPublic ? 'success' : 'info'" effect="plain">{{ projectForm.isPublic ? $t('workspace.projects.statusPublic') : $t('workspace.projects.statusPrivate') }}</el-tag>
+                <el-tag v-if="projectForm.isFeatured" size="mini" type="warning" effect="plain">{{ $t('workspace.projects.isFeatured') }}</el-tag>
+                <i :class="propertiesExpanded ? 'el-icon-arrow-up' : 'el-icon-arrow-down'" class="properties-toggle-icon"></i>
+              </div>
+              <div v-if="propertiesExpanded" class="properties-expanded">
+                <el-row :gutter="16">
+                  <el-col :span="12">
+                    <el-form-item :label="$t('workspace.projects.category')">
+                      <el-input v-model="projectForm.category" :placeholder="$t('workspace.projects.categoryPlaceholder')" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item :label="$t('workspace.projects.shortName')">
+                      <el-input v-model="projectForm.shortName" :placeholder="$t('workspace.projects.shortNamePlaceholder')" maxlength="20" show-word-limit />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-row :gutter="16">
+                  <el-col :span="12">
+                    <el-form-item :label="$t('workspace.projects.nameZh')">
+                      <el-input v-model="projectForm.nameZh" :placeholder="$t('workspace.projects.nameZhPlaceholder')" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item :label="$t('workspace.projects.subtitleZh')">
+                      <el-input v-model="projectForm.subtitleZh" :placeholder="$t('workspace.projects.subtitleZhPlaceholder')" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-form-item :label="$t('workspace.projects.highlightMetricZh')">
+                  <el-input v-model="projectForm.highlightMetricZh" :placeholder="$t('workspace.projects.highlightMetricZhPlaceholder')" maxlength="300" show-word-limit />
+                </el-form-item>
+                <el-form-item :label="$t('workspace.projects.descriptionEn')">
+                  <el-input v-model="projectForm.description" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionPlaceholder')" />
+                </el-form-item>
+                <el-form-item :label="$t('workspace.projects.descriptionZh')">
+                  <el-input v-model="projectForm.descriptionZh" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionZhPlaceholder')" />
+                </el-form-item>
+                <el-row :gutter="16">
+                  <el-col :span="12">
+                    <el-form-item :label="$t('workspace.projects.projectUrl')">
+                      <el-input v-model="projectForm.projectUrl" placeholder="https://..." />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="12">
+                    <el-form-item :label="$t('workspace.projects.githubLink')">
+                      <el-input v-model="projectForm.githubUrl" placeholder="https://github.com/..." />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+                <el-form-item :label="$t('workspace.projects.technologiesEn')">
+                  <div class="dynamic-tags">
+                    <el-tag v-for="(tech, idx) in projectForm.technologies" :key="idx" closable size="small" @close="projectForm.technologies.splice(idx, 1)">{{ tech }}</el-tag>
+                    <el-input v-if="projectTagInputVisible" ref="projectTagInput" v-model="projectTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectTag" @blur="addProjectTag" />
+                    <el-button v-else size="small" class="tag-add-btn" @click="showProjectTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
+                  </div>
+                </el-form-item>
+                <el-form-item :label="$t('workspace.projects.technologiesZh')">
+                  <div class="dynamic-tags">
+                    <el-tag v-for="(tech, idx) in projectForm.technologiesZh" :key="idx" closable size="small" @close="projectForm.technologiesZh.splice(idx, 1)">{{ tech }}</el-tag>
+                    <el-input v-if="projectZhTagInputVisible" ref="projectZhTagInput" v-model="projectZhTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectZhTag" @blur="addProjectZhTag" />
+                    <el-button v-else size="small" class="tag-add-btn" @click="showProjectZhTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
+                  </div>
+                </el-form-item>
+                <el-row :gutter="16">
+                  <el-col :span="8">
+                    <el-form-item :label="$t('workspace.projects.displayOrder')">
+                      <el-input-number v-model="projectForm.displayOrder" :min="0" size="small" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="8">
+                    <el-form-item :label="$t('workspace.projects.publicField')">
+                      <el-switch v-model="projectForm.isPublic" @change="saveFieldsImmediately" />
+                    </el-form-item>
+                  </el-col>
+                  <el-col :span="8">
+                    <el-form-item :label="$t('workspace.projects.isFeatured')">
+                      <el-switch v-model="projectForm.isFeatured" @change="saveFieldsImmediately" />
+                    </el-form-item>
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
             <el-form :model="projectForm" label-position="top" class="entity-form">
-              <el-form-item :label="$t('workspace.projects.descriptionEn')">
-                <el-input v-model="projectForm.description" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionPlaceholder')" />
-              </el-form-item>
-              <el-form-item :label="$t('workspace.projects.descriptionZh')">
-                <el-input v-model="projectForm.descriptionZh" type="textarea" :rows="3" :placeholder="$t('workspace.projects.descriptionZhPlaceholder')" />
-              </el-form-item>
               <el-form-item :label="$t('workspace.projects.content')">
                 <div id="projectRichTextEditor" class="project-rich-text-editor"></div>
               </el-form-item>
-              <el-row :gutter="16">
-                <el-col :span="12">
-                  <el-form-item :label="$t('workspace.projects.category')">
-                    <el-input v-model="projectForm.category" :placeholder="$t('workspace.projects.categoryPlaceholder')" />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-row :gutter="16">
-                <el-col :span="12">
-                  <el-form-item :label="$t('workspace.projects.projectUrl')">
-                    <el-input v-model="projectForm.projectUrl" placeholder="https://..." />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item :label="$t('workspace.projects.githubLink')">
-                    <el-input v-model="projectForm.githubUrl" placeholder="https://github.com/..." />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-form-item :label="$t('workspace.projects.technologiesEn')">
-                <div class="dynamic-tags">
-                  <el-tag v-for="(tech, idx) in projectForm.technologies" :key="idx" closable size="small" @close="projectForm.technologies.splice(idx, 1)">{{ tech }}</el-tag>
-                  <el-input v-if="projectTagInputVisible" ref="projectTagInput" v-model="projectTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectTag" @blur="addProjectTag" />
-                  <el-button v-else size="small" class="tag-add-btn" @click="showProjectTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
-                </div>
-              </el-form-item>
-              <el-form-item :label="$t('workspace.projects.technologiesZh')">
-                <div class="dynamic-tags">
-                  <el-tag v-for="(tech, idx) in projectForm.technologiesZh" :key="idx" closable size="small" @close="projectForm.technologiesZh.splice(idx, 1)">{{ tech }}</el-tag>
-                  <el-input v-if="projectZhTagInputVisible" ref="projectZhTagInput" v-model="projectZhTagInputValue" size="small" class="tag-input" @keyup.enter.native="addProjectZhTag" @blur="addProjectZhTag" />
-                  <el-button v-else size="small" class="tag-add-btn" @click="showProjectZhTagInput">{{ $t('workspace.projects.addTag') }}</el-button>
-                </div>
-              </el-form-item>
-              <el-row :gutter="16">
-                <el-col :span="8">
-                  <el-form-item :label="$t('workspace.projects.displayOrder')">
-                    <el-input-number v-model="projectForm.displayOrder" :min="0" size="small" />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="8">
-                  <el-form-item :label="$t('workspace.projects.publicField')">
-                    <el-switch v-model="projectForm.isPublic" />
-                  </el-form-item>
-                </el-col>
-                <el-col :span="8">
-                  <el-form-item :label="$t('workspace.projects.isFeatured')">
-                    <el-switch v-model="projectForm.isFeatured" />
-                  </el-form-item>
-                </el-col>
-              </el-row>
             </el-form>
         </div>
         <div v-else class="note-main-empty">
@@ -260,6 +290,7 @@ export default {
       hasUnsavedChanges: false,
       _suppressAutosave: false,
       highlightBannerEditing: false,
+      propertiesExpanded: false,
 
       // 布局控制
       leftPanelCollapsed: false,
@@ -1252,6 +1283,39 @@ export default {
 
 .project-highlight-add-btn {
   margin-top: 10px;
+}
+
+.project-properties {
+  margin: 14px 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 0;
+}
+
+.properties-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex-wrap: wrap;
+  max-width: 100%;
+  overflow: hidden;
+
+  .el-tag {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .properties-toggle-icon {
+    margin-left: auto;
+    color: var(--text-muted);
+  }
+}
+
+.properties-expanded {
+  margin-top: 12px;
 }
 </style>
 
