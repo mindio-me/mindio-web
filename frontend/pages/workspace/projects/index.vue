@@ -403,11 +403,16 @@ export default {
         displayOrder: item.displayOrder || 0
       }
 
-      this.$nextTick(() => {
-        this._suppressAutosave = false
+      this.$nextTick(async () => {
+        // initProjectEditor() 最后一步会把 contentType 写成 'editorjs'（也落在
+        // 被深度 watch 的 projectForm 上）——必须等它（含这次写入触发的 watcher
+        // 排队、以及下面这次 $nextTick 冲刷）都结束，才能解除抑制，否则刚打开/
+        // 切换项目就会立刻触发一次没意义的自动保存
         if (process.client) {
-          this.initProjectEditor()
+          await this.initProjectEditor()
+          await this.$nextTick()
         }
+        this._suppressAutosave = false
       })
     },
     async createProject() {
@@ -450,8 +455,17 @@ export default {
       if (this.editor) {
         try {
           const outputData = await this.editor.save()
+          // projectForm 被深度 watch 用来驱动自动保存——这里写回 content/contentType
+          // 如果不加抑制标记，会立刻被同一个 watcher 当成"新的改动"，排一次新的
+          // debouncedSave()，而那次保存又会再写一遍 content，形成"保存→触发watcher→
+          // 再保存"的死循环（自动保存状态一直在"保存中"闪烁、页面像在不停刷新）。
+          // 用和 selectProject 里同样的 _suppressAutosave + $nextTick 套路，
+          // 等 watcher 这一轮跑完再放开抑制
+          this._suppressAutosave = true
           this.projectForm.content = JSON.stringify(outputData)
           this.projectForm.contentType = 'editorjs'
+          await this.$nextTick()
+          this._suppressAutosave = false
         } catch (e) {
           console.error('读取项目正文内容失败:', e)
         }
