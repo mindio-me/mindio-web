@@ -650,10 +650,9 @@
 
 <script>
 import { renderMarkdown as renderMd } from '~/utils/markdown'
-import { createEditorImageResizer } from '~/utils/editorjsImageResize'
-import { clipboardMayContainImage, getClipboardImagePayload, uploadClipboardImage } from '~/utils/clipboardImage'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 import workspaceAiDock from '~/mixins/workspaceAiDock'
+import editorjsHost from '~/mixins/editorjsHost'
 
 // 左侧笔记列表每批加载的数量（无限滚动的批大小），asyncData 首屏预取和后续
 // loadMoreNotes 都必须用同一个值——否则首屏拿到的 size 和 page=1 时按这个
@@ -664,7 +663,7 @@ export default {
   name: 'WorkspacePage',
   layout: 'workspace',
   inject: ['getTopbarCollapsed'],
-  mixins: [workspaceLayoutResize, workspaceAiDock],
+  mixins: [workspaceLayoutResize, workspaceAiDock, editorjsHost],
   components: {
     WechatPublishDialog: () => import('~/components/WechatPublishDialog.vue'),
     TranslationDialog: () => import('~/components/TranslationDialog.vue'),
@@ -715,9 +714,6 @@ export default {
       activeNote: null,
       clipCount: 0,
       outline: [],
-      editor: null,
-      editorUndo: null,
-      imageResizer: null,
       saveStatus: { icon: 'el-icon-check', text: '' },
       saveTimeout: null,
       isSaving: false,
@@ -1264,467 +1260,43 @@ export default {
 
     // ========== Editor.js ==========
     async initEditor(data = null) {
-      if (!process.client) return
       this._editorReady = false
-      const container = this.$refs.editorContainer
-      if (!container) return
-      const holderId = 'editorjs-ws-' + Date.now()
-      container.id = holderId
-      const [
-        { default: EditorJS }, { default: Header }, { default: List },
-        { default: CodeTool }, { default: Delimiter }, { default: Quote },
-        { default: Table }, { default: InlineCode }, { default: ImageTool },
-        { default: Marker }, { default: Checklist }, { default: Warning }, { default: LinkTool }, { default: AttachesTool }, { default: MarkdownBlock },
-        { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool },
-        { default: RecordTool },
-        { default: CodeWrapTune }, { default: Undo },
-        { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }
-      ] = await Promise.all([
-        import('@editorjs/editorjs'), import('@editorjs/header'), import('@editorjs/list'),
-        import('@editorjs/code'), import('@editorjs/delimiter'), import('@editorjs/quote'),
-        import('@editorjs/table'), import('@editorjs/inline-code'), import('@editorjs/image'),
-        import('@editorjs/marker'), import('@editorjs/checklist'), import('@editorjs/warning'),
-        import('@editorjs/link'),
-        import('@editorjs/attaches'),
-        import('~/utils/editorjs-markdown-block'),
-        import('~/utils/editorjsVideoTool'), import('~/utils/editorjsEmbedVideoTool'),
-        import('~/utils/editorjsAudioTool'),
-        import('~/utils/editorjsRecordTool'),
-        import('~/utils/editorjsCodeWrapTune'),
-        import('editorjs-undo'),
-        import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool')
-      ])
-      const uploadService = this.$uploadService
-      const noteId = this.activeNote ? this.activeNote.id : 0
-      this.editor = new EditorJS({
-        holder: holderId,
-        placeholder: this.$t('workspace.notes.editorPlaceholder'),
-        autofocus: false,
-        tools: {
-          header: { class: Header, config: { placeholder: this.$t('workspace.notes.editorHeaderPlaceholder'), levels: [1, 2, 3], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
-          list: { class: List, inlineToolbar: true, config: { defaultStyle: 'unordered' } },
-          code: { class: CodeTool, config: { placeholder: this.$t('workspace.notes.editorCodePlaceholder') }, tunes: ['codeWrap'] },
-          codeWrap: { class: CodeWrapTune },
-          delimiter: { class: Delimiter },
-          quote: { class: Quote, config: { quotePlaceholder: this.$t('workspace.notes.editorQuotePlaceholder'), captionPlaceholder: this.$t('workspace.notes.editorQuoteCaptionPlaceholder') }, shortcut: 'CMD+SHIFT+O' },
-          table: { class: Table, inlineToolbar: true, config: { rows: 3, cols: 3, withHeadings: true } },
-          inlineCode: { class: InlineCode, shortcut: 'CMD+SHIFT+M' },
-          image: {
-            class: ImageTool,
-            config: {
-              features: { caption: 'optional' },
-              uploader: {
-                async uploadByFile(file) {
-                  try {
-                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) {
-                    console.error('图片上传失败:', e)
-                    return { success: 0 }
-                  }
-                },
-                async uploadByUrl(url) {
-                  try {
-                    const result = await uploadService.uploadRemote(url, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) { return { success: 0 } }
-                }
-              }
-            }
-          },
-          marker: { class: Marker },
-          checklist: { class: Checklist, inlineToolbar: true },
-          warning: {
-            class: Warning,
-            inlineToolbar: true,
-            config: {
-              titlePlaceholder: this.$t('workspace.notes.editorWarningTitlePlaceholder'),
-              messagePlaceholder: this.$t('workspace.notes.editorWarningMessagePlaceholder')
-            }
-          },
-          linkTool: {
-            class: LinkTool,
-            config: {
-              endpoint: `${this.$axios?.defaults?.baseURL || ''}/v1/link-preview`,
-              headers: {
-                Authorization: this.$auth?.strategy?.token?.get() || ''
-              }
-            }
-          },
-          attaches: {
-            class: AttachesTool,
-            config: {
-              buttonText: this.$t('workspace.notes.editorAttachButtonText'),
-              errorMessage: this.$t('workspace.notes.editorAttachErrorMessage'),
-              uploader: {
-                async uploadByFile(file) {
-                  try {
-                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
-                    return {
-                      success: 1,
-                      file: {
-                        url: result.url || result.fileUrl || result,
-                        name: result.fileName || file.name,
-                        size: result.fileSize,
-                        extension: result.extName
-                      }
-                    }
-                  } catch (e) {
-                    console.error('文件上传失败:', e)
-                    return { success: 0 }
-                  }
-                }
-              }
-            }
-          },
-          references: {
-            class: ReferencesTool,
-            config: {
-              axiosBaseURL: this.$axios?.defaults?.baseURL || '',
-              getAuthHeader: () => ({ Authorization: this.$auth?.strategy?.token?.get() || '' }),
-              uploader: {
-                async uploadByFile(file) {
-                  try {
-                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) {
-                    console.error('参考文档上传失败:', e)
-                    return { success: 0 }
-                  }
-                }
-              }
-            }
-          },
-          mediaGallery: {
-            class: GalleryTool,
-            config: {
-              uploader: {
-                async uploadByFile(file) {
-                  try {
-                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) {
-                    console.error('画廊素材上传失败:', e)
-                    return { success: 0 }
-                  }
-                },
-                async uploadByUrl(url) {
-                  try {
-                    const result = await uploadService.uploadRemote(url, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) {
-                    console.error('画廊图片链接抓取失败:', e)
-                    return { success: 0 }
-                  }
-                }
-              }
-            }
-          },
-          timeline: {
-            class: TimelineTool
-          },
-          markdown: { class: MarkdownBlock, inlineToolbar: false, config: { axiosBaseURL: this.$axios?.defaults?.baseURL || '' } },
-          embed: {
-            class: EmbedVideoTool
-          },
-          video: {
-            class: VideoTool,
-            config: {
-              uploader: {
-                async uploadByFile(file) {
-                  try {
-                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) {
-                    console.error('视频上传失败:', e)
-                    return { success: 0 }
-                  }
-                }
-              }
-            }
-          },
-          audio: {
-            class: AudioTool,
-            config: {
-              uploader: {
-                async uploadByFile(file) {
-                  try {
-                    const result = await uploadService.uploadLocal(file, 'note', noteId || 0)
-                    return { success: 1, file: { url: result.url || result.fileUrl || result } }
-                  } catch (e) {
-                    console.error('音频上传失败:', e)
-                    return { success: 0 }
-                  }
-                }
-              },
-              session: {
-                async createSession() {
-                  return await uploadService.createSession('note', noteId || 0, 'audio/*')
-                },
-                async getSession(sessionId, token) {
-                  return await uploadService.getSession(sessionId, token)
-                }
-              }
-            }
-          },
-          audioRecord: {
-            class: RecordTool,
-            config: {
-              getNoteId: () => (this.activeNote ? this.activeNote.id : null)
-            }
-          }
+      await this.initEditorJsHost({
+        container: this.$refs.editorContainer,
+        model: 'note',
+        entityId: this.activeNote ? this.activeNote.id : 0,
+        data,
+        locale: this.$i18n.locale,
+        axiosBaseURL: this.$axios?.defaults?.baseURL || '',
+        authHeader: () => this.$auth?.strategy?.token?.get() || '',
+        placeholders: {
+          editor: this.$t('workspace.notes.editorPlaceholder'),
+          header: this.$t('workspace.notes.editorHeaderPlaceholder'),
+          code: this.$t('workspace.notes.editorCodePlaceholder'),
+          quote: this.$t('workspace.notes.editorQuotePlaceholder'),
+          quoteCaption: this.$t('workspace.notes.editorQuoteCaptionPlaceholder'),
+          warningTitle: this.$t('workspace.notes.editorWarningTitlePlaceholder'),
+          warningMessage: this.$t('workspace.notes.editorWarningMessagePlaceholder'),
+          attachButton: this.$t('workspace.notes.editorAttachButtonText'),
+          attachError: this.$t('workspace.notes.editorAttachErrorMessage'),
+          clipboardImageReadFailed: () => this.$t('workspace.notes.clipboardImageReadFailed'),
+          uploadingImage: (size) => this.$t('workspace.notes.uploadingImage', { size }),
+          imageTooLarge: (size) => this.$t('workspace.notes.imageTooLarge', { size }),
+          imagePasteUploadFailed: (size) => this.$t('workspace.notes.imagePasteUploadFailed', { size })
         },
-        data: data || undefined,
         onChange: () => {
           if (!this._editorReady) return
           this.hasUnsavedChanges = true
           this.debouncedSave()
         },
-        // EditorJS 自身有一套独立于 vue-i18n 的内部 i18n 机制（块工具/菜单文案），
-        // 且这套字典是模块级全局单例（I18n.currentDictionary），只有传入非空 messages 时
-        // 才会调用 setDictionary() 覆盖它——英文分支必须显式传空字典触发重置，
-        // 传 undefined 只会导致沿用上一次（通常是中文）构造过的编辑器留下的全局字典，
-        // 表现上就像英文模式下菜单文案"写死"成中文了一样
-        i18n: this.$i18n.locale === 'zh-CN' ? {
-          messages: {
-            ui: {
-              blockTunes: { toggler: { 'Click to tune': '点击调整', 'or drag to move': '或拖动移动' } },
-              inlineToolbar: { converter: { 'Convert to': '转换为' } },
-              toolbar: { toolbox: { Add: '添加' } }
-            },
-            toolNames: {
-              Text: '文本', Heading: '标题', List: '列表', Quote: '引用',
-              Code: '代码块', Delimiter: '分割线', Table: '表格', Image: '图片',
-              InlineCode: '行内代码', Marker: '高亮', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
-            },
-            tools: {
-              header: { 'Heading 1': '标题 1', 'Heading 2': '标题 2', 'Heading 3': '标题 3' },
-              list: { Ordered: '有序列表', Unordered: '无序列表' },
-              quote: { 'Align Left': '左对齐', 'Align Center': '居中' },
-              table: { 'With headings': '带表头', 'Without headings': '无表头', 'Add row above': '上方插入行', 'Add row below': '下方插入行', 'Delete row': '删除行', 'Add column to the left': '左侧插入列', 'Add column to the right': '右侧插入列', 'Delete column': '删除列' },
-              image: { Caption: '图片说明', 'Select an Image': '选择图片', 'With border': '带边框', 'Stretch image': '拉伸图片', 'With background': '带背景', 'With caption': '图片说明' }
-            },
-            blockTunes: {
-              delete: { Delete: '删除', 'Click to delete': '点击确认删除' },
-              moveUp: { 'Move up': '上移' },
-              moveDown: { 'Move down': '下移' }
-            }
-          }
-        } : { messages: {} }
+        includeRecordTool: true,
+        getRecordEntityId: () => (this.activeNote ? this.activeNote.id : null)
       })
-      await this.editor.isReady
-      if (!this.imageResizer) {
-        this.imageResizer = createEditorImageResizer({
-          getEditor: () => this.editor,
-          getContainer: () => this.$refs.editorContainer,
-          markDirtyAndSave: () => {
-            this.hasUnsavedChanges = true
-            this.updateSaveStatus('saving')
-            this.debouncedSave()
-          }
-        })
-      }
-      this.imageResizer.setupImageResize()
-      this.setupCodeBlockAutoResize()
-      this.setupImagePaste(uploadService, noteId)
-      this.setupHeaderToggleShortcut()
-      this.setupListCopyFix()
-      this.editorUndo = new Undo({ editor: this.editor })
-      if (data) this.editorUndo.initialize(data)
       // _editorReady 由 loadActiveNote 在清除 saveTimeout 后设置
     },
 
-    // 整块复制/剪切时，EditorJS 自带的 copySelectedBlocks 用 .textContent 拼接每个 block，
-    // list 内各项之间不会插入换行，粘贴到只认 text/plain 的地方（如代码块）会挤成一行。
-    // 监听器同样挂在 document 冒泡阶段，但在 editor 初始化完成后才注册——
-    // 依据 DOM 规范，同一元素同一阶段的监听器按注册顺序执行，所以会排在 EditorJS 自己的 handler 之后，
-    // 待其写入（有问题的）text/plain 后，再用保留换行的版本覆盖掉。只覆盖 text/plain，
-    // text/html 和 EditorJS 内部富结构 MIME 数据不受影响。
-    setupListCopyFix() {
-      const fixClipboardText = (e) => {
-        if (!e.clipboardData || !this.editor) return
-        const count = this.editor.blocks.getBlocksCount()
-        const selected = []
-        for (let i = 0; i < count; i++) {
-          const block = this.editor.blocks.getBlockByIndex(i)
-          if (block && block.selected) selected.push(block)
-        }
-        if (selected.length === 0) return // 未整块选中，走浏览器原生复制，不干预
-
-        const text = selected.map(block => {
-          const clone = block.holder.cloneNode(true)
-          clone.querySelectorAll('.cdx-list__item').forEach(item => {
-            item.insertAdjacentText('afterend', '\n')
-          })
-          return clone.textContent
-        }).join('\n\n')
-
-        e.clipboardData.setData('text/plain', text)
-      }
-
-      document.addEventListener('copy', fixClipboardText)
-      document.addEventListener('cut', fixClipboardText)
-      this._listCopyFixHandler = () => {
-        document.removeEventListener('copy', fixClipboardText)
-        document.removeEventListener('cut', fixClipboardText)
-      }
-    },
-
-    // Cmd/Ctrl+Shift+H 双向切换：当前块已是 header 时转回 paragraph，
-    // 否则放行给 EditorJS 自带的 header shortcut（文本转标题）
-    setupHeaderToggleShortcut() {
-      const container = this.$refs.editorContainer
-      if (!container) return
-
-      const handler = async (e) => {
-        const isCmd = e.ctrlKey || e.metaKey
-        if (!isCmd || !e.shiftKey || e.key.toUpperCase() !== 'H') return
-
-        const index = this.editor.blocks.getCurrentBlockIndex()
-        const block = this.editor.blocks.getBlockByIndex(index)
-        if (!block || block.name !== 'header') return
-
-        e.stopPropagation()
-        e.preventDefault()
-        const newBlock = await this.editor.blocks.convert(block.id, 'paragraph')
-        this.editor.caret.setToBlock(newBlock, 'end')
-      }
-
-      // useCapture=true：抢在 EditorJS 自身的 header shortcut 处理之前判断
-      container.addEventListener('keydown', handler, true)
-      this._headerToggleHandler = () => container.removeEventListener('keydown', handler, true)
-    },
-
-    setupImagePaste(uploadService, noteId) {
-      const container = this.$refs.editorContainer
-      if (!container) return
-
-      const handler = async (e) => {
-        const clipboardData = e.clipboardData
-        if (!clipboardMayContainImage(clipboardData)) return
-
-        e.stopPropagation()
-        e.preventDefault()
-
-        const payload = await getClipboardImagePayload(clipboardData)
-        if (!payload) {
-          this.$message.warning(this.$t('workspace.notes.clipboardImageReadFailed'))
-          return
-        }
-
-        const sizeText = payload.file ? ` (${(payload.file.size / 1024 / 1024).toFixed(1)}MB)` : ''
-        const loadingMsg = this.$message({ message: this.$t('workspace.notes.uploadingImage', { size: sizeText }), duration: 0 })
-        try {
-          const result = await uploadClipboardImage(uploadService, payload, 'note', noteId || 0)
-          loadingMsg.close()
-          const url = result.url || result.fileUrl || result
-          await this.editor.blocks.insert('image', {
-            file: { url },
-            caption: '',
-            withBorder: false,
-            withBackground: false,
-            stretched: false
-          })
-          this.hasUnsavedChanges = true
-          this.updateSaveStatus('saving')
-          this.debouncedSave()
-        } catch (err) {
-          loadingMsg.close()
-          console.error('粘贴图片上传失败:', err)
-          const status = err?.response?.status
-          if (status === 413) {
-            this.$message.error(this.$t('workspace.notes.imageTooLarge', { size: sizeText }))
-          } else {
-            this.$message.error(this.$t('workspace.notes.imagePasteUploadFailed', { size: sizeText }))
-          }
-        }
-      }
-
-      container.addEventListener('paste', handler, true)
-      this._imagePasteHandler = () => container.removeEventListener('paste', handler, true)
-    },
-
-    // Code block textarea auto-resize
-    setupCodeBlockAutoResize() {
-      const container = this.$refs.editorContainer
-      if (!container) return
-
-      const autoResize = (textarea) => {
-        // 用 scrollHeight 量实际渲染高度，而不是按 \n 数逻辑行——
-        // 这样无论是否开启自动换行、字体多大，都能量出正确高度，不会出现纵向滚动条
-        const minH = 60
-        textarea.style.height = 'auto'
-        textarea.style.height = Math.max(textarea.scrollHeight, minH) + 'px'
-        // 禁用拼写检查和语法检查，屏蔽蓝色双下划线告警
-        textarea.setAttribute('spellcheck', 'false')
-        textarea.setAttribute('autocomplete', 'off')
-        textarea.setAttribute('autocorrect', 'off')
-        textarea.setAttribute('autocapitalize', 'off')
-      }
-
-      // 延迟执行，确保 EditorJS 已渲染完内容
-      setTimeout(() => {
-        container.querySelectorAll('.ce-code__textarea').forEach(autoResize)
-      }, 200)
-
-      // 输入时实时调整高度
-      container.addEventListener('input', (e) => {
-        if (e.target && e.target.classList.contains('ce-code__textarea')) {
-          autoResize(e.target)
-        }
-      })
-
-      // 监听新增代码块
-      if (this._codeBlockObserver) {
-        this._codeBlockObserver.disconnect()
-      }
-      this._codeBlockObserver = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType !== 1) continue
-            const textareas = node.classList && node.classList.contains('ce-code__textarea')
-              ? [node]
-              : (node.querySelectorAll ? node.querySelectorAll('.ce-code__textarea') : [])
-            textareas.forEach((ta) => setTimeout(() => autoResize(ta), 100))
-          }
-        }
-      })
-      this._codeBlockObserver.observe(container, { childList: true, subtree: true })
-    },
-
     destroyEditor() {
-      if (this._codeBlockObserver) {
-        this._codeBlockObserver.disconnect()
-        this._codeBlockObserver = null
-      }
-      if (this.imageResizer) {
-        this.imageResizer.destroy()
-        this.imageResizer = null
-      }
-      if (this._imagePasteHandler) {
-        this._imagePasteHandler()
-        this._imagePasteHandler = null
-      }
-      if (this._headerToggleHandler) {
-        this._headerToggleHandler()
-        this._headerToggleHandler = null
-      }
-      if (this._listCopyFixHandler) {
-        this._listCopyFixHandler()
-        this._listCopyFixHandler = null
-      }
-      if (this.editorUndo) {
-        // editorjs-undo 把 keydown 监听器挂在容器节点上，靠监听容器的自定义"destroy"事件来
-        // 移除自己——但 EditorJS 自身的 destroy() 从不派发这个事件。这里的容器节点是复用的
-        // （切换笔记只改 id，不重建DOM），不手动补发这个事件，每切换一次笔记就会在同一个节点上
-        // 再叠一份 keydown 监听器，切换几次后按一次 Ctrl+Z 会同时触发多个僵尸实例的处理逻辑。
-        try { this.$refs.editorContainer?.dispatchEvent(new Event('destroy')) } catch (e) { /* ignore */ }
-        this.editorUndo = null
-      }
-      if (this.editor) {
-        try { this.editor.destroy() } catch (e) { /* ignore */ }
-        this.editor = null
-      }
+      this.destroyEditorJsHost()
     },
 
     // 切换 App 语言时重建当前编辑器，让 EditorJS 内部 UI 文案跟着换语言，
