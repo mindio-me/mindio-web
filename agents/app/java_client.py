@@ -127,5 +127,26 @@ class JavaClient:
         except httpx.HTTPError as e:
             raise JavaClientError(f"put_state failed for conversation_id={conversation_id!r}: {e}") from e
 
+    async def get_project_notes(self, project_id: int) -> list[dict]:
+        try:
+            resp = await self._client.get(f"/internal/projects/{project_id}/notes")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"get_project_notes failed for project_id={project_id!r}: {e}") from e
+
+    async def patch_project_field(self, project_id: int, field: str, value: str) -> dict:
+        try:
+            resp = await self._client.patch(
+                f"/internal/projects/{project_id}/fields",
+                json={"field": field, "value": value},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(
+                f"patch_project_field failed for project_id={project_id!r} field={field!r}: {e}"
+            ) from e
+
     async def aclose(self) -> None:
         await self._client.aclose()

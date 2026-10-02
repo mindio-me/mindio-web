@@ -207,3 +207,55 @@ async def test_patch_media_block_wraps_http_errors(test_settings):
     client = _client_with_transport(test_settings, handler)
     with pytest.raises(JavaClientError):
         await client.patch_media_block(9, "b1", {"caption": "x"})
+
+
+async def test_get_project_notes_sends_expected_request_and_parses_response(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["method"] = request.method
+        return httpx.Response(200, json=[{"id": 1, "title": "开发日志", "bodyText": "正文"}])
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.get_project_notes(9)
+
+    assert captured["method"] == "GET"
+    assert captured["url"] == "http://java.internal.test/internal/projects/9/notes"
+    assert result == [{"id": 1, "title": "开发日志", "bodyText": "正文"}]
+
+
+async def test_get_project_notes_wraps_http_errors(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "boom"})
+
+    client = _client_with_transport(test_settings, handler)
+    with pytest.raises(JavaClientError):
+        await client.get_project_notes(9)
+
+
+async def test_patch_project_field_sends_expected_request_and_parses_response(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = str(request.url)
+        captured["method"] = request.method
+        captured["body"] = request.content
+        return httpx.Response(200, json={"id": 9, "descriptionZh": "新简介"})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.patch_project_field(9, "descriptionZh", "新简介")
+
+    assert captured["method"] == "PATCH"
+    assert captured["url"] == "http://java.internal.test/internal/projects/9/fields"
+    assert b'"field":"descriptionZh"' in captured["body"]
+    assert result == {"id": 9, "descriptionZh": "新简介"}
+
+
+async def test_patch_project_field_wraps_http_errors(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "bad field"})
+
+    client = _client_with_transport(test_settings, handler)
+    with pytest.raises(JavaClientError):
+        await client.patch_project_field(9, "projectUrl", "x")
