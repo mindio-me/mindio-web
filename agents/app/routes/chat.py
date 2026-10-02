@@ -42,6 +42,8 @@ class ChatStreamRequest(BaseModel):
     conversationId: str
     currentNoteContext: str | None = None
     currentNoteId: int | None = None
+    currentProjectContext: str | None = None
+    currentProjectId: int | None = None
     attachments: list[AttachmentPayload] | None = None
 
 
@@ -77,7 +79,7 @@ def _dedupe_citations(citations: list[dict]) -> list[dict]:
 
 async def _drive_graph(
     graph, graph_input, config: dict, citations: list[dict], block_updates: list[dict],
-    media_block_updates: list[dict],
+    media_block_updates: list[dict], project_field_updates: list[dict],
 ) -> AsyncIterator[str]:
     """驱动一次图执行，把astream_events的细粒度事件转成text_delta/tool_call SSE事件。
     循环结束后检查是否有待确认的interrupt——interrupt()触发时GraphInterrupt不会从
@@ -118,6 +120,9 @@ async def _drive_graph(
     for update in media_block_updates:
         yield _event("media_block_updated", **update)
 
+    for update in project_field_updates:
+        yield _event("project_field_updated", **update)
+
     yield _event("done", content=final_text, citations=_dedupe_citations(citations))
 
 
@@ -127,12 +132,14 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
     citations: list[dict] = []
     block_updates: list[dict] = []
     media_block_updates: list[dict] = []
+    project_field_updates: list[dict] = []
     try:
         await checkpointer.hydrate()
         graph_builder, _tools = build_default_graph_builder(
             java_client, settings.default_provider,
             citations_sink=citations, block_update_sink=block_updates,
             media_block_update_sink=media_block_updates,
+            project_field_update_sink=project_field_updates,
         )
         graph = graph_builder.compile(checkpointer=checkpointer)
         config = {
@@ -161,7 +168,7 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
         cleanup_rounds = 0
         while state.next and cleanup_rounds < 3:
             if any(t.interrupts for t in state.tasks):
-                async for _ in _drive_graph(graph, Command(resume="reject"), config, [], [], []):
+                async for _ in _drive_graph(graph, Command(resume="reject"), config, [], [], [], []):
                     pass
             else:
                 messages = state.values.get("messages", [])
@@ -189,9 +196,12 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
             "username": request.username,
             "current_note_context": request.currentNoteContext,
             "current_note_id": request.currentNoteId,
+            "current_project_context": request.currentProjectContext,
+            "current_project_id": request.currentProjectId,
         }
 
-        async for chunk in _drive_graph(graph, input_state, config, citations, block_updates, media_block_updates):
+        async for chunk in _drive_graph(graph, input_state, config, citations, block_updates, media_block_updates,
+                                         project_field_updates):
             yield chunk
     except Exception as e:  # noqa: BLE001 - 任何失败都要转成error事件让流正常结束，不是HTTP层500
         yield _event("error", content=f"抱歉，这次没能回复，换个说法试试？（{e}）")
@@ -212,12 +222,14 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
     citations: list[dict] = []
     block_updates: list[dict] = []
     media_block_updates: list[dict] = []
+    project_field_updates: list[dict] = []
     try:
         await checkpointer.hydrate()
         graph_builder, _tools = build_default_graph_builder(
             java_client, settings.default_provider,
             citations_sink=citations, block_update_sink=block_updates,
             media_block_update_sink=media_block_updates,
+            project_field_update_sink=project_field_updates,
         )
         graph = graph_builder.compile(checkpointer=checkpointer)
         config = {
@@ -232,7 +244,8 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
             return
 
         async for chunk in _drive_graph(
-            graph, Command(resume=request.decision), config, citations, block_updates, media_block_updates
+            graph, Command(resume=request.decision), config, citations, block_updates, media_block_updates,
+            project_field_updates,
         ):
             yield chunk
     except Exception as e:  # noqa: BLE001

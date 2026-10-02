@@ -25,3 +25,5 @@ class AgentState(TypedDict):
     username: str
     current_note_context: str | None
     current_note_id: int | None
+    current_project_context: str | None
+    current_project_id: int | None

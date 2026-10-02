@@ -61,6 +61,8 @@ def build_graph_builder(model: BaseChatModel, tools: list) -> StateGraph:
         system_text = SYSTEM_PROMPT
         if state.get("current_note_context"):
             system_text += f"\n\n【当前正在编辑的笔记】\n{state['current_note_context']}"
+        if state.get("current_project_context"):
+            system_text += f"\n\n【当前正在编辑的项目】\n{state['current_project_context']}"
         response = model.invoke([SystemMessage(system_text), *state["messages"]])
         return {"messages": [response]}
 
@@ -82,7 +84,7 @@ def build_graph_builder(model: BaseChatModel, tools: list) -> StateGraph:
 def build_default_graph_builder(
     java_client: JavaClient, provider: str,
     citations_sink: list | None = None, block_update_sink: list | None = None,
-    media_block_update_sink: list | None = None,
+    media_block_update_sink: list | None = None, project_field_update_sink: list | None = None,
 ) -> tuple[StateGraph, list]:
     cache = ContentCache()
     tools = [

@@ -44,6 +44,8 @@ def _agent_state(username: str = "alice", current_note_id: int | None = None) ->
         "username": username,
         "current_note_context": None,
         "current_note_id": current_note_id,
+        "current_project_context": None,
+        "current_project_id": None,
     }
 
 

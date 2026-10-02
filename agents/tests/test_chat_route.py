@@ -5,7 +5,7 @@ import json
 
 import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 import app.routes.chat as chat_route
@@ -57,7 +57,8 @@ def fake_java_client(monkeypatch):
 
 
 def _patch_graph(monkeypatch, model, tools):
-    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None):
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                  project_field_update_sink=None):
         return build_graph_builder(model, tools), tools
 
     monkeypatch.setattr(chat_route, "build_default_graph_builder", fake_builder)
@@ -87,7 +88,8 @@ async def test_search_workspace_tool_call_emits_tool_call_event(monkeypatch, fak
     # 用真实的 build_default_graph_builder 组装方式（而不是 _patch_graph 那个不接线
     # citations_sink 的简化版），只替换掉真正会打网络请求的模型解析这一步，这样
     # citations_sink 能像生产代码里一样被正确接到 search_workspace 工具上。
-    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None):
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                  project_field_update_sink=None):
         search_tool = make_search_workspace_tool(java_client, ContentCache(), citations_sink=citations_sink)
         return build_graph_builder(model, [search_tool]), [search_tool]
 
@@ -112,7 +114,8 @@ async def test_search_web_tool_call_emits_tool_call_event_and_web_citation(monke
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
 
-    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None):
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                  project_field_update_sink=None):
         search_tool = make_search_web_tool(java_client, citations_sink=citations_sink)
         return build_graph_builder(model, [search_tool]), [search_tool]
 
@@ -129,7 +132,8 @@ async def test_search_web_tool_call_emits_tool_call_event_and_web_citation(monke
 
 
 async def test_graph_failure_yields_error_event_instead_of_raising(monkeypatch, fake_java_client):
-    def broken_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None):
+    def broken_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                        project_field_update_sink=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(chat_route, "build_default_graph_builder", broken_builder)
@@ -240,7 +244,8 @@ async def test_resume_accept_emits_block_updated_before_done(monkeypatch, fake_j
     final_msg = AIMessage(content="已经帮你加好了")
     model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
 
-    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None):
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                  project_field_update_sink=None):
         write_tool = make_add_timeline_item_tool(java_client, block_update_sink)
         return build_graph_builder(model, [write_tool]), [write_tool]
 
@@ -405,7 +410,8 @@ async def test_analyze_image_emits_media_block_updated_before_done(monkeypatch, 
     final_msg = AIMessage(content="已经描述好了")
     model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
 
-    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None):
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                  project_field_update_sink=None):
         analyze_tool = make_analyze_image_tool(java_client, media_block_update_sink)
         return build_graph_builder(model, [analyze_tool]), [analyze_tool]
 
@@ -423,6 +429,33 @@ async def test_analyze_image_emits_media_block_updated_before_done(monkeypatch, 
     assert media_event["blockId"] == "b1"
     assert media_event["blockType"] == "image"
     assert media_event["data"] == {"url": "a.png", "caption": "一张图片描述"}
+
+
+class _RecordingModel:
+    """最小的spy model：记录每次invoke收到的消息列表，用来断言system prompt内容——
+    现有测试文件里的FakeMessagesListChatModel/GenericFakeChatModel都不暴露调用历史，
+    不够用来验证current_project_context有没有被正确拼进system prompt。"""
+
+    def __init__(self, reply: str):
+        self._reply = reply
+        self.invocations: list[list] = []
+
+    def invoke(self, messages):
+        self.invocations.append(messages)
+        return AIMessage(content=self._reply)
+
+
+async def test_current_project_context_reaches_graph_state_and_system_prompt(monkeypatch, fake_java_client):
+    model = _RecordingModel("好的")
+    _patch_graph(monkeypatch, model, [dummy_tool])
+
+    await _collect_events(ChatStreamRequest(
+        username="alice", content="帮我写简介", conversationId="alice",
+        currentProjectId=7, currentProjectContext="名称：Mindio\n分类：SaaS",
+    ))
+
+    system_messages = [m for call in model.invocations for m in call if isinstance(m, SystemMessage)]
+    assert any("名称：Mindio" in m.content and "分类：SaaS" in m.content for m in system_messages)
 
 
 async def _async_return(value):

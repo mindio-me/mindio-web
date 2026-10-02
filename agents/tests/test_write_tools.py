@@ -34,6 +34,8 @@ def _agent_input(text: str, current_note_id: int | None = None) -> dict:
         "username": "alice",
         "current_note_context": None,
         "current_note_id": current_note_id,
+        "current_project_context": None,
+        "current_project_id": None,
     }
 
 
