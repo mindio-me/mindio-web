@@ -163,6 +163,37 @@ public class ProjectService {
         return ProjectResponse.fromEntity(updatedProject);
     }
 
+    // 项目页 AI 助手（Spec B）专用的窄写入口：只允许改 description/descriptionZh 这两个
+    // "文案"字段，不像 updateProject 那样整体覆盖所有字段——避免 AI 的一次写入意外
+    // 带崩其它字段（比如把 technologies 清空）。owner 校验已经在上游
+    // GlobalChatService.loadOwnedProjectOrNull 做过一次，这里不重复做（和
+    // InternalAgentController 里 appendBlockItem 等现有内部写入路径同一信任边界）。
+    private static final java.util.Set<String> AI_WRITABLE_PROJECT_FIELDS =
+            java.util.Set.of("description", "descriptionZh");
+
+    @Transactional
+    public ProjectResponse updateProjectField(Long id, String field, String value) {
+        Project project = projectRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("项目不存在，ID: " + id));
+
+        if (!AI_WRITABLE_PROJECT_FIELDS.contains(field)) {
+            throw new IllegalArgumentException("不支持通过 AI 助手写入字段: " + field);
+        }
+
+        switch (field) {
+            case "description" -> {
+                if (value == null || value.isBlank()) {
+                    throw new IllegalArgumentException("description 不能为空");
+                }
+                project.setDescription(value);
+            }
+            case "descriptionZh" -> project.setDescriptionZh(value);
+            default -> throw new IllegalArgumentException("不支持通过 AI 助手写入字段: " + field);
+        }
+
+        return ProjectResponse.fromEntity(projectRepository.save(project));
+    }
+
     /**
      * 删除项目
      * 删除前会将所有关联该项目的文档的 project_id 设置为 NULL（级联删除逻辑）
