@@ -57,6 +57,7 @@
         <div v-if="selectedProject" class="entity-form-wrapper">
           <div class="project-cover" :class="{ 'is-empty': !projectForm.imageUrl }" @click="triggerCoverUpload">
             <img v-if="projectForm.imageUrl" :src="projectForm.imageUrl" alt="cover" class="project-cover-img" />
+            <i v-else class="el-icon-plus project-cover-upload-icon"></i>
             <span class="project-cover-hint">
               {{ selectedProject.id ? (projectForm.imageUrl ? $t('workspace.projects.coverUploadChange') : $t('workspace.projects.coverUploadEmpty')) : $t('workspace.projects.coverUploadNeedSaveFirst') }}
             </span>
@@ -202,7 +203,7 @@
             </div>
             <el-form :model="projectForm" label-position="top" class="entity-form">
               <el-form-item :label="$t('workspace.projects.content')">
-                <div ref="projectEditorContainer" class="project-editorjs-container"></div>
+                <div ref="projectEditorContainer" class="editorjs-workspace-container project-editorjs-container"></div>
               </el-form-item>
             </el-form>
         </div>
@@ -1018,6 +1019,16 @@ export default {
 .project-editorjs-container {
   min-height: 300px;
   padding: 8px 0;
+
+  // 这个页面内容列比笔记页窄，复用笔记页那套 60px 的块左侧预留间距（给
+  // +/拖拽手柄图标留空间）显得过空——缩小到一半，"+"菜单弹出位置跟着改
+  ::v-deep .ce-block__content {
+    padding-left: 30px;
+  }
+
+  ::v-deep .ce-toolbox {
+    left: 30px !important;
+  }
 }
 
 .entity-form-wrapper {
@@ -1103,7 +1114,6 @@ export default {
 .project-cover {
   height: 120px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
   position: relative;
   cursor: pointer;
   overflow: hidden;
@@ -1111,8 +1121,22 @@ export default {
 
   &.is-empty {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 6px;
+    background: var(--bg-secondary);
+    border: 1px dashed var(--border-color);
+    transition: border-color 0.2s;
+
+    &:hover {
+      border-color: #667eea;
+    }
+  }
+
+  .project-cover-upload-icon {
+    font-size: 22px;
+    color: var(--text-muted);
   }
 
   .project-cover-img {
@@ -1135,6 +1159,8 @@ export default {
   &.is-empty .project-cover-hint {
     position: static;
     background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
   }
 }
 
