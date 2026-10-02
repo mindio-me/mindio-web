@@ -202,7 +202,7 @@
             </div>
             <el-form :model="projectForm" label-position="top" class="entity-form">
               <el-form-item :label="$t('workspace.projects.content')">
-                <div id="projectRichTextEditor" class="project-rich-text-editor"></div>
+                <div ref="projectEditorContainer" class="project-editorjs-container"></div>
               </el-form-item>
             </el-form>
         </div>
@@ -245,11 +245,12 @@
 import { renderMarkdown as renderMd } from '~/utils/markdown'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 import workspaceAiDock from '~/mixins/workspaceAiDock'
+import editorjsHost from '~/mixins/editorjsHost'
 
 export default {
   name: 'ProjectsPage',
   layout: 'workspace',
-  mixins: [workspaceLayoutResize, workspaceAiDock],
+  mixins: [workspaceLayoutResize, workspaceAiDock, editorjsHost],
   data() {
     return {
       loading: false,
@@ -278,8 +279,6 @@ export default {
         isFeatured: false,
         displayOrder: 0
       },
-      projectEditor: null,
-      projectSaving: false,
       projectSearch: '',
       projectTagInputVisible: false,
       projectTagInputValue: '',
@@ -337,14 +336,7 @@ export default {
     document.addEventListener('keydown', this._onEsc)
   },
   beforeDestroy() {
-    if (this.projectEditor) {
-      try {
-        this.projectEditor.destroy()
-      } catch (e) {
-        console.warn('Error destroying project editor:', e)
-      }
-      this.projectEditor = null
-    }
+    this.destroyEditorJsHost()
     // 移除事件监听器
     this.$nuxt.$off('workspace:create:projects', this.createProject)
     if (this._onEsc) document.removeEventListener('keydown', this._onEsc)
@@ -454,6 +446,15 @@ export default {
     },
     async saveToBackend() {
       if (!this.selectedProject || !this.projectForm.name) return
+      if (this.editor) {
+        try {
+          const outputData = await this.editor.save()
+          this.projectForm.content = JSON.stringify(outputData)
+          this.projectForm.contentType = 'editorjs'
+        } catch (e) {
+          console.error('读取项目正文内容失败:', e)
+        }
+      }
       this.updateSaveStatus('saving')
       try {
         const submitData = this.buildProjectSubmitData()
@@ -537,53 +538,59 @@ export default {
       this.projectZhTagInputVisible = false
       this.projectZhTagInputValue = ''
     },
-    initProjectEditor() {
-      if (this.projectEditor) {
-        try {
-          this.projectEditor.destroy()
-        } catch (e) {
-          console.warn('Error destroying editor:', e)
+    async initProjectEditor() {
+      if (!process.client || !this.selectedProject) return
+      this.destroyEditorJsHost()
+
+      let editorData = null
+      if (this.projectForm.content) {
+        if (this.projectForm.contentType === 'editorjs') {
+          try {
+            editorData = JSON.parse(this.projectForm.content)
+          } catch (e) {
+            console.warn('项目正文不是合法的 EditorJS JSON，按空文档处理:', e)
+            editorData = null
+          }
+        } else {
+          // 旧的 richtext/markdown 内容——不做自动转换，按空文档处理，
+          // 由用户手工把旧内容搬进新编辑器（spec 已确认现存记录很少，手工迁移即可）
+          editorData = null
         }
-        this.projectEditor = null
       }
 
-      if (!process.client) return
-
-      this.$nextTick(() => {
-        this.$nextTick(() => {
-          const editorContainer = document.getElementById('projectRichTextEditor')
-          if (!editorContainer) {
-            console.warn('Editor container not found')
-            return
-          }
-
-          import('wangeditor').then((WangEditor) => {
-            const E = WangEditor.default || WangEditor
-            this.projectEditor = new E('#projectRichTextEditor')
-            this.projectEditor.config.placeholder = this.$t('workspace.projects.editorPlaceholder')
-            this.projectEditor.config.zIndex = 1000
-            this.projectEditor.config.height = 500
-            this.projectEditor.config.onchange = (html) => {
-              this.projectForm.content = html
-            }
-            this.projectEditor.create()
-            if (this.projectForm.content) {
-              this.projectEditor.txt.html(this.projectForm.content)
-            }
-            setTimeout(() => {
-              if (this.projectEditor && this.projectEditor.txt) {
-                try {
-                  this.projectEditor.txt.focus()
-                } catch (e) {
-                  // 忽略焦点错误
-                }
-              }
-            }, 100)
-          }).catch((error) => {
-            console.error('Failed to load wangeditor:', error)
-          })
-        })
+      await this.$nextTick()
+      await this.initEditorJsHost({
+        container: this.$refs.projectEditorContainer,
+        model: 'project',
+        entityId: this.selectedProject.id,
+        data: editorData,
+        locale: this.$i18n.locale,
+        axiosBaseURL: this.$axios?.defaults?.baseURL || '',
+        authHeader: () => this.$auth?.strategy?.token?.get() || '',
+        placeholders: {
+          editor: this.$t('workspace.projects.editorPlaceholder'),
+          header: this.$t('workspace.projects.editorHeaderPlaceholder'),
+          code: this.$t('workspace.projects.editorCodePlaceholder'),
+          quote: this.$t('workspace.projects.editorQuotePlaceholder'),
+          quoteCaption: this.$t('workspace.projects.editorQuoteCaptionPlaceholder'),
+          warningTitle: this.$t('workspace.projects.editorWarningTitlePlaceholder'),
+          warningMessage: this.$t('workspace.projects.editorWarningMessagePlaceholder'),
+          attachButton: this.$t('workspace.projects.editorAttachButtonText'),
+          attachError: this.$t('workspace.projects.editorAttachErrorMessage'),
+          clipboardImageReadFailed: () => this.$t('workspace.projects.clipboardImageReadFailed'),
+          uploadingImage: (size) => this.$t('workspace.projects.uploadingImage', { size }),
+          imageTooLarge: (size) => this.$t('workspace.projects.imageTooLarge', { size }),
+          imagePasteUploadFailed: (size) => this.$t('workspace.projects.imagePasteUploadFailed', { size })
+        },
+        onChange: () => {
+          if (this._suppressAutosave) return
+          this.hasUnsavedChanges = true
+          this.updateSaveStatus('saving')
+          this.debouncedSave()
+        },
+        includeRecordTool: false
       })
+      this.projectForm.contentType = 'editorjs'
     },
     formatDate(time) {
       if (!time) return '-'
@@ -1008,92 +1015,9 @@ export default {
   font-weight: 500;
 }
 
-.project-rich-text-editor {
-  // min-height: 400px;
-  border: 1px solid var(--input-border);
-  border-radius: 4px;
-  background: var(--input-bg);
-  position: relative;
-  z-index: 1;
-}
-
-.project-rich-text-editor .w-e-text-container {
-  min-height: 400px;
-}
-
-.project-rich-text-editor .w-e-toolbar,
-.project-rich-text-editor .w-e-text-container {
-  position: relative;
-  z-index: 1;
-}
-
-.project-rich-text-editor {
-  ::v-deep .w-e-toolbar {
-    background: var(--input-bg) !important;
-    border-color: var(--input-border) !important;
-  }
-
-  ::v-deep .w-e-text-container {
-    background: var(--input-bg) !important;
-    border-color: var(--input-border) !important;
-  }
-
-  ::v-deep .w-e-text {
-    background: var(--input-bg) !important;
-    color: var(--text-color) !important;
-  }
-
-  ::v-deep .w-e-text p,
-  ::v-deep .w-e-text div,
-  ::v-deep .w-e-text span,
-  ::v-deep .w-e-text-container p,
-  ::v-deep .w-e-text-container div,
-  ::v-deep .w-e-text-container span {
-    color: var(--text-color) !important;
-  }
-
-  /* 暗色模式：覆盖 WangEditor CSS 中的浅色背景 */
-  ::v-deep .w-e-text blockquote {
-    background-color: var(--bg-tertiary) !important;
-    border-left-color: #4a6fa5;
-    color: var(--text-secondary);
-  }
-  ::v-deep .w-e-text code {
-    background-color: var(--bg-tertiary) !important;
-    color: var(--text-color);
-  }
-  ::v-deep .w-e-text table th {
-    background-color: var(--bg-tertiary) !important;
-  }
-  ::v-deep .w-e-text table,
-  ::v-deep .w-e-text table td,
-  ::v-deep .w-e-text table th {
-    border-color: var(--border-color) !important;
-  }
-
-  ::v-deep .w-e-text-container .placeholder {
-    color: var(--text-muted) !important;
-  }
-
-  ::v-deep .w-e-toolbar .w-e-menu {
-    color: var(--text-secondary);
-
-    &:hover {
-      background: var(--bg-secondary);
-    }
-  }
-
-  ::v-deep .w-e-menu i {
-    color: var(--text-secondary);
-  }
-}
-
-::v-deep .project-preview-dialog {
-  .el-dialog__body {
-    max-height: 70vh;
-    overflow-y: auto;
-    padding-top: 8px;
-  }
+.project-editorjs-container {
+  min-height: 300px;
+  padding: 8px 0;
 }
 
 .entity-form-wrapper {
