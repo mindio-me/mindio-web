@@ -54,181 +54,18 @@
           :collapse-title="$t('workspace.projects.collapseSidebar')"
           @toggle="leftPanelCollapsed = !leftPanelCollapsed"
         />
-        <div v-if="selectedProject" class="entity-detail-wrapper">
-          <!-- 详情模式 -->
-          <div v-if="projectViewMode === 'detail'" class="entity-detail-view">
-            <!-- 详情头部 -->
-            <div class="entity-detail-header">
-              <h2 class="entity-detail-title">{{ selectedProject.name }}</h2>
-              <div class="entity-detail-actions">
-                <el-button size="small" icon="el-icon-edit" @click="projectViewMode = 'edit'">{{ $t('common.edit') }}</el-button>
-                <el-button v-if="!isFullscreen" size="small" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
-                <el-button v-if="isFullscreen" size="small" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
-                <el-button size="small" type="danger" plain @click="deleteProject">{{ $t('common.delete') }}</el-button>
-              </div>
-            </div>
-
-            <!-- 详情内容 -->
-            <div class="entity-detail-content">
-              <!-- 中文名称 -->
-              <div v-if="selectedProject.nameZh" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.nameZh') }}</label>
-                <div class="detail-value">{{ selectedProject.nameZh }}</div>
-              </div>
-
-              <!-- 简称 -->
-              <div v-if="selectedProject.shortName" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.shortName') }}</label>
-                <div class="detail-value">{{ selectedProject.shortName }}</div>
-              </div>
-
-              <!-- 副标题 -->
-              <div v-if="selectedProject.subtitle" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.subtitleEn') }}</label>
-                <div class="detail-value">{{ selectedProject.subtitle }}</div>
-              </div>
-              <div v-if="selectedProject.subtitleZh" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.subtitleZh') }}</label>
-                <div class="detail-value">{{ selectedProject.subtitleZh }}</div>
-              </div>
-
-              <!-- 高亮说明句 -->
-              <div v-if="selectedProject.highlightMetric" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.highlightMetricEn') }}</label>
-                <div class="detail-value">{{ selectedProject.highlightMetric }}</div>
-              </div>
-              <div v-if="selectedProject.highlightMetricZh" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.highlightMetricZh') }}</label>
-                <div class="detail-value">{{ selectedProject.highlightMetricZh }}</div>
-              </div>
-
-              <!-- 描述 -->
-              <div v-if="selectedProject.description" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.descriptionEn') }}</label>
-                <div class="detail-value">{{ selectedProject.description }}</div>
-              </div>
-              <div v-if="selectedProject.descriptionZh" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.descriptionZh') }}</label>
-                <div class="detail-value">{{ selectedProject.descriptionZh }}</div>
-              </div>
-
-              <!-- 正文内容（富文本或 Markdown） -->
-              <div v-if="selectedProject.content" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.content') }}</label>
-                <div
-                  v-if="selectedProject.contentType === 'markdown'"
-                  class="markdown-content-display"
-                  v-mermaid
-                  v-html="renderMarkdown(selectedProject.content)"
-                ></div>
-                <div
-                  v-else
-                  class="wangeditor-content"
-                  v-html="selectedProject.content"
-                ></div>
-              </div>
-
-              <!-- 基本信息（两列） -->
-              <el-row :gutter="16" class="detail-meta-row">
-                <el-col :span="12">
-                  <div class="detail-field">
-                    <label class="detail-label">{{ $t('workspace.projects.category') }}</label>
-                    <div class="detail-value">{{ selectedProject.category || '-' }}</div>
-                  </div>
-                </el-col>
-                <el-col :span="12">
-                  <div class="detail-field">
-                    <label class="detail-label">{{ $t('workspace.projects.icon') }}</label>
-                    <div class="detail-value">
-                      <i v-if="selectedProject.icon" :class="selectedProject.icon"></i>
-                      <span v-else>-</span>
-                    </div>
-                  </div>
-                </el-col>
-              </el-row>
-
-              <!-- 链接（两列） -->
-              <el-row :gutter="16" class="detail-meta-row">
-                <el-col :span="12">
-                  <div class="detail-field">
-                    <label class="detail-label">{{ $t('workspace.projects.projectUrl') }}</label>
-                    <div class="detail-value">
-                      <a v-if="selectedProject.projectUrl" :href="selectedProject.projectUrl" target="_blank" rel="noopener">{{ selectedProject.projectUrl }}</a>
-                      <span v-else>-</span>
-                    </div>
-                  </div>
-                </el-col>
-                <el-col :span="12">
-                  <div class="detail-field">
-                    <label class="detail-label">GitHub</label>
-                    <div class="detail-value">
-                      <a v-if="selectedProject.githubUrl" :href="selectedProject.githubUrl" target="_blank" rel="noopener">{{ selectedProject.githubUrl }}</a>
-                      <span v-else>-</span>
-                    </div>
-                  </div>
-                </el-col>
-              </el-row>
-
-              <!-- 封面图片 -->
-              <div v-if="selectedProject.imageUrl" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.coverImage') }}</label>
-                <div class="detail-value">
-                  <img :src="selectedProject.imageUrl" alt="cover" style="max-width: 400px; border-radius: 8px;" />
-                </div>
-              </div>
-
-              <!-- 技术栈 -->
-              <div v-if="displayTechnologies.length" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.technologiesEn') }}</label>
-                <div class="detail-value">
-                  <el-tag v-for="(tech, idx) in displayTechnologies" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
-                </div>
-              </div>
-              <div v-if="displayTechnologiesZh.length" class="detail-field">
-                <label class="detail-label">{{ $t('workspace.projects.technologiesZh') }}</label>
-                <div class="detail-value">
-                  <el-tag v-for="(tech, idx) in displayTechnologiesZh" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
-                </div>
-              </div>
-
-              <!-- 状态信息（三列） -->
-              <el-row :gutter="16" class="detail-meta-row">
-                <el-col :span="8">
-                  <div class="detail-field">
-                    <label class="detail-label">{{ $t('workspace.projects.displayOrder') }}</label>
-                    <div class="detail-value">{{ selectedProject.displayOrder || 0 }}</div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="detail-field">
-                    <label class="detail-label">{{ $t('workspace.projects.publicField') }}</label>
-                    <div class="detail-value">
-                      <el-tag :type="selectedProject.isPublic ? 'success' : 'info'" size="small">{{ selectedProject.isPublic ? $t('workspace.projects.yes') : $t('workspace.projects.no') }}</el-tag>
-                    </div>
-                  </div>
-                </el-col>
-                <el-col :span="8">
-                  <div class="detail-field">
-                    <label class="detail-label">{{ $t('workspace.projects.isFeatured') }}</label>
-                    <div class="detail-value">
-                      <el-tag :type="selectedProject.isFeatured ? 'warning' : 'info'" size="small">{{ selectedProject.isFeatured ? $t('workspace.projects.yes') : $t('workspace.projects.no') }}</el-tag>
-                    </div>
-                  </div>
-                </el-col>
-              </el-row>
+        <div v-if="selectedProject" class="entity-form-wrapper">
+          <div class="entity-form-header">
+            <h2 class="entity-form-title">{{ selectedProject.name }}</h2>
+            <div class="entity-form-actions">
+              <span class="save-status" :class="saveStatus.icon === 'el-icon-warning' ? 'is-error' : ''">
+                <i :class="saveStatus.icon"></i>{{ saveStatus.text }}
+              </span>
+              <el-button v-if="!isFullscreen" size="small" icon="el-icon-full-screen" @click="isFullscreen = true">{{ $t('workspace.notes.fullscreen') }}</el-button>
+              <el-button v-if="isFullscreen" size="small" type="warning" icon="el-icon-close" @click="isFullscreen = false">{{ $t('workspace.notes.exitFullscreen') }}</el-button>
+              <el-button size="small" type="danger" plain @click="deleteProject">{{ $t('common.delete') }}</el-button>
             </div>
           </div>
-
-          <!-- 编辑模式 -->
-          <div v-else-if="projectViewMode === 'edit'" class="entity-form-wrapper">
-            <div class="entity-form-header">
-              <h2 class="entity-form-title">{{ $t('workspace.projects.editTitle') }}</h2>
-              <div class="entity-form-actions">
-                <el-button size="small" icon="el-icon-view" @click="openProjectPreview">{{ $t('workspace.projects.preview') }}</el-button>
-                <el-button size="small" @click="cancelProjectEdit">{{ $t('common.cancel') }}</el-button>
-                <el-button type="primary" size="small" :loading="projectSaving" @click="saveProject">{{ $t('common.save') }}</el-button>
-              </div>
-            </div>
             <el-form :model="projectForm" label-position="top" class="entity-form">
               <el-row :gutter="16">
                 <el-col :span="16">
@@ -325,7 +162,6 @@
                 </el-col>
               </el-row>
             </el-form>
-          </div>
         </div>
         <div v-else class="note-main-empty">
           <i class="el-icon-folder-opened empty-icon"></i>
@@ -359,45 +195,6 @@
         </div>
       </aside>
     </div>
-
-    <!-- ========== 预览弹窗 ========== -->
-    <el-dialog
-      :visible.sync="previewVisible"
-      :title="$t('workspace.projects.previewTitle', { name: projectForm.name || '' })"
-      width="720px"
-      custom-class="project-preview-dialog"
-      append-to-body
-    >
-      <div class="entity-detail-content preview-content">
-        <div v-if="projectForm.subtitle" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.subtitleEn') }}</label>
-          <div class="detail-value">{{ projectForm.subtitle }}</div>
-        </div>
-
-        <div v-if="projectForm.description" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.descriptionEn') }}</label>
-          <div class="detail-value">{{ projectForm.description }}</div>
-        </div>
-
-        <div v-if="projectForm.content" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.content') }}</label>
-          <div
-            v-if="projectForm.contentType === 'markdown'"
-            class="markdown-content-display"
-            v-mermaid
-            v-html="renderMarkdown(projectForm.content)"
-          ></div>
-          <div v-else class="wangeditor-content" v-html="projectForm.content"></div>
-        </div>
-
-        <div v-if="projectForm.technologies && projectForm.technologies.length" class="detail-field">
-          <label class="detail-label">{{ $t('workspace.projects.technologiesEn') }}</label>
-          <div class="detail-value">
-            <el-tag v-for="(tech, idx) in projectForm.technologies" :key="idx" size="small" style="margin-right: 8px; margin-bottom: 8px;">{{ tech }}</el-tag>
-          </div>
-        </div>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
@@ -445,8 +242,10 @@ export default {
       projectTagInputValue: '',
       projectZhTagInputVisible: false,
       projectZhTagInputValue: '',
-      projectViewMode: 'edit', // 'detail' | 'edit'
-      previewVisible: false,
+      saveStatus: { icon: 'el-icon-check', text: '' },
+      saveTimeout: null,
+      hasUnsavedChanges: false,
+      _suppressAutosave: false,
 
       // 布局控制
       leftPanelCollapsed: false,
@@ -474,13 +273,13 @@ export default {
     }
   },
   watch: {
-    projectViewMode(newMode) {
-      if (newMode === 'edit') {
-        this.$nextTick(() => {
-          if (process.client) {
-            this.initProjectEditor()
-          }
-        })
+    projectForm: {
+      deep: true,
+      handler() {
+        if (this._suppressAutosave || !this.selectedProject) return
+        this.hasUnsavedChanges = true
+        this.updateSaveStatus('saving')
+        this.debouncedSave()
       }
     }
   },
@@ -524,9 +323,18 @@ export default {
         this.loading = false
       }
     },
-    selectProject(item) {
+    async selectProject(item) {
+      // 如果上一个项目还有未落盘的防抖改动（2 秒窗口内就切走了），先同步存掉，
+      // 不然 selectedProject/projectForm 一旦被下面的赋值替换成新项目，原来挂起的
+      // debouncedSave() 定时器触发时存的就是新项目自己未改动的数据，上一个项目
+      // 最后一次编辑会被静默丢弃（而不是错误地污染新项目——新项目保存的是它自己
+      // 没改过的值，是空操作，但旧项目的改动就这么没了）
+      if (this.hasUnsavedChanges && this.selectedProject) {
+        clearTimeout(this.saveTimeout)
+        await this.saveToBackend()
+      }
+      this._suppressAutosave = true
       this.selectedProject = item
-      this.projectViewMode = 'edit'
 
       // 预填充编辑表单
       this.projectForm = {
@@ -557,26 +365,12 @@ export default {
         displayOrder: item.displayOrder || 0
       }
 
-      // projectViewMode 默认即为 'edit'，值不变时 watcher 不会触发，
-      // 因此这里显式初始化编辑器（同时覆盖切换项目时刷新编辑器内容）
-      if (this.projectViewMode === 'edit') {
-        this.$nextTick(() => {
-          if (process.client) {
-            this.initProjectEditor()
-          }
-        })
-      }
-    },
-    cancelProjectEdit() {
-      this.projectViewMode = 'detail'
-      if (this.projectEditor) {
-        try {
-          this.projectEditor.destroy()
-        } catch (e) {
-          console.warn('Error destroying project editor:', e)
+      this.$nextTick(() => {
+        this._suppressAutosave = false
+        if (process.client) {
+          this.initProjectEditor()
         }
-        this.projectEditor = null
-      }
+      })
     },
     async createProject() {
       try {
@@ -590,61 +384,48 @@ export default {
         this.$message.error(this.$t('workspace.projects.createFailed'))
       }
     },
-    async saveProject() {
-      if (!this.selectedProject || !this.projectForm.name) return
-
-      // 从编辑器获取内容
-      if (this.projectEditor && this.projectForm.contentType === 'richtext') {
-        this.projectForm.content = this.projectEditor.txt.html()
+    updateSaveStatus(status) {
+      const map = {
+        saving: { icon: 'el-icon-loading', text: this.$t('workspace.notes.saving') },
+        saved: { icon: 'el-icon-check', text: this.$t('workspace.notes.saved') },
+        error: { icon: 'el-icon-warning', text: this.$t('workspace.notes.saveFailed') }
       }
-
-      this.projectSaving = true
-      try {
-        // 将技术栈数组转换为逗号分隔的字符串
-        const submitData = {
-          ...this.projectForm,
-          technologies: Array.isArray(this.projectForm.technologies)
-            ? this.projectForm.technologies.join(',')
-            : this.projectForm.technologies,
-          technologiesZh: Array.isArray(this.projectForm.technologiesZh)
-            ? this.projectForm.technologiesZh.join(',')
-            : this.projectForm.technologiesZh
-        }
-
-        await this.$projectService.updateProject(this.selectedProject.id, submitData)
-        this.$message.success(this.$t('workspace.projects.saveSuccess'))
-
-        // 更新本地列表
-        const idx = this.projects.findIndex(p => p.id === this.selectedProject.id)
-        if (idx >= 0) Object.assign(this.projects[idx], submitData)
-
-        // 更新选中对象
-        this.selectedProject = { ...this.selectedProject, ...submitData }
-
-        // 切换回详情模式
-        this.projectViewMode = 'detail'
-
-        // 销毁编辑器
-        if (this.projectEditor) {
-          try {
-            this.projectEditor.destroy()
-          } catch (e) {
-            console.warn('Error destroying project editor:', e)
-          }
-          this.projectEditor = null
-        }
-      } catch (error) {
-        this.$message.error(this.$t('workspace.projects.saveFailed'))
-      } finally {
-        this.projectSaving = false
+      this.saveStatus = map[status] || { icon: 'el-icon-edit', text: '' }
+    },
+    debouncedSave() {
+      clearTimeout(this.saveTimeout)
+      this.saveTimeout = setTimeout(() => { this.saveToBackend() }, 2000)
+    },
+    buildProjectSubmitData() {
+      return {
+        ...this.projectForm,
+        technologies: Array.isArray(this.projectForm.technologies)
+          ? this.projectForm.technologies.join(',')
+          : this.projectForm.technologies,
+        technologiesZh: Array.isArray(this.projectForm.technologiesZh)
+          ? this.projectForm.technologiesZh.join(',')
+          : this.projectForm.technologiesZh
       }
     },
-    openProjectPreview() {
-      // 从编辑器获取最新内容，确保预览与所见一致
-      if (this.projectEditor && this.projectForm.contentType === 'richtext') {
-        this.projectForm.content = this.projectEditor.txt.html()
+    async saveToBackend() {
+      if (!this.selectedProject || !this.projectForm.name) return
+      this.updateSaveStatus('saving')
+      try {
+        const submitData = this.buildProjectSubmitData()
+        await this.$projectService.updateProject(this.selectedProject.id, submitData)
+        this.hasUnsavedChanges = false
+        this.updateSaveStatus('saved')
+        const idx = this.projects.findIndex(p => p.id === this.selectedProject.id)
+        if (idx >= 0) Object.assign(this.projects[idx], submitData)
+        Object.assign(this.selectedProject, submitData)
+      } catch (error) {
+        this.updateSaveStatus('error')
       }
-      this.previewVisible = true
+    },
+    // 给 isPublic/isFeatured 这类离散开关用：不等 2 秒防抖，立即落盘
+    saveFieldsImmediately() {
+      clearTimeout(this.saveTimeout)
+      this.saveToBackend()
     },
     deleteProject() {
       if (!this.selectedProject) return
@@ -696,8 +477,6 @@ export default {
       this.projectZhTagInputValue = ''
     },
     initProjectEditor() {
-      if (this.projectViewMode !== 'edit') return
-
       if (this.projectEditor) {
         try {
           this.projectEditor.destroy()
@@ -1321,6 +1100,19 @@ export default {
   border: none !important;
   overflow-y: auto;
   padding: 16px 32px;
+}
+
+.save-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &.is-error {
+    color: #f56c6c;
+  }
 }
 </style>
 
