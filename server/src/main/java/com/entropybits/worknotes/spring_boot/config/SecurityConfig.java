@@ -91,6 +91,8 @@ public class SecurityConfig {
                         .requestMatchers("/v1/resources", "/v1/resources/category/**", "/v1/resources/*").permitAll()
                         // 允许访问公开个人资料
                         .requestMatchers("/v1/profiles/*").permitAll()
+                        // 允许访问站点设置（个人主页展示站点名称/Logo 需要，写操作仍需 ADMIN，见 Controller 的 @PreAuthorize）
+                        .requestMatchers(HttpMethod.GET, "/v1/settings/site").permitAll()
                         // 允许 Actuator 健康检查（可选）
                         .requestMatchers("/actuator/health").permitAll()
                         // /internal/** 是给独立Agent服务回调用的内部接口，不走JWT——鉴权
