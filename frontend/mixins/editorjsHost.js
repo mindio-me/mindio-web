@@ -134,6 +134,8 @@ export default {
                     file: {
                       url: result.url || result.fileUrl || result,
                       name: result.fileName || file.name,
+                      // attaches 工具的标题取自 file.title，缺失时会退回占位符 "File title"
+                      title: result.fileName || file.name,
                       size: result.fileSize,
                       extension: result.extName
                     }
