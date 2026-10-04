@@ -800,6 +800,7 @@
       "historyLoadFailed": "Failed to load chat history",
       "retry": "Retry",
       "currentNoteHint": "Current note automatically linked",
+      "thinking": "Thinking…",
       "searching": "Searching \"{query}\"…",
       "attachImage": "Upload image",
       "attachDocument": "Upload document",

@@ -98,6 +98,10 @@
           <div class="chat-assistant-block">
             <div class="chat-assistant-icon"><i class="el-icon-chat-dot-round"></i></div>
             <div class="chat-assistant-body">
+              <div v-if="!searchingQuery && !liveAssistantText" class="chat-tool-indicator">
+                <i class="el-icon-loading"></i>
+                {{ $t('workspace.chat.thinking') }}
+              </div>
               <div v-if="searchingQuery" class="chat-tool-indicator">
                 <i class="el-icon-loading"></i>
                 {{ $t('workspace.chat.searching', { query: searchingQuery }) }}

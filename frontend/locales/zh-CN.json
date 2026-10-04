@@ -800,6 +800,7 @@
       "historyLoadFailed": "历史记录加载失败",
       "retry": "重试",
       "currentNoteHint": "已自动关联当前笔记",
+      "thinking": "正在思考…",
       "searching": "正在搜索「{query}」…",
       "attachImage": "上传图片",
       "attachDocument": "上传文档",
