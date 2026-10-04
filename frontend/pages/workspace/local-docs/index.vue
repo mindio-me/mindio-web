@@ -1013,10 +1013,10 @@ export default {
   font-size: 14px;
   transition: all 0.15s ease;
 
-  &:hover { color: #667eea; }
+  &:hover { color: var(--color-nav); }
 
   &.active {
-    color: #667eea;
+    color: var(--color-nav);
     background: var(--card-bg-color);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
   }
@@ -1054,7 +1054,7 @@ export default {
     }
 
     &.active {
-      border-color: #667eea;
+      border-color: var(--color-nav);
       box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.16);
     }
   }
@@ -1072,7 +1072,7 @@ export default {
   }
 
   .dir-item-all .dir-icon {
-    color: #667eea;
+    color: var(--color-nav);
   }
 
   .dir-item-info {
@@ -1125,8 +1125,8 @@ export default {
 
   &.active {
     background: rgba(102, 126, 234, 0.1);
-    .dir-item-name { color: #667eea; font-weight: 500; }
-    .dir-icon { color: #667eea; }
+    .dir-item-name { color: var(--color-nav); font-weight: 500; }
+    .dir-icon { color: var(--color-nav); }
   }
 }
 
@@ -1134,7 +1134,7 @@ export default {
   flex-shrink: 0;
 
   .dir-icon {
-    color: #667eea;
+    color: var(--color-nav);
   }
 }
 
@@ -1327,11 +1327,11 @@ export default {
   transition: all 0.15s ease;
 
   &:hover {
-    color: #667eea;
+    color: var(--color-nav);
   }
 
   &.active {
-    color: #667eea;
+    color: var(--color-nav);
     background: var(--card-bg-color);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
   }
@@ -1433,7 +1433,7 @@ export default {
   cursor: pointer;
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.12);
 
-  &:hover { color: #667eea; }
+  &:hover { color: var(--color-nav); }
 }
 
 .document-icon {
@@ -1600,17 +1600,17 @@ export default {
   cursor: pointer;
   font-size: 13px;
 
-  &:hover { color: #667eea; }
+  &:hover { color: var(--color-nav); }
 
   &.active {
-    color: #667eea;
+    color: var(--color-nav);
     background: rgba(102, 126, 234, 0.12);
   }
 }
 
 .crumb {
   cursor: pointer;
-  color: #667eea;
+  color: var(--color-nav);
   padding: 1px 3px;
   border-radius: 3px;
   &:hover { background: rgba(102,126,234,0.1); }

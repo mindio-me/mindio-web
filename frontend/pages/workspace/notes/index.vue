@@ -2230,7 +2230,7 @@ export default {
 
   &.active {
     background: rgba(102, 126, 234, 0.12);
-    color: #667eea;
+    color: var(--color-nav);
   }
 }
 
@@ -2451,8 +2451,8 @@ export default {
   padding: 0;
 
   &:hover:not(:disabled) {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-nav);
+    color: var(--color-nav);
   }
 
   &:disabled {
@@ -2520,7 +2520,7 @@ export default {
   color: var(--text-muted);
 
   .note-main-source-link {
-    color: #667eea;
+    color: var(--color-action);
     text-decoration: none;
   }
 
@@ -2642,7 +2642,7 @@ export default {
 }
 
 .tag-manager-row--active {
-  color: #667eea;
+  color: var(--color-nav);
 }
 
 .tag-manager-editor {
@@ -2715,7 +2715,7 @@ export default {
 .section-label {
   font-size: 13px;
   font-weight: 500;
-  color: #667eea;
+  color: var(--color-nav);
 }
 
 .section-preview {
@@ -3001,7 +3001,7 @@ export default {
 }
 
 .meta-link {
-  color: #667eea;
+  color: var(--color-action);
   text-decoration: none;
   &:hover { text-decoration: underline; }
 }
@@ -3185,7 +3185,7 @@ export default {
   line-height: 1;
 }
 .cal-day-num--today {
-  background: #667eea;
+  background: var(--color-nav);
   color: #fff !important;
   font-weight: 600;
 }
@@ -3205,7 +3205,7 @@ export default {
   border-radius: 3px;
   background: rgba(102, 126, 234, 0.12);
   color: var(--text-color);
-  border-left: 2px solid #667eea;
+  border-left: 2px solid var(--color-nav);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3213,7 +3213,7 @@ export default {
   transition: background 0.12s, color 0.12s;
 }
 .cal-note-chip:hover {
-  background: #667eea;
+  background: var(--color-nav);
   color: #fff;
 }
 .cal-note-more {
@@ -3228,7 +3228,7 @@ export default {
   display: inline-flex;
   align-items: center;
   font-size: 12px;
-  color: #667eea;
+  color: var(--color-nav);
   cursor: pointer;
   margin-bottom: 12px;
   padding: 4px 8px;

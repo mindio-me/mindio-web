@@ -761,7 +761,7 @@ export default {
           font-size: 14px;
 
           .breadcrumb-link {
-            color: #409eff;
+            color: var(--color-nav);
             text-decoration: none;
             transition: color 0.3s;
 
@@ -865,7 +865,7 @@ export default {
     }
 
     .note-summary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--color-nav) 0%, #764ba2 100%);
       color: white;
       padding: 20px;
       border-radius: 8px;
@@ -892,7 +892,7 @@ export default {
       padding: 20px;
       border-radius: 8px;
       margin-bottom: 30px;
-      border-left: 4px solid #409eff;
+      border-left: 4px solid var(--color-nav);
 
       .toc-header {
         display: flex;
@@ -929,7 +929,7 @@ export default {
             min-width: 24px;
             height: 24px;
             padding: 0 6px;
-            background: #409eff;
+            background: var(--color-nav);
             color: white;
             border-radius: 12px;
             font-size: 12px;
@@ -979,7 +979,7 @@ export default {
 
           .section-number {
             font-weight: 600;
-            color: #409eff;
+            color: var(--color-nav);
             font-size: 16px;
           }
         }
@@ -1028,7 +1028,7 @@ export default {
             padding: 16px;
             border-radius: 6px;
             overflow-x: auto;
-            border-left: 4px solid #409eff;
+            border-left: 4px solid var(--color-nav);
             margin: 20px 0;
 
             code {
@@ -1046,7 +1046,7 @@ export default {
           }
 
           blockquote {
-            border-left: 4px solid #409eff;
+            border-left: 4px solid var(--color-nav);
             padding: 12px 20px;
             margin: 20px 0;
             background: #f5f7fa;
@@ -1080,7 +1080,7 @@ export default {
           }
 
           a {
-            color: #409eff;
+            color: var(--color-action);
             text-decoration: none;
 
             &:hover {
@@ -1097,7 +1097,7 @@ export default {
 
       // 引用块样式
       .quote-content {
-        border-left: 4px solid #409eff;
+        border-left: 4px solid var(--color-nav);
         padding: 12px 16px;
         background: #f5f7fa;
         border-radius: 4px;
@@ -1194,7 +1194,7 @@ export default {
       }
 
       .ejs-quote {
-        border-left: 4px solid #667eea;
+        border-left: 4px solid var(--color-nav);
         padding: 12px 20px;
         margin: 16px 0;
         background: #f8f9fa;

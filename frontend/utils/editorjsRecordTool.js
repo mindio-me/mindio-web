@@ -26,8 +26,8 @@ function injectStyles() {
   user-select: none;
 }
 .record-tool__placeholder:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: var(--color-nav);
+  color: var(--color-nav);
   background: rgba(102,126,234,0.04);
 }
 .record-tool__placeholder--recording {
@@ -92,7 +92,7 @@ function injectStyles() {
 .record-tool__transcript-toggle {
   margin-top: 8px;
   font-size: 12.5px;
-  color: #667eea;
+  color: var(--color-nav);
   cursor: pointer;
   user-select: none;
   display: inline-block;

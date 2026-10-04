@@ -1004,15 +1004,15 @@ export default {
   &:hover { background: var(--bg-secondary); .dir-more-btn { opacity: 1; } }
   &.active {
     background: rgba(102, 126, 234, 0.1);
-    .dir-item-name { color: #667eea; font-weight: 500; }
-    .dir-icon { color: #667eea; }
+    .dir-item-name { color: var(--color-nav); font-weight: 500; }
+    .dir-icon { color: var(--color-nav); }
   }
 }
 
 .dir-item-all {
   flex-shrink: 0;
 
-  .dir-icon { color: #667eea; }
+  .dir-icon { color: var(--color-nav); }
 }
 
 .dir-item-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
@@ -1072,7 +1072,7 @@ export default {
   padding: 4px 12px; border-radius: 14px; font-size: 12px; cursor: pointer;
   color: var(--text-muted); background: var(--bg-secondary); transition: all 0.15s;
   &:hover { color: var(--text-color); }
-  &.active { background: rgba(102,126,234,0.15); color: #667eea; font-weight: 500; }
+  &.active { background: rgba(102,126,234,0.15); color: var(--color-nav); font-weight: 500; }
 }
 
 .media-content-area {
@@ -1146,7 +1146,7 @@ export default {
     box-shadow: 0 5px 14px rgba(0, 0, 0, 0.1);
   }
   &:hover .path-overlay { opacity: 1; }
-  &.active { border-color: #667eea; }
+  &.active { border-color: var(--color-nav); }
 }
 
 .path-overlay {
@@ -1319,15 +1319,15 @@ export default {
   cursor: pointer;
   font-size: 13px;
 
-  &:hover { color: #667eea; }
+  &:hover { color: var(--color-nav); }
 
   &.active {
-    color: #667eea;
+    color: var(--color-nav);
     background: rgba(102, 126, 234, 0.12);
   }
 }
 .crumb {
-  cursor: pointer; color: #667eea; padding: 1px 3px; border-radius: 3px;
+  cursor: pointer; color: var(--color-nav); padding: 1px 3px; border-radius: 3px;
   &:hover { background: rgba(102,126,234,0.1); }
   &-last { color: var(--text-color); cursor: default; font-weight: 500; &:hover { background: none; } }
   &-root { font-size: 14px; }

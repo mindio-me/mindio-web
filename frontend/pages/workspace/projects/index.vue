@@ -848,7 +848,7 @@ export default {
       line-height: 1.6;
 
       a {
-        color: #667eea;
+        color: var(--color-action);
         text-decoration: none;
 
         &:hover {
@@ -894,7 +894,7 @@ export default {
     blockquote {
       margin: 1em 0;
       padding: 0.5em 1em;
-      border-left: 4px solid var(--primary-color, #667eea);
+      border-left: 4px solid var(--primary-color, var(--color-nav));
       background: var(--bg-tertiary, rgba(102, 126, 234, 0.1));
       color: var(--text-secondary);
     }
@@ -918,11 +918,11 @@ export default {
       border-radius: 4px;
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 0.9em;
-      color: var(--primary-color, #667eea);
+      color: var(--primary-color, var(--color-nav));
     }
 
     a {
-      color: var(--primary-color, #667eea);
+      color: var(--primary-color, var(--color-action));
       text-decoration: none;
       &:hover { text-decoration: underline; }
     }
@@ -1079,7 +1079,7 @@ export default {
     color: var(--text-color) !important;
 
     &:focus {
-      border-color: #667eea !important;
+      border-color: var(--color-nav) !important;
     }
   }
 
@@ -1093,7 +1093,7 @@ export default {
     color: var(--text-color) !important;
 
     &:focus {
-      border-color: #667eea !important;
+      border-color: var(--color-nav) !important;
     }
   }
 
@@ -1115,7 +1115,7 @@ export default {
       color: var(--text-secondary) !important;
 
       &:hover {
-        color: #667eea !important;
+        color: var(--color-nav) !important;
       }
     }
   }
@@ -1171,7 +1171,7 @@ export default {
     transition: border-color 0.2s;
 
     &:hover {
-      border-color: #667eea;
+      border-color: var(--color-nav);
     }
   }
 

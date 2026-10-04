@@ -287,8 +287,8 @@ export default {
   transition: all 0.2s;
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-nav);
+    color: var(--color-nav);
     background: rgba(102, 126, 234, 0.08);
   }
 
@@ -321,7 +321,7 @@ export default {
 
 .calendar-month.is-selected-month {
   .month-header {
-    color: #667eea;
+    color: var(--color-nav);
   }
 
   .month-header::before {
@@ -331,7 +331,7 @@ export default {
     height: 6px;
     margin-right: 6px;
     border-radius: 50%;
-    background: #667eea;
+    background: var(--color-nav);
     vertical-align: 2px;
   }
 }
@@ -381,12 +381,12 @@ export default {
   }
 
   &.is-today:not(.is-selected) {
-    border: 1px solid #667eea;
+    border: 1px solid var(--color-nav);
     background: rgba(102, 126, 234, 0.05);
   }
 
   &.is-selected {
-    background: #667eea;
+    background: var(--color-nav);
     color: #fff;
     transform: scale(1.05);
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
@@ -426,14 +426,14 @@ export default {
   z-index: 1;
 
   .marker-dot {
-    color: #667eea;
+    color: var(--color-nav);
     font-size: 14px;
     line-height: 1;
     display: block;
   }
 
   .marker-count {
-    color: #667eea;
+    color: var(--color-nav);
     font-size: 10px;
     font-weight: 600;
     background: rgba(102, 126, 234, 0.15);

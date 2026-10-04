@@ -395,7 +395,7 @@ export default {
     font-size: 14px;
 
     &:hover {
-      color: #667eea;
+      color: var(--color-nav);
     }
   }
 }
@@ -419,7 +419,7 @@ export default {
 
   &:hover {
     background: rgba(148, 163, 184, 0.08);
-    color: #667eea;
+    color: var(--color-nav);
   }
 }
 
@@ -469,7 +469,7 @@ export default {
   }
 
   &.active {
-    background: #667eea;
+    background: var(--color-nav);
     color: #fff;
     font-weight: 500;
   }

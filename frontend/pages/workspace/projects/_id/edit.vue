@@ -420,7 +420,7 @@ export default {
   gap: 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #667eea;
+  color: var(--color-nav);
   cursor: pointer;
 
   i { font-size: 22px; }
@@ -431,7 +431,7 @@ export default {
   color: var(--text-muted) !important;
   padding: 4px 8px;
 
-  &:hover { color: #667eea !important; }
+  &:hover { color: var(--color-nav) !important; }
 }
 
 .topbar-right {
@@ -452,7 +452,7 @@ export default {
     gap: 6px;
     font-size: 14px;
 
-    &:hover { color: #667eea; }
+    &:hover { color: var(--color-nav); }
   }
 }
 
@@ -519,7 +519,7 @@ export default {
   color: var(--text-color);
 
   &:focus {
-    border-color: #667eea;
+    border-color: var(--color-nav);
   }
 }
 
@@ -555,7 +555,7 @@ export default {
     color: var(--text-secondary) !important;
 
     &:hover {
-      color: #667eea !important;
+      color: var(--color-nav) !important;
     }
   }
 }
@@ -567,7 +567,7 @@ export default {
   }
 
   &.is-checked .el-switch__core {
-    background-color: #667eea !important;
+    background-color: var(--color-nav) !important;
   }
 }
 

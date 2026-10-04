@@ -149,7 +149,7 @@ export default {
 }
 
 .mode-radio.is-checked {
-  border-color: #409eff;
+  border-color: var(--color-action);
   background: #f0f7ff;
 }
 

@@ -36,6 +36,12 @@
   }
   pre code { display: block; }
 
+  a {
+    color: var(--color-action, #409eff);
+    text-decoration: none;
+    &:hover { text-decoration: underline; color: var(--color-action-hover, #66b1ff); }
+  }
+
   table {
     border-top: 1px solid #ccc;
     border-left: 1px solid #ccc;

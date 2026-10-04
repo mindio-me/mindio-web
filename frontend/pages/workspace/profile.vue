@@ -780,7 +780,7 @@ export default {
     color: var(--text-color);
 
     &:focus {
-      border-color: #667eea;
+      border-color: var(--color-nav);
     }
   }
 
@@ -881,8 +881,8 @@ export default {
   transition: border-color 0.2s, color 0.2s;
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-nav);
+    color: var(--color-nav);
   }
 }
 
@@ -935,8 +935,8 @@ export default {
   transition: border-color 0.2s, color 0.2s;
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-nav);
+    color: var(--color-nav);
   }
 }
 

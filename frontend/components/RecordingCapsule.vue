@@ -566,7 +566,7 @@ export default {
     background: var(--border-color, #e2e2ea);
     color: var(--text-color, #333);
   }
-  &:focus-visible { outline: 2px solid #667eea; outline-offset: 2px; }
+  &:focus-visible { outline: 2px solid var(--color-nav); outline-offset: 2px; }
 }
 .rap-opt {
   width: 100%;
@@ -578,7 +578,7 @@ export default {
   cursor: pointer;
   color: var(--text-color, #1a202c);
   &:hover { background: var(--bg-secondary, #f5f7fa); }
-  &:focus-visible { outline: 2px solid #667eea; outline-offset: -2px; }
+  &:focus-visible { outline: 2px solid var(--color-nav); outline-offset: -2px; }
 }
 .rap-opt-title { font-size: 13.5px; }
 .rap-opt-sub { font-size: 12px; color: var(--text-muted, #718096); margin-top: 1px; }

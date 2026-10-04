@@ -25,6 +25,12 @@
   --icon-bg: #eff6ff;
   --hero-gradient: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
   --cta-gradient: linear-gradient(135deg, #e0e7ff 0%, #dbeafe 100%);
+
+  // Workspace 蓝色语义变量：三套色系分别对应"导航/装饰""可交互""AI 助手"
+  --color-nav: #667eea;
+  --color-action: #409eff;
+  --color-action-hover: #66b1ff;
+  --color-ai-accent: #cc785c;
 }
 
 // Dark 主题：通过在 html/body 上挂 theme-dark 类来启用
@@ -48,6 +54,11 @@
   --icon-bg: #1e3a5f;
   --hero-gradient: linear-gradient(135deg, #1e1e1e 0%, #181818 100%);
   --cta-gradient: linear-gradient(135deg, #1e293b 0%, #172554 100%);
+
+  --color-nav: #7c8ff0;
+  --color-action: #66b1ff;
+  --color-action-hover: #85c1ff;
+  --color-ai-accent: #e0a085;
 }
 
 * {
@@ -533,7 +544,7 @@ html.theme-dark #__layout {
   // 只有正在被拖动的那一条才高亮——mixin 在 pointerdown 时直接给这个
   // resizer 元素加类名（不经 Vue 响应式，也就不会连带另一条一起变色）
   &.ws-col-resizer-active { background: rgba(102, 126, 234, 0.12); }
-  &.ws-col-resizer-active::before { background: #667eea; }
+  &.ws-col-resizer-active::before { background: var(--color-nav); }
 }
 
 @media screen and (max-width: 1024px) {

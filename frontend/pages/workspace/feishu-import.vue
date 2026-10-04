@@ -790,7 +790,7 @@ export default {
   gap: 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #667eea;
+  color: var(--color-nav);
   cursor: pointer;
 
   i { font-size: 22px; }
@@ -801,7 +801,7 @@ export default {
   color: var(--text-muted) !important;
   padding: 4px 8px;
 
-  &:hover { color: #667eea !important; }
+  &:hover { color: var(--color-nav) !important; }
 }
 
 .topbar-right {
@@ -813,7 +813,7 @@ export default {
     gap: 6px;
     font-size: 14px;
 
-    &:hover { color: #667eea; }
+    &:hover { color: var(--color-nav); }
   }
 }
 
@@ -904,7 +904,7 @@ export default {
   border-radius: 8px;
 
   a {
-    color: #667eea;
+    color: var(--color-nav);
     text-decoration: none;
 
     &:hover {
@@ -961,7 +961,7 @@ export default {
 
 ::v-deep .importable-row {
   .file-icon {
-    color: #409eff;
+    color: var(--color-action);
   }
 }
 
@@ -992,7 +992,7 @@ export default {
 
 .selected-count {
   font-size: 13px;
-  color: #409eff;
+  color: var(--color-action);
 }
 
 .node-breadcrumb {
@@ -1002,7 +1002,7 @@ export default {
   border-radius: 6px;
 
   a {
-    color: #667eea;
+    color: var(--color-nav);
     text-decoration: none;
     &:hover { text-decoration: underline; }
   }

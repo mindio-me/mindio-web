@@ -244,7 +244,7 @@ export default {
   flex-shrink: 0;
 }
 .li-cover-upload:hover {
-  border-color: #409eff;
+  border-color: var(--color-action);
 }
 .li-cover-preview {
   width: 100%;
@@ -290,6 +290,6 @@ export default {
   margin-top: 4px;
 }
 .li-cover-download:hover {
-  color: #409eff;
+  color: var(--color-action);
 }
 </style>

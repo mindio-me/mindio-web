@@ -10,7 +10,7 @@
   .ce-header { color: var(--text-color, #333); font-weight: 600; padding: 0.6em 0 0.3em; }
 
   .cdx-quote {
-    border-left: 4px solid #667eea;
+    border-left: 4px solid var(--color-nav);
     padding: 12px 20px;
     background: var(--bg-secondary, #f8f9fa);
     border-radius: 4px;
@@ -122,8 +122,8 @@
       background: var(--card-bg-color, #fff);
     }
     .cdx-checklist__item--checked .cdx-checklist__item-checkbox-check {
-      background: #667eea;
-      border-color: #667eea;
+      background: var(--color-nav);
+      border-color: var(--color-nav);
     }
     .cdx-checklist__item--checked .cdx-checklist__item-checkbox:not(.cdx-checklist__item-checkbox--no-hover):hover .cdx-checklist__item-checkbox-check {
       background: #5a6fd6;
@@ -165,7 +165,7 @@
   .cdx-references {
     &__list { list-style: none; padding-left: 0; margin: 0 0 8px; }
     &__item { padding: 6px 0; border-bottom: 1px solid var(--border-color, #eee); }
-    &__link { color: var(--text-color, #333); text-decoration: none; font-weight: 500; &:hover { color: #667eea; } }
+    &__link { color: var(--text-color, #333); text-decoration: none; font-weight: 500; &:hover { color: var(--color-nav); } }
     &__note { color: var(--text-muted, #999); font-size: 0.85em; margin-top: 2px; }
     &__add-btn, &__delete { background: none; border: 1px solid var(--border-color, #ddd); border-radius: 4px; cursor: pointer; color: var(--text-color, #333); }
     &__form { margin-top: 8px; padding: 10px; border: 1px solid var(--border-color, #ddd); border-radius: 6px; background: var(--bg-secondary, #f8f9fa); }
@@ -334,7 +334,7 @@
     background-color: rgba(30, 30, 30, 0.95);
   }
   .el-loading-spinner .path {
-    stroke: #667eea;
+    stroke: var(--color-nav);
   }
   .el-loading-spinner .el-loading-text {
     color: var(--text-secondary);
@@ -400,7 +400,7 @@
     }
 
     &--active {
-      background: #667eea;
+      background: var(--color-nav);
       color: #fff;
       &:hover { background: #5a6fd6; color: #fff; }
     }
@@ -485,7 +485,7 @@
     li { margin: 0.3em 0; line-height: 1.6; }
 
     blockquote {
-      border-left: 4px solid #667eea;
+      border-left: 4px solid var(--color-nav);
       padding: 12px 20px;
       margin: 1em 0;
       background: var(--bg-secondary, #f8f9fa);
@@ -520,7 +520,7 @@
       }
     }
 
-    a { color: #409eff; text-decoration: none; &:hover { text-decoration: underline; } }
+    a { color: var(--color-action); text-decoration: none; &:hover { text-decoration: underline; color: var(--color-action-hover); } }
 
     img.md-image {
       max-width: 100%;

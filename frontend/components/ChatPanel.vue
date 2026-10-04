@@ -786,7 +786,7 @@ export default {
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  background: #cc785c;
+  background: var(--color-ai-accent);
   color: #fff;
   flex-shrink: 0;
   display: flex;
@@ -840,7 +840,7 @@ export default {
 
 .chat-citation-chip {
   font-size: 12px;
-  color: #409eff;
+  color: var(--color-ai-accent);
   border: 1px solid var(--border-color, #e4e7ed);
   border-radius: 999px;
   padding: 2px 10px;
@@ -881,7 +881,7 @@ export default {
 .chat-citation-link-btn {
   border: none;
   background: transparent;
-  color: #409eff;
+  color: var(--color-ai-accent);
   font-size: 12px;
   cursor: pointer;
   padding: 0;
@@ -900,7 +900,7 @@ export default {
   background: var(--bg-color, #fff);
   transition: border-color 0.2s;
 
-  &:focus-within { border-color: #409eff; }
+  &:focus-within { border-color: var(--color-ai-accent); }
 }
 
 .chat-composer-textarea ::v-deep .el-textarea__inner {
@@ -949,7 +949,7 @@ export default {
 
 .chat-send-btn {
   border: none;
-  background: #409eff;
+  background: var(--color-ai-accent);
   color: #fff;
   cursor: pointer;
   font-size: 16px;

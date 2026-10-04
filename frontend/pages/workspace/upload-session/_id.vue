@@ -35,7 +35,7 @@
         <div class="us-dropzone" :class="{ 'us-dropzone--active': selectedFile }" @click="$refs.fileInput.click()">
           <input ref="fileInput" type="file" class="us-file-input" :accept="accept || undefined" @change="onFileChange" />
           <div v-if="!selectedFile" class="us-dz-placeholder">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-nav)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
               <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
             </svg>
@@ -43,7 +43,7 @@
             <div class="us-dz-hint">{{ acceptHint }}</div>
           </div>
           <div v-else class="us-dz-selected">
-            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-nav)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
             </svg>
             <div class="us-dz-filename">{{ selectedFile.name }}</div>
@@ -201,7 +201,7 @@ export default {
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--color-nav), #764ba2);
   color: #fff;
   display: flex;
   align-items: center;
@@ -258,7 +258,7 @@ export default {
 }
 .us-dropzone:hover,
 .us-dropzone--active {
-  border-color: #667eea;
+  border-color: var(--color-nav);
   background: rgba(102, 126, 234, 0.04);
 }
 .us-file-input {
@@ -300,7 +300,7 @@ export default {
 }
 .us-dz-change {
   font-size: 12px;
-  color: #667eea;
+  color: var(--color-nav);
   margin-top: 2px;
 }
 
@@ -318,7 +318,7 @@ export default {
 .us-btn {
   width: 100%;
   padding: 14px;
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, var(--color-nav), #764ba2);
   color: #fff;
   border: none;
   border-radius: 12px;
@@ -395,13 +395,13 @@ export default {
   border: 1.5px solid #c5cdf5;
   border-radius: 20px;
   font-size: 13.5px;
-  color: #667eea;
+  color: var(--color-nav);
   text-decoration: none;
   transition: all 0.15s;
 }
 .us-home-link:hover {
-  background: #667eea;
+  background: var(--color-nav);
   color: #fff;
-  border-color: #667eea;
+  border-color: var(--color-nav);
 }
 </style>

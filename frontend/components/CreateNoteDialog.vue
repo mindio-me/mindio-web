@@ -166,7 +166,7 @@ export default {
   background: var(--card-bg-color);
 
   &:hover {
-    border-color: #667eea;
+    border-color: var(--color-nav);
     background: var(--bg-secondary);
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
   }
@@ -185,7 +185,7 @@ export default {
   justify-content: center;
   background: var(--icon-bg);
   border-radius: 8px;
-  color: #667eea;
+  color: var(--color-nav);
 
   i {
     font-size: 24px;

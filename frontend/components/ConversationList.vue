@@ -88,7 +88,7 @@ export default {
 .conversation-list-new-btn {
   border: none;
   background: none;
-  color: var(--el-color-primary, #409eff);
+  color: var(--el-color-primary, var(--color-action));
   cursor: pointer;
   font-size: 13px;
 }

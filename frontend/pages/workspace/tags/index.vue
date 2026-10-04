@@ -460,7 +460,7 @@ export default {
     color: var(--text-color) !important;
 
     &:focus {
-      border-color: #667eea !important;
+      border-color: var(--color-nav) !important;
     }
   }
 

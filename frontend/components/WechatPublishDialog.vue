@@ -217,7 +217,7 @@ export default {
   background: #fafafa;
 }
 .cover-upload-area:hover {
-  border-color: #409eff;
+  border-color: var(--color-action);
 }
 .cover-preview {
   width: 100%;

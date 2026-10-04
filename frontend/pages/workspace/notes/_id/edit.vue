@@ -552,7 +552,7 @@ export default {
   color: var(--text-color);
 
   &:focus {
-    border-color: #667eea;
+    border-color: var(--color-nav);
   }
 }
 

@@ -27,8 +27,8 @@ function injectStyles() {
   user-select: none;
 }
 .audio-tool__placeholder:hover {
-  border-color: #667eea;
-  color: #667eea;
+  border-color: var(--color-nav);
+  color: var(--color-nav);
   background: rgba(102,126,234,0.04);
 }
 .audio-tool__player {
@@ -61,7 +61,7 @@ function injectStyles() {
 .audio-tool__transcript-toggle {
   margin-top: 8px;
   font-size: 12.5px;
-  color: #667eea;
+  color: var(--color-nav);
   cursor: pointer;
   user-select: none;
   display: inline-block;
@@ -126,7 +126,7 @@ function injectStyles() {
   width: 34px;
   height: 34px;
   border-radius: 9px;
-  background: linear-gradient(135deg,#667eea,#764ba2);
+  background: linear-gradient(135deg,var(--color-nav),#764ba2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -172,11 +172,11 @@ function injectStyles() {
   border-radius: 6px 6px 0 0;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.at-tab-btn:hover { color: #667eea; background: rgba(102,126,234,0.06); }
+.at-tab-btn:hover { color: var(--color-nav); background: rgba(102,126,234,0.06); }
 .at-tab-btn.active {
-  color: #667eea;
+  color: var(--color-nav);
   font-weight: 500;
-  border-bottom-color: #667eea;
+  border-bottom-color: var(--color-nav);
   background: rgba(102,126,234,0.05);
 }
 
@@ -209,7 +209,7 @@ function injectStyles() {
   position: relative;
 }
 .at-dropzone:hover, .at-dropzone.dragover {
-  border-color: #667eea;
+  border-color: var(--color-nav);
   background: rgba(102,126,234,0.04);
 }
 .at-dropzone.loading {
@@ -239,7 +239,7 @@ function injectStyles() {
 .at-dz-btn {
   margin-top: 6px;
   padding: 9px 28px;
-  background: linear-gradient(135deg,#667eea,#764ba2);
+  background: linear-gradient(135deg,var(--color-nav),#764ba2);
   color: #fff;
   border: none;
   border-radius: 20px;
@@ -251,7 +251,7 @@ function injectStyles() {
 .at-dz-btn:hover { opacity: 0.88; transform: translateY(-1px); }
 .at-dz-status {
   font-size: 13px;
-  color: #667eea;
+  color: var(--color-nav);
   margin-top: 4px;
   min-height: 20px;
 }
@@ -335,7 +335,7 @@ function injectStyles() {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(135deg,#667eea,#764ba2);
+  background: linear-gradient(135deg,var(--color-nav),#764ba2);
   color: #fff;
   font-size: 11px;
   display: flex;
@@ -368,7 +368,7 @@ function injectStyles() {
 .at-regen-btn {
   padding: 5px 12px;
   font-size: 12px;
-  color: #667eea;
+  color: var(--color-nav);
   border: 1px solid #c5cdf5;
   background: rgba(102,126,234,0.06);
   border-radius: 4px;
@@ -376,7 +376,7 @@ function injectStyles() {
   transition: all 0.15s;
   align-self: flex-start;
 }
-.at-regen-btn:hover { background: #667eea; color: #fff; border-color: #667eea; }
+.at-regen-btn:hover { background: var(--color-nav); color: #fff; border-color: var(--color-nav); }
 `
   document.head.appendChild(el)
 }
@@ -598,7 +598,7 @@ class AudioTool {
     dropzone.classList.add('at-dropzone')
     dropzone.innerHTML = `
       <div class="at-dz-icon-wrap">
-        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-nav)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
         </svg>
       </div>

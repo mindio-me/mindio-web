@@ -494,7 +494,7 @@ export default {
   }
   &.active {
     background: rgba(102, 126, 234, 0.12);
-    border: 1px solid #667eea;
+    border: 1px solid var(--color-nav);
   }
 }
 
@@ -576,14 +576,14 @@ export default {
   text-align: left;
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-nav);
+    color: var(--color-nav);
     background: rgba(102, 126, 234, 0.05);
   }
 
   &.active {
-    background: #667eea;
-    border-color: #667eea;
+    background: var(--color-nav);
+    border-color: var(--color-nav);
     color: white;
   }
 }
@@ -616,7 +616,7 @@ export default {
 
 .clear-filters-btn {
   padding: 10px 20px;
-  background: #667eea;
+  background: var(--color-action);
   color: white;
   border: none;
   border-radius: 6px;
@@ -653,12 +653,12 @@ export default {
   cursor: pointer;
 
   &:hover {
-    border-color: #667eea;
+    border-color: var(--color-nav);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
 
     .resource-icon {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, var(--color-nav) 0%, #764ba2 100%);
       transform: scale(1.05);
 
       i {
@@ -687,7 +687,7 @@ export default {
 
   i {
     font-size: 20px;
-    color: #667eea;
+    color: var(--color-nav);
     transition: all 0.2s ease;
   }
 }
@@ -786,7 +786,7 @@ export default {
 }
 
 .meta-link {
-  color: #667eea;
+  color: var(--color-action);
   text-decoration: none;
   &:hover {
     text-decoration: underline;
@@ -944,14 +944,14 @@ export default {
   transition: all 0.15s;
 
   &:hover {
-    border-color: #667eea;
-    color: #667eea;
+    border-color: var(--color-nav);
+    color: var(--color-nav);
     background: rgba(102, 126, 234, 0.06);
   }
 
   &.active {
-    border-color: #667eea;
-    background: #667eea;
+    border-color: var(--color-nav);
+    background: var(--color-nav);
     color: white;
   }
 }
