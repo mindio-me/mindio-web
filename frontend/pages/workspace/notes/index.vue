@@ -952,12 +952,7 @@ export default {
       if (append) this.loadingMore = true
       else this.loading = true
       try {
-        // 左侧列表：按创建时间排序
-        const params = { page: this.page, size: this.pageSize, sortBy: 'createdAt', direction: 'DESC' }
-        if (this.searchKeyword) params.keyword = this.searchKeyword
-        if (this.selectedTags.length > 0) params.tagIds = this.selectedTags.join(',')
-        if (this.selectedProjects.length > 0) params.projectIds = this.selectedProjects.join(',')
-        const { data } = await this.$axios.get('/v1/notes', { params })
+        const { data } = await this.$axios.get('/v1/notes', { params: this.buildNoteListParams() })
         this.notes = append ? this.notes.concat(data.content || []) : (data.content || [])
         this.total = data.totalElements || 0
 
@@ -975,6 +970,43 @@ export default {
           if (!append && this.$refs.noteListEl) this.$refs.noteListEl.scrollTop = 0
         })
       }
+    },
+    // 左侧列表的查询参数：按创建时间排序，带上当前的搜索/标签/项目筛选
+    buildNoteListParams() {
+      const params = { page: this.page, size: this.pageSize, sortBy: 'createdAt', direction: 'DESC' }
+      if (this.searchKeyword) params.keyword = this.searchKeyword
+      if (this.selectedTags.length > 0) params.tagIds = this.selectedTags.join(',')
+      if (this.selectedProjects.length > 0) params.projectIds = this.selectedProjects.join(',')
+      return params
+    },
+    // 本地删掉一条后，服务端后续每页都往前挪了一位：下一次 loadMore 请求 page+1 时，
+    // 原本排在下一页第一条的笔记会被跳过。重新拉一次当前页（已整体前移一位），
+    // 把末尾那条补进来，让 notes.length 重新和 page 对齐
+    async refillAfterLocalRemove() {
+      if (!this.hasMoreNotes) return
+      this.loadingMore = true
+      try {
+        const { data } = await this.$axios.get('/v1/notes', { params: this.buildNoteListParams() })
+        const loaded = new Set(this.notes.map(n => n.id))
+        this.notes = this.notes.concat((data.content || []).filter(n => !loaded.has(n.id)))
+        this.total = data.totalElements || 0
+      } catch (error) {
+        // 补位失败最多是少显示一条，不打扰用户
+        console.error('删除后补位加载失败:', error)
+      } finally {
+        this.loadingMore = false
+      }
+    },
+    // 只在选中项超出列表可视区时才滚动，且滚动幅度最小（贴边），不改变用户原本的浏览位置
+    scrollActiveNoteIntoView() {
+      const root = this.$refs.noteListEl
+      if (!root) return
+      const el = root.querySelector('.note-list-item.active')
+      if (!el) return
+      const rootRect = root.getBoundingClientRect()
+      const elRect = el.getBoundingClientRect()
+      if (elRect.top < rootRect.top) root.scrollTop -= rootRect.top - elRect.top
+      else if (elRect.bottom > rootRect.bottom) root.scrollTop += elRect.bottom - rootRect.bottom
     },
     async loadMoreNotes() {
       if (this.loading || this.loadingMore || !this.hasMoreNotes) return
@@ -1799,12 +1831,33 @@ export default {
         this.$message.success(this.$t('workspace.notes.deleteSuccess'))
         this.activeNoteId = null
         this.activeNote = null
-        await this.loadNotes()
-        // loadNotes 内部会调用 loadRecentNotes，所以这里不需要单独调用
-        if (this.notes.length > 0) {
-          this.activeNoteId = this.notes[0].id
+        const idx = this.notes.findIndex(n => n.id === note.id)
+        if (idx === -1) {
+          // 被删的笔记不在已加载的列表里（比如从"最近笔记"或 AI 引用打开的），
+          // 不知道它在列表里的位置，只能整体刷新、选中最新一条
+          await this.loadNotes()
+          // loadNotes 内部会调用 loadRecentNotes，所以这里不需要单独调用
+          if (this.notes.length > 0) {
+            this.activeNoteId = this.notes[0].id
+            await this.loadActiveNote()
+          }
+          return
+        }
+        // 在列表里：原地移除，保留滚动位置和已加载的页，选中相邻的下一条（更早的），
+        // 删的是最后一条时选上一条
+        this.notes.splice(idx, 1)
+        this.total = Math.max(0, this.total - 1)
+        this.loadRecentNotes()
+        const next = this.notes[idx] || this.notes[idx - 1]
+        if (next) {
+          // 不走 selectNote()：它会先保存"当前笔记"，而当前笔记刚被删掉
+          this.activeNoteId = next.id
+          // 被删的笔记可能本来就在可视区外（比如选中第 1 条后往下滚了很远），
+          // 自动选中的相邻笔记同样不可见，贴边滚到它
+          this.$nextTick(() => this.scrollActiveNoteIntoView())
           await this.loadActiveNote()
         }
+        await this.refillAfterLocalRemove()
         } catch (error) { this.$message.error(this.$t('workspace.notes.deleteFailed')) }
       }).catch(() => {})
     },
