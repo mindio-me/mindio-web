@@ -837,7 +837,7 @@ export default {
   cursor: pointer;
   transition: background-color .15s;
 }
-.recent-item:hover { background-color: #f5f7fa; }
+.recent-item:hover { background-color: var(--bg-secondary, #f5f7fa); }
 .recent-title {
   font-size: 13px;
   color: #303133;
@@ -951,8 +951,9 @@ export default {
 .clip-source-badge {
   display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 500;
 }
-.badge-web     { background: #ecf5ff; color: var(--color-action); }
-.badge-wechat  { background: #f0f9eb; color: #67c23a; }
+/* 半透明底色：浅色下与原 #ecf5ff/#f0f9eb 观感一致，深色下不会显出浅色块 */
+.badge-web     { background: rgba(64, 158, 255, 0.12); color: var(--color-action); }
+.badge-wechat  { background: rgba(103, 194, 58, 0.12); color: #67c23a; }
 .clip-date { font-size: 12px; color: #c0c4cc; }
 .clip-card-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; line-height: 1.4; overflow-wrap: anywhere; word-break: break-word; }
 .clip-card-meta { font-size: 12px; color: #909399; margin-bottom: 4px; overflow-wrap: anywhere; word-break: break-word; }

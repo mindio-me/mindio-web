@@ -171,6 +171,17 @@ export default {
   }
 }
 
+// 登录卡片在深色模式下仍是白底，把全局深色输入框用到的变量还原成浅色值，保持卡片内一致
+.theme-dark .login-card {
+  --input-bg: #ffffff;
+  --input-border: #dcdfe6;
+  --input-border-hover: #c0c4cc;
+  --text-color: #606266;
+  --text-placeholder: #c0c4cc;
+  --text-muted: #c0c4cc;
+  --color-action: #409eff;
+}
+
 .login-card {
   width: 100%;
   max-width: 400px;

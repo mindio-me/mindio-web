@@ -20,6 +20,7 @@
   --header-bg: #ffffff;
   --input-bg: #ffffff;
   --input-border: #e2e8f0;
+  --input-border-hover: #c0c4cc;
   --tag-bg: #f1f5f9;
   --tag-color: #475569;
   --icon-bg: #eff6ff;
@@ -49,6 +50,7 @@
   --header-bg: #181818;
   --input-bg: #181818;
   --input-border: #3c3c3c;
+  --input-border-hover: #5a5a5a;
   --tag-bg: #333333;
   --tag-color: #cccccc;
   --icon-bg: #1e3a5f;
@@ -260,7 +262,7 @@ html.theme-dark #__layout {
     }
 
     &:hover {
-      border-color: #5a5a5a;
+      border-color: var(--input-border-hover);
     }
 
     &:focus {
@@ -359,6 +361,123 @@ html.theme-dark #__layout {
       border-color: var(--border-color);
       color: var(--text-placeholder);
     }
+  }
+
+  // 单选按钮组（分段切换）：未选中透明底，选中用半透明蓝，和深色 el-tag--primary 一致
+  .el-radio-button__inner {
+    background-color: transparent;
+    border-color: var(--input-border);
+    color: var(--text-secondary);
+
+    &:hover {
+      color: var(--text-color);
+    }
+  }
+
+  .el-radio-button:first-child .el-radio-button__inner {
+    border-left-color: var(--input-border);
+  }
+
+  .el-radio-button__orig-radio:checked + .el-radio-button__inner {
+    background-color: rgba(102, 177, 255, 0.15);
+    border-color: var(--color-action);
+    color: var(--color-action);
+    box-shadow: -1px 0 0 0 var(--color-action);
+  }
+
+  // 表格
+  .el-table,
+  .el-table__expanded-cell,
+  .el-table tr {
+    background-color: var(--card-bg-color);
+    color: var(--text-color);
+  }
+
+  .el-table th.el-table__cell {
+    background-color: var(--bg-tertiary);
+    color: var(--text-secondary);
+  }
+
+  .el-table td.el-table__cell,
+  .el-table th.el-table__cell.is-leaf,
+  .el-table--border,
+  .el-table--group,
+  .el-table--border .el-table__cell {
+    border-color: var(--border-color);
+  }
+
+  .el-table::before,
+  .el-table--border::after,
+  .el-table--group::after,
+  .el-table__fixed::before,
+  .el-table__fixed-right::before {
+    background-color: var(--border-color);
+  }
+
+  .el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell,
+  .el-table__body tr.hover-row > td.el-table__cell {
+    background-color: var(--bg-tertiary);
+  }
+
+  .el-table__body tr.current-row > td.el-table__cell {
+    background-color: rgba(102, 177, 255, 0.12);
+  }
+
+  .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+    background-color: var(--bg-secondary);
+  }
+
+  .el-table__fixed-right-patch {
+    background-color: var(--bg-tertiary);
+    border-bottom-color: var(--border-color);
+  }
+
+  .el-table__empty-text {
+    color: var(--text-muted);
+  }
+
+  // 分页（非 background 样式）
+  .el-pagination {
+    color: var(--text-secondary);
+
+    button,
+    .btn-prev,
+    .btn-next,
+    button:disabled {
+      background-color: transparent;
+      color: var(--text-secondary);
+    }
+
+    button:disabled {
+      color: var(--text-placeholder);
+    }
+
+    .el-pager li {
+      background-color: transparent;
+      color: var(--text-secondary);
+
+      &:hover {
+        color: var(--color-action);
+      }
+
+      &.active {
+        color: var(--color-action);
+      }
+    }
+  }
+
+  // 标签页
+  .el-tabs__item {
+    color: var(--text-secondary);
+
+    &:hover,
+    &.is-active {
+      color: var(--color-action);
+    }
+  }
+
+  .el-tabs__nav-wrap::after {
+    background-color: var(--border-color);
   }
 }
 
