@@ -460,6 +460,7 @@ export default {
   border-radius: 999px;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 600;
   color: var(--text-secondary);
   transition: all 0.2s;
 
@@ -471,7 +472,7 @@ export default {
   &.active {
     background: var(--color-nav);
     color: #fff;
-    font-weight: 500;
+    font-weight: 700;
   }
 
   i {

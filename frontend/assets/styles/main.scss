@@ -69,13 +69,30 @@
 
 html,
 body {
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  // 西文优先用系统 UI 字体（macOS SF / Windows Segoe UI），它们有 500/600 等中间字重，
+  // 中文再回落到苹方/雅黑；参考 Twitter 等一线产品的系统字体栈
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Helvetica,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--bg-color);
   color: var(--text-color);
   // scrollbar-gutter: stable; // 预留滚动条空间，防止出现/消失时引发水平抖动
+}
+
+// 表单控件默认不继承页面字体（浏览器 UA 样式），统一继承全局字体栈
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
+// 按钮、菜单项文字加粗到 600，参考 Twitter 偏粗的交互文字风格。
+// 注意：雅黑只有常规/粗体两档，500 在 Windows 中文下等同常规，600 起才会渲染成粗体
+.el-button,
+.el-dropdown-menu__item {
+  font-weight: 600;
 }
 
 // 深色模式下确保 html/body 背景色一致，防止页面切换时闪白
@@ -226,6 +243,121 @@ html.theme-dark #__layout {
     &:hover {
       background-color: var(--text-color);
       color: var(--card-bg-color);
+    }
+  }
+
+  // ===============================================
+  // 输入框 / 下拉框 / 默认按钮：跟随深色主题，避免 Element 默认白底"突"出来
+  // ===============================================
+  .el-input__inner,
+  .el-textarea__inner {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--text-color);
+
+    &::placeholder {
+      color: var(--text-placeholder);
+    }
+
+    &:hover {
+      border-color: #5a5a5a;
+    }
+
+    &:focus {
+      border-color: var(--color-action);
+    }
+  }
+
+  .el-input.is-disabled .el-input__inner,
+  .el-textarea.is-disabled .el-textarea__inner {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-placeholder);
+  }
+
+  .el-input__icon,
+  .el-select .el-input .el-select__caret {
+    color: var(--text-muted);
+  }
+
+  .el-select .el-input.is-focus .el-input__inner,
+  .el-select .el-input__inner:focus {
+    border-color: var(--color-action);
+  }
+
+  .el-input-group__append,
+  .el-input-group__prepend {
+    background-color: var(--bg-tertiary);
+    border-color: var(--input-border);
+    color: var(--text-secondary);
+  }
+
+  .el-select-dropdown {
+    background: var(--card-bg-color);
+    border-color: var(--border-color);
+
+    .el-select-dropdown__item {
+      color: var(--text-color);
+
+      &.hover,
+      &:hover {
+        background-color: var(--bg-tertiary);
+      }
+
+      &.selected {
+        color: var(--color-action);
+      }
+
+      &.is-disabled {
+        color: var(--text-placeholder);
+      }
+    }
+
+    .el-select-dropdown__empty {
+      color: var(--text-muted);
+    }
+
+    &.el-popper[x-placement^='bottom'] .popper__arrow {
+      border-bottom-color: var(--border-color);
+
+      &::after {
+        border-bottom-color: var(--card-bg-color);
+      }
+    }
+
+    &.el-popper[x-placement^='top'] .popper__arrow {
+      border-top-color: var(--border-color);
+
+      &::after {
+        border-top-color: var(--card-bg-color);
+      }
+    }
+  }
+
+  // 只处理无 type 的默认按钮；primary/success 等语义按钮保持原样
+  .el-button--default {
+    background-color: transparent;
+    border-color: var(--border-color);
+    color: var(--text-secondary);
+
+    &:hover,
+    &:focus {
+      background-color: var(--bg-tertiary);
+      border-color: #5a5a5a;
+      color: var(--text-color);
+    }
+
+    &:active {
+      border-color: var(--color-action);
+      color: var(--color-action);
+    }
+
+    &.is-disabled,
+    &.is-disabled:hover,
+    &.is-disabled:focus {
+      background-color: transparent;
+      border-color: var(--border-color);
+      color: var(--text-placeholder);
     }
   }
 }
