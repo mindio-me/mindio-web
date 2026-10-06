@@ -946,6 +946,9 @@ export default {
     // ========== 笔记方法 ==========
     // append=true 用于无限滚动"加载下一批"，false（默认）是筛选条件变化后的整体刷新
     async loadNotes({ append = false } = {}) {
+      // 整体刷新时 this.notes 会被整个替换成"一页"，必须从第 0 页重来；否则无限滚动
+      // 留下的 page（比如 4）会让列表只剩第 4 页，前面的笔记再也滚不回去
+      if (!append) this.page = 0
       if (append) this.loadingMore = true
       else this.loading = true
       try {
