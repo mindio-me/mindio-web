@@ -38,10 +38,8 @@ export default class GalleryTool {
     // 封面图（见 createVideoFacade 的注释）。用 WeakSet 存 item 引用，不用下标，避免删除
     // 卡片导致下标错位。
     this._playingItems = new WeakSet()
-    // 推文卡片 iframe → 对应 item，以及量到的卡片高度。重绘网格时 iframe 会重建，高度记在
-    // item 上（WeakMap，不进存档）就不会每次重绘都先缩回默认高度再跳回来。
+    // 推文卡片 iframe → 对应 item，收到 resize 消息时把高度写回 item.tweetHeight
     this._tweetItems = new WeakMap()
-    this._tweetHeights = new WeakMap()
     this._onMessage = null
   }
 
@@ -72,12 +70,13 @@ export default class GalleryTool {
       if (item.type === 'video') {
         media.classList.add('cdx-gallery__media--video')
         const isTweet = item.service === 'twitter'
-        if (this._playingItems.has(item) && isTweet) {
-          // 推文卡片放不进小格子，点开后这一格展开成完整卡片，高度按 resize 消息自适应
+        if (isTweet) {
+          // 推文拿不到封面图，小格子里的占位只能是一块黑底；推文卡片本身就是预览（不会自动播放），
+          // 所以这一格直接展开成完整卡片，loading=lazy 让屏幕外的卡片滚到附近才加载。
+          // 高度按 resize 消息自适应，量到的高度存进 item，下次打开先按它占位，加载出来不跳。
           card.classList.add('cdx-gallery__card--tweet')
-          const iframe = createEl('iframe', 'cdx-gallery__tweet', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true, scrolling: 'no' })
-          const height = this._tweetHeights.get(item)
-          if (height) iframe.style.height = `${height}px`
+          const iframe = createEl('iframe', 'cdx-gallery__tweet', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true, scrolling: 'no', loading: 'lazy' })
+          if (item.tweetHeight) iframe.style.height = `${item.tweetHeight}px`
           this._tweetItems.set(iframe, item)
           this._ensureTweetResizeListener()
           media.appendChild(iframe)
@@ -88,7 +87,6 @@ export default class GalleryTool {
             this._playingItems.add(item)
             this._renderGrid()
           }, 'cdx-gallery__video-facade'))
-          if (isTweet) media.appendChild(createEl('span', 'cdx-gallery__badge', { textContent: 'X' }))
         }
       } else if (item.type === 'audio') {
         media.appendChild(createEl('audio', 'cdx-gallery__audio', { src: item.url, controls: true }))
@@ -113,7 +111,7 @@ export default class GalleryTool {
         if (!height) return
         iframe.style.height = `${height}px`
         const item = this._tweetItems.get(iframe)
-        if (item) this._tweetHeights.set(item, height)
+        if (item) item.tweetHeight = height
       })
     }
     window.addEventListener('message', this._onMessage)
