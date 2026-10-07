@@ -42,7 +42,10 @@ public class InternalServiceAuthFilter extends OncePerRequestFilter {
             @NonNull HttpServletResponse response,
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
-        if (!request.getRequestURI().startsWith(INTERNAL_PATH_PREFIX)) {
+        // 必须去掉 context-path（application.yml 里是 /api）再比对：getRequestURI() 带着这个前缀，
+        // 直接拿它判断 startsWith("/internal/") 永远不成立，所有内部接口都会被当成普通路径放行
+        String pathWithinContext = request.getRequestURI().substring(request.getContextPath().length());
+        if (!pathWithinContext.startsWith(INTERNAL_PATH_PREFIX)) {
             filterChain.doFilter(request, response);
             return;
         }
