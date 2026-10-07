@@ -1,6 +1,5 @@
--- 本文件在 db/migration/mysql/ 下有同版本号的兄弟文件
--- （mysql/V18__add_zh_variants_for_homepage_content.sql），两者必须保持同步：相同版本号、
--- 相同 schema 语义，只允许 vendor 特定的类型/语法差异。
+-- spring-boot/src/main/resources/db/migration/h2/V18__add_zh_variants_for_homepage_content.sql
+-- 本文件在 db/migration/mysql/ 下有同版本号的兄弟文件，两者必须保持同步。
 --
 -- 公开主页需要按访客语言展示不同文案。原有字段隐含为英文/默认版本，
 -- 这里为首页会用到的字段各加一个中文版本，留空则前端回退到原字段。

@@ -1,9 +1,14 @@
--- 本文件在 db/migration/mysql/ 下有同版本号的兄弟文件
--- （mysql/V15__widen_agent_conversation_state_blob.sql），两者必须保持同步：相同版本号、
--- 相同 schema 语义，只允许 vendor 特定的类型/语法差异。
+-- spring-boot/src/main/resources/db/migration/h2/V15__widen_agent_conversation_state_blob.sql
+-- 本文件在 db/migration/mysql/ 下有同版本号的兄弟文件，两者必须保持同步。
 --
--- mysql/V15 把 state_blob 从 TEXT（MySQL 上限 65535 字节）放大到 LONGTEXT（上限 4GB），
--- 因为 LangGraph checkpointer 序列化后的体积会超过 TEXT 的上限。H2 的 TEXT 本就映射为
--- CLOB，没有这个字节上限，所以这里保持列类型不变，仅登记版本号以满足两个目录的版本号
--- 集合一致性校验（见 MigrationVendorParityTest）。
-ALTER TABLE agent_conversation_state ALTER COLUMN state_blob SET DATA TYPE CLOB;
+-- state_blob 原来是 TEXT（MySQL 上限 65535 字节）。LangGraph 的 checkpointer 每轮对话
+-- 都会把整个 InMemorySaver 的 storage/writes/blobs 序列化后落这一列——单个持续对话
+-- （conversationId 就是 username，是唯一连续会话）攒到几十轮后，pickle+base64 的体积
+-- 会超过这个上限。超限时 PUT /internal/agent-state/{conversationId} 直接 500，而 Python
+-- 那边 flush() 失败被 `except Exception: pass` 原样吞掉、不报错——这条会话的checkpoint
+-- 会冻结在超限前最后一次成功写入的状态，此后每一轮都在这份冻结的坏历史上重放同一个
+-- 错误，且完全没有日志能看出原因。实测撞到过（2026-09-16，conversationId=admin，冻结
+-- 前的blob已经是62208字节，紧贴着65535的上限）。
+--
+-- H2 中 TEXT 已经足够存储大文本，无需修改。
+-- 此 migration 对 H2 为 no-op，只有 MySQL 端需要改为 LONGTEXT。
