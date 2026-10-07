@@ -108,6 +108,40 @@ class TweetPosterServiceTest {
     }
 
     @Test
+    void picksMp4UnderPreferredBitrateWithAspectRatio() throws Exception {
+        serve(200, "{\"mediaDetails\":[{\"type\":\"video\",\"video_info\":{\"aspect_ratio\":[9,16],\"variants\":[" +
+                "{\"content_type\":\"application/x-mpegURL\",\"url\":\"https://video.twimg.com/pl/a.m3u8\"}," +
+                "{\"content_type\":\"video/mp4\",\"bitrate\":632000,\"url\":\"https://video.twimg.com/vid/320.mp4\"}," +
+                "{\"content_type\":\"video/mp4\",\"bitrate\":2176000,\"url\":\"https://video.twimg.com/vid/720.mp4\"}," +
+                "{\"content_type\":\"video/mp4\",\"bitrate\":10368000,\"url\":\"https://video.twimg.com/vid/1080.mp4\"}," +
+                "{\"content_type\":\"video/mp4\",\"bitrate\":900000,\"url\":\"https://evil.example.com/x.mp4\"}]}}]}", null);
+
+        TweetPosterService.TweetVideo video = service.fetchVideo("123", "abc");
+
+        assertThat(video.videoUrl()).isEqualTo("https://video.twimg.com/vid/720.mp4");
+        assertThat(video.aspectRatio()).isEqualTo("9/16");
+    }
+
+    @Test
+    void fallsBackToLowestBitrateWhenAllAboveCap() throws Exception {
+        serve(200, "{\"mediaDetails\":[{\"type\":\"video\",\"video_info\":{\"variants\":[" +
+                "{\"content_type\":\"video/mp4\",\"bitrate\":10368000,\"url\":\"https://video.twimg.com/vid/1080.mp4\"}," +
+                "{\"content_type\":\"video/mp4\",\"bitrate\":5000000,\"url\":\"https://video.twimg.com/vid/900.mp4\"}]}}]}", null);
+
+        TweetPosterService.TweetVideo video = service.fetchVideo("123", "abc");
+
+        assertThat(video.videoUrl()).isEqualTo("https://video.twimg.com/vid/900.mp4");
+        assertThat(video.aspectRatio()).isEqualTo("16/9");
+    }
+
+    @Test
+    void returnsNullVideoForPhotoOnlyTweet() throws Exception {
+        serve(200, "{\"mediaDetails\":[{\"type\":\"photo\",\"media_url_https\":\"https://pbs.twimg.com/media/p.jpg\"}]}", null);
+
+        assertThat(service.fetchVideo("123", "abc")).isNull();
+    }
+
+    @Test
     void rejectsMalformedIdOrToken() {
         assertThatThrownBy(() -> service.fetchPosterUrl("123&x=1", "abc")).isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> service.fetchPosterUrl("123", "a/b")).isInstanceOf(BadRequestException.class);

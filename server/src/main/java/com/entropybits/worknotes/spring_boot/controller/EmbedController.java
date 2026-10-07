@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -33,5 +34,15 @@ public class EmbedController {
     @Operation(summary = "获取推文封面", description = "返回推文里视频/图片的封面地址，取不到时 posterUrl 为 null")
     public ResponseEntity<Map<String, String>> tweetPoster(@RequestParam String id, @RequestParam String token) {
         return ResponseEntity.ok(Collections.singletonMap("posterUrl", tweetPosterService.fetchPosterUrl(id, token)));
+    }
+
+    @GetMapping("/tweet-video")
+    @Operation(summary = "获取推文视频直链", description = "返回推文视频的 mp4 地址和宽高比，取不到时 videoUrl 为 null")
+    public ResponseEntity<Map<String, String>> tweetVideo(@RequestParam String id, @RequestParam String token) {
+        TweetPosterService.TweetVideo video = tweetPosterService.fetchVideo(id, token);
+        Map<String, String> body = new HashMap<>();
+        body.put("videoUrl", video == null ? null : video.videoUrl());
+        body.put("aspectRatio", video == null ? null : video.aspectRatio());
+        return ResponseEntity.ok(body);
     }
 }
