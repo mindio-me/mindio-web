@@ -97,6 +97,11 @@ export default class GalleryTool {
       const url = input.value.trim()
       if (!url) return
       const embed = resolveVideoEmbed(url)
+      // 推文嵌入的是整张推文卡片（高度不定），塞进画廊的小格子会被裁掉，引导去用单独的网络视频块
+      if (embed && embed.service === 'twitter') {
+        this.api.notifier?.show({ message: 'X(Twitter) 视频请用"网络视频"块单独嵌入', style: 'error' })
+        return
+      }
       if (embed) {
         const item = { type: 'video', embedUrl: embed.embedUrl, caption: '', posterUrl: embed.posterUrl || null }
         this.data.items.push(item)

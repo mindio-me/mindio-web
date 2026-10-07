@@ -34,6 +34,18 @@ const SERVICES = [
     // 抖音同样没有可靠的公开封面渠道，渲染层用通用占位图
     fixedWidth: 324,
     fixedHeight: 720
+  },
+  {
+    name: 'twitter',
+    regex: /(?:twitter\.com|x\.com)\/(?:\w+|i\/web)\/status(?:es)?\/(\d+)/,
+    // X 没有"纯视频播放器"的嵌入地址，只能嵌整张推文卡片（视频在卡片里点开播放），
+    // 这个页面就是官方 widgets.js 自己创建的 iframe，直接用可以避免往笔记里注入第三方脚本。
+    embed: (m) => `https://platform.twitter.com/embed/Tweet.html?id=${m[1]}&dnt=true`,
+    // 封面接口 cdn.syndication.twimg.com 只允许 platform.twitter.com 跨域，浏览器拿不到，用通用占位图。
+    // 推文卡片高度随正文长短变化，这里只是初始高度，播放后按 iframe 发来的 resize 消息自适应。
+    fixedWidth: 550,
+    fixedHeight: 640,
+    autoHeight: true
   }
 ]
 
@@ -48,7 +60,8 @@ export function resolveVideoEmbed(url) {
       aspectRatio: svc.aspectRatio || '16/9',
       defaultWidth: svc.defaultWidth || 100,
       fixedWidth: svc.fixedWidth || null,
-      fixedHeight: svc.fixedHeight || null
+      fixedHeight: svc.fixedHeight || null,
+      autoHeight: !!svc.autoHeight
     }
   }
   return null

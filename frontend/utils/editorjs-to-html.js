@@ -179,7 +179,7 @@ function renderBlock(block) {
       const src = d.embedUrl || d.embed
       if (!src) return ''
       const caption = d.caption ? `<figcaption>${esc(d.caption)}</figcaption>` : ''
-      return `<figure class="pdf-embed"><iframe src="${esc(src)}" height="${d.height || 360}" frameborder="0" allowfullscreen style="width:100%"></iframe>${caption}</figure>`
+      return `<figure class="pdf-embed"><iframe src="${esc(src)}" height="${d.fixedHeight || d.height || 360}" frameborder="0" allowfullscreen style="width:100%"></iframe>${caption}</figure>`
     }
 
     default:
