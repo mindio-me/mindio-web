@@ -26,6 +26,16 @@
         <span class="rc-wave">
           <span v-for="i in 20" :key="i" :style="{ height: barHeight(i) + 'px' }"></span>
         </span>
+        <button
+          class="rc-btn rc-sys"
+          :class="{ on: recording.systemAudio === 'on', connecting: recording.systemAudio === 'connecting', unavailable: !recording.systemAudioSupported }"
+          :title="systemAudioTitle"
+          :aria-pressed="recording.systemAudio === 'on' ? 'true' : 'false'"
+          :aria-disabled="!recording.systemAudioSupported || recording.systemAudio === 'connecting' ? 'true' : 'false'"
+          @click="toggleSystemAudio"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M9.5 8.5v3M12 7v6M14.5 8.5v3"/></svg>
+        </button>
         <button class="rc-btn" :title="recording.status === 'paused' ? '继续' : '暂停'" @click="togglePause">
           <svg v-if="recording.status === 'paused'" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           <svg v-else viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
@@ -62,7 +72,13 @@
         </button>
       </div>
 
-      <div v-if="toast" class="recording-toast">{{ toast }}</div>
+      <div v-if="toast" class="recording-toast">
+        <span>{{ toast }}</span>
+        <span v-if="toastAction" class="rt-actions">
+          <button class="rt-action" @click="runToastAction">{{ toastAction.label }}</button>
+          <button class="rt-close" title="关闭" @click="dismissToast">✕</button>
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -84,6 +100,7 @@ export default {
       showAttachPopover: false,
       stopResult: null,
       toast: '',
+      toastAction: null, // { label, handler } —— 有值时 toast 带一个操作按钮
       toastTimer: null,
       broadcastNoteId: null,
       dragPos: null // {left, top} once dragged; else default bottom-right via CSS
@@ -125,6 +142,15 @@ export default {
     },
     dragStyle() {
       return this.dragPos ? { left: this.dragPos.left + 'px', top: this.dragPos.top + 'px', right: 'auto', bottom: 'auto' } : {}
+    },
+    systemAudioTitle() {
+      if (!this.recording.systemAudioSupported) {
+        const isDesktop = typeof window !== 'undefined' && !!window.mindioDesktop
+        return isDesktop ? '当前无法录制电脑声音' : '桌面版可录制电脑声音'
+      }
+      if (this.recording.systemAudio === 'connecting') return '正在连接电脑声音…'
+      if (this.recording.systemAudio === 'on') return '正在录制电脑声音，点击关闭'
+      return '同时录制电脑声音'
     }
   },
   watch: {
@@ -172,6 +198,20 @@ export default {
       const reason = (payload && payload.reason) || ''
       if (reason === 'start-failed') {
         this.showToast('无法开始录音，请检查麦克风权限')
+      } else if (reason === 'system-audio-failed') {
+        const api = typeof window !== 'undefined' && window.mindioDesktop && window.mindioDesktop.recording
+        const denied = !!(payload.error && payload.error.name === 'NotAllowedError')
+        if (api && payload.platform === 'darwin' && denied) {
+          // macOS 授予屏幕录制/系统音频权限后，正在运行的进程拿不到新权限，必须重启应用
+          this.showToast('需要在系统设置中允许 MindIO 录制屏幕和系统音频，开启后需重启应用', {
+            label: '打开系统设置',
+            handler: () => api.openSystemAudioSettings()
+          })
+        } else {
+          this.showToast('无法录制电脑声音，已继续仅录制麦克风')
+        }
+      } else if (reason === 'system-audio-ended') {
+        this.showToast('电脑声音已断开，继续仅录制麦克风')
       } else {
         // 'track-ended'（设备被拔掉/被别的程序抢走）与 'recorder-error'（录制器自身报错）
         this.showToast('录音意外中断')
@@ -197,6 +237,10 @@ export default {
       } else {
         recordingController.pause()
       }
+    },
+    toggleSystemAudio() {
+      if (!this.recording.systemAudioSupported || this.recording.systemAudio === 'connecting') return
+      recordingController.setSystemAudio(this.recording.systemAudio !== 'on').catch(() => {})
     },
     async onStop() {
       const result = await recordingController.stop()
@@ -368,16 +412,30 @@ export default {
       this.showAttachPopover = false
       this.showToast('已放弃录音')
     },
-    showToast(text) {
+    showToast(text, action) {
       clearTimeout(this.toastTimer)
       this.toast = text
-      this.toastTimer = setTimeout(() => { this.toast = '' }, 3200)
+      this.toastAction = action || null
+      // 带操作按钮的提示要留时间给用户读完再点
+      this.toastTimer = setTimeout(() => this.dismissToast(), action ? 8000 : 3200)
     },
     /** 进行中状态：不自动消失，等真正的结果 toast 把它替换掉 */
     showPendingToast(text) {
       clearTimeout(this.toastTimer)
       this.toastTimer = null
       this.toast = text
+      this.toastAction = null
+    },
+    dismissToast() {
+      clearTimeout(this.toastTimer)
+      this.toastTimer = null
+      this.toast = ''
+      this.toastAction = null
+    },
+    runToastAction() {
+      const action = this.toastAction
+      this.dismissToast()
+      if (action && action.handler) Promise.resolve(action.handler()).catch(() => {})
     },
     onGripDown(e) {
       const capsuleEl = e.currentTarget.closest('.recording-capsule')
@@ -505,6 +563,19 @@ export default {
   &.stop { background: #ef4444; }
   &.stop:hover { filter: brightness(1.1); }
 }
+.rc-sys {
+  svg { width: 14px; height: 14px; }
+  // 开着时反白，和 macOS 控制中心里"已开启"的按钮一样
+  &.on { background: #fff; color: var(--text-color, #1a202c); }
+  &.on:hover { background: rgba(255, 255, 255, 0.88); }
+  &.connecting svg { animation: rc-pulse 1.2s ease-in-out infinite; }
+  &.connecting { cursor: progress; }
+  &.unavailable { opacity: 0.4; cursor: not-allowed; }
+  &.unavailable:hover { background: rgba(255, 255, 255, 0.14); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-sys.connecting svg { animation: none; }
+}
 .rc-collapse {
   background: none;
   border: none;
@@ -592,5 +663,33 @@ export default {
   box-shadow: 0 18px 40px rgba(23, 25, 40, 0.18);
   max-width: 230px;
   line-height: 1.6;
+}
+.rt-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.rt-action {
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--card-bg-color, #fff);
+  color: var(--text-color, #1a202c);
+  &:hover { filter: brightness(0.94); }
+  &:focus-visible { outline: 2px solid var(--card-bg-color, #fff); outline-offset: 2px; }
+}
+.rt-close {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  margin-left: auto;
+  &:hover { opacity: 1; }
 }
 </style>
