@@ -155,14 +155,17 @@ class EmbedVideoTool {
             this.data.widthPercent = result.defaultWidth
           }
         }
+        // 刚粘贴完链接，用户就是要看这个视频，直接挂播放器；封面占位只用于重新打开笔记时秒开
+        this._playing = true
         wrapper.innerHTML = ''
         this._renderEmbed(wrapper)
-        // Vimeo 封面要异步调接口拿，拿到后原地补上并重绘一次；只发生在插入的这一刻，
+        // Vimeo 封面要异步调接口拿，拿到后存进 data（此时已在播放，不用重绘）；只发生在插入的这一刻，
         // posterUrl 会随 save() 一起持久化，以后重新打开不会再发这个请求。
         if (result.needsOembedPoster) {
           fetchVimeoPoster(url).then((posterUrl) => {
-            if (posterUrl && !this._playing) {
-              this.data.posterUrl = posterUrl
+            if (!posterUrl) return
+            this.data.posterUrl = posterUrl
+            if (!this._playing) {
               wrapper.innerHTML = ''
               this._renderEmbed(wrapper)
             }

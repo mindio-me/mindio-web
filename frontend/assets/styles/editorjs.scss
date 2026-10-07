@@ -98,6 +98,77 @@
     }
   }
 
+  /* 本地上传视频 / 网络视频：原先写在 workspace/editor.vue 的全局样式里，那个文件 10/2 清理掉时一起丢了 */
+  .video-tool, .embed-video-tool {
+    .image-resize-handle {
+      position: absolute; right: 0; top: 0; bottom: 0; width: 8px; cursor: col-resize; z-index: 10;
+      &::after {
+        content: ''; position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+        width: 4px; height: 36px; border-radius: 2px; background: rgba(102, 126, 234, 0.6);
+        opacity: 0; transition: opacity 0.2s;
+      }
+    }
+    .image-resize-tooltip {
+      position: absolute; top: -30px; right: 0; background: rgba(0, 0, 0, 0.75); color: #fff;
+      padding: 3px 10px; border-radius: 4px; font-size: 12px; white-space: nowrap; pointer-events: none;
+    }
+  }
+
+  .video-tool {
+    position: relative;
+    .video-tool__video {
+      border-radius: 8px; margin: 0 auto 10px; position: relative; overflow: hidden;
+      video { display: block; width: 100%; border-radius: 8px; }
+      &:hover .image-resize-handle::after, .image-resize-handle.resizing::after { opacity: 1; }
+    }
+    .video-tool__caption { color: var(--text-muted, #999); font-size: 0.85em; text-align: center; margin-top: 4px; }
+    .video-tool__upload-area {
+      border: 2px dashed var(--border-color, #e8e8e8); border-radius: 8px; padding: 32px 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      &:hover, &--dragover { border-color: #667eea; background: rgba(102, 126, 234, 0.05); }
+      &--loading { opacity: 0.6; pointer-events: none; }
+      .video-tool__upload-icon { color: var(--text-muted, #bbb); }
+      .video-tool__upload-text { color: var(--text-muted, #999); font-size: 0.9em; }
+    }
+  }
+
+  .embed-video-tool {
+    position: relative; display: flex; flex-direction: column; align-items: center;
+    .embed-video-tool__frame {
+      border-radius: 8px; margin-bottom: 10px; position: relative;
+      // 右侧给 handle 留位
+      padding-right: 10px; box-sizing: border-box;
+      iframe { display: block; width: 100%; border-radius: 8px; }
+      .image-resize-handle { width: 10px; &::after { right: 1px; } }
+    }
+    .embed-video-tool__facade {
+      width: 100%; height: 100%; border-radius: 8px; background-color: #000;
+      background-size: cover; background-position: center; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      &__play {
+        width: 56px; height: 56px; border-radius: 50%; background: rgba(0, 0, 0, 0.55);
+        display: flex; align-items: center; justify-content: center;
+      }
+    }
+    // hover 检测放在外层容器，避免 iframe 吞掉鼠标事件
+    &:hover .embed-video-tool__frame .image-resize-handle::after,
+    .embed-video-tool__frame .image-resize-handle.resizing::after { opacity: 1; }
+    .embed-video-tool__caption { color: var(--text-muted, #999); font-size: 0.85em; text-align: center; margin-top: 6px; }
+    .embed-video-tool__input-row { display: flex; gap: 8px; width: 100%; }
+    .embed-video-tool__input {
+      flex: 1; padding: 8px 12px; border: 1px solid var(--border-color, #e8e8e8); border-radius: 6px;
+      font-size: 14px; background: var(--bg-color, #fff); color: var(--text-color, #333); outline: none;
+      &:focus { border-color: #667eea; }
+    }
+    .embed-video-tool__btn {
+      padding: 8px 16px; background: #667eea; color: #fff; border: none; border-radius: 6px;
+      font-size: 14px; cursor: pointer; white-space: nowrap;
+      &:hover { background: #5a6fd6; }
+    }
+    .embed-video-tool__error { color: #f56c6c; font-size: 13px; margin-top: 6px; min-height: 18px; }
+  }
+
   .cdx-list {
     color: var(--text-color, #333); padding-left: 24px;
     .cdx-list__item {
