@@ -200,6 +200,18 @@ export default {
               } catch (e) {
                 return null
               }
+            },
+            // 弹窗里用原生播放器播推文视频：点开时现取 mp4 直链（不存进笔记，避免过期）；
+            // 失败返回 null，弹窗退回推文卡片
+            fetchTweetVideo: async (tweetId) => {
+              try {
+                const res = await this.$axios.get('/v1/embed/tweet-video', {
+                  params: { id: tweetId, token: tweetSyndicationToken(tweetId) }
+                })
+                return res.data?.videoUrl ? res.data : null
+              } catch (e) {
+                return null
+              }
             }
           }
         },

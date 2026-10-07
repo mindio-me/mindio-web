@@ -68,6 +68,17 @@ export function resolveVideoEmbed(url) {
   return null
 }
 
+/** 给平台播放器地址加上 autoplay=1（YouTube/Vimeo/B站/抖音 都认这个参数），用于弹窗里点开即播 */
+export function withAutoplay(embedUrl) {
+  try {
+    const u = new URL(embedUrl)
+    u.searchParams.set('autoplay', '1')
+    return u.toString()
+  } catch (e) {
+    return embedUrl
+  }
+}
+
 /** 从推文嵌入地址（Tweet.html?id=...）里取推文 ID，不是推文嵌入地址返回 null */
 export function getTweetIdFromEmbedUrl(embedUrl) {
   const m = /^https:\/\/platform\.twitter\.com\/embed\/Tweet\.html\?id=(\d+)/.exec(embedUrl || '')

@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import { createEl, createButton, createVideoFacade } from './editorjsUiHelpers'
-import { resolveVideoEmbed, fetchVimeoPoster, getTweetResizeHeight, getTweetIdFromEmbedUrl } from './videoEmbedResolver'
+import { resolveVideoEmbed, fetchVimeoPoster, getTweetIdFromEmbedUrl } from './videoEmbedResolver'
+import { openMediaLightbox } from './editorjsMediaLightbox'
 
 /** 在浏览器里试加载一个地址，能解码成图片就算图片（不看扩展名），超时按失败处理 */
 function loadsAsImage(url, timeoutMs = 10000) {
@@ -35,14 +36,8 @@ export default class GalleryTool {
     this.config = config || {}
     this.data = { items: Array.isArray(data?.items) ? data.items : [] }
     this.wrapper = null
-    // 哪些视频卡片已经被点开播放过——只是渲染态，不持久化，重新打开笔记时应该总是先显示
-    // 封面图（见 createVideoFacade 的注释）。用 WeakSet 存 item 引用，不用下标，避免删除
-    // 卡片导致下标错位。
-    this._playingItems = new WeakSet()
-    // 推文卡片 iframe → 对应 item，收到 resize 消息时把高度写回 item.tweetHeight
-    this._tweetItems = new WeakMap()
     this._posterRequested = new WeakSet()
-    this._onMessage = null
+    this._closeLightbox = null
   }
 
   render() {
@@ -60,6 +55,8 @@ export default class GalleryTool {
     return this.wrapper
   }
 
+  // 格子永远是缩略图，不在格子里播放：图片点开看原图，视频点开在弹窗里直接播放（见 editorjsMediaLightbox）。
+  // 音频本身能在格子里播，留在格子里，不进弹窗。
   _renderGrid() {
     const existing = this.wrapper.querySelector('.cdx-gallery__grid')
     if (existing) existing.remove()
@@ -71,29 +68,14 @@ export default class GalleryTool {
       card.appendChild(media)
       if (item.type === 'video') {
         media.classList.add('cdx-gallery__media--video')
-        const isTweet = item.service === 'twitter'
-        if (isTweet && this._playingItems.has(item)) {
-          // 推文卡片放不进小格子，点开后这一格展开成完整卡片。高度按 resize 消息自适应，
-          // 量到的高度存进 item，下次点开先按它占位，加载出来不跳。
-          card.classList.add('cdx-gallery__card--tweet')
-          const iframe = createEl('iframe', 'cdx-gallery__tweet', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true, scrolling: 'no' })
-          if (item.tweetHeight) iframe.style.height = `${item.tweetHeight}px`
-          this._tweetItems.set(iframe, item)
-          this._ensureTweetResizeListener()
-          media.appendChild(iframe)
-        } else if (this._playingItems.has(item)) {
-          media.appendChild(createEl('iframe', 'cdx-gallery__video', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true }))
-        } else {
-          media.appendChild(createVideoFacade(item.posterUrl, () => {
-            this._playingItems.add(item)
-            this._renderGrid()
-          }, 'cdx-gallery__video-facade'))
-          if (isTweet && !item.posterUrl) this._fetchTweetPoster(item)
-        }
+        media.appendChild(createVideoFacade(item.posterUrl, () => this._openLightbox(item), 'cdx-gallery__video-facade'))
+        if (getTweetIdFromEmbedUrl(item.embedUrl) && !item.posterUrl) this._fetchTweetPoster(item)
       } else if (item.type === 'audio') {
         media.appendChild(createEl('audio', 'cdx-gallery__audio', { src: item.url, controls: true }))
       } else {
+        media.classList.add('cdx-gallery__media--zoomable')
         media.appendChild(createEl('img', 'cdx-gallery__image', { src: item.url, alt: item.caption || '' }))
+        media.addEventListener('click', () => this._openLightbox(item))
       }
       if (item.caption) card.appendChild(createEl('div', 'cdx-gallery__caption', { textContent: item.caption }))
       if (!this.readOnly) {
@@ -102,6 +84,14 @@ export default class GalleryTool {
       grid.appendChild(card)
     })
     this.wrapper.insertBefore(grid, this.wrapper.firstChild)
+  }
+
+  _openLightbox(item) {
+    const viewable = this.data.items.filter((it) => it.type !== 'audio')
+    if (this._closeLightbox) this._closeLightbox()
+    this._closeLightbox = openMediaLightbox(viewable, viewable.indexOf(item), {
+      fetchTweetVideo: this.config.fetchTweetVideo
+    })
   }
 
   // 推文封面浏览器跨域拿不到，经后端取一次（见 editorjsHost 的 fetchTweetPoster），拿到后存进 item
@@ -116,23 +106,8 @@ export default class GalleryTool {
       item.posterUrl = posterUrl
       // 不是用户编辑触发的数据变化，主动通知编辑器，让封面随下一次自动保存写进笔记
       this.block?.dispatchChange?.()
-      if (!this._playingItems.has(item)) this._renderGrid()
+      this._renderGrid()
     })
-  }
-
-  // 整个画廊共用一个 message 监听，按消息来源找到是哪张推文卡片发来的 resize
-  _ensureTweetResizeListener() {
-    if (this._onMessage) return
-    this._onMessage = (e) => {
-      this.wrapper.querySelectorAll('iframe.cdx-gallery__tweet').forEach((iframe) => {
-        const height = getTweetResizeHeight(e, iframe)
-        if (!height) return
-        iframe.style.height = `${height}px`
-        const item = this._tweetItems.get(iframe)
-        if (item) item.tweetHeight = height
-      })
-    }
-    window.addEventListener('message', this._onMessage)
   }
 
   async _handleFiles(fileList) {
@@ -228,10 +203,11 @@ export default class GalleryTool {
     return { items: this.data.items }
   }
 
+  // 块被删除或切换笔记时，顺手关掉还开着的弹窗，免得它停留在别的笔记上
   destroy() {
-    if (this._onMessage) {
-      window.removeEventListener('message', this._onMessage)
-      this._onMessage = null
+    if (this._closeLightbox) {
+      this._closeLightbox()
+      this._closeLightbox = null
     }
   }
 
