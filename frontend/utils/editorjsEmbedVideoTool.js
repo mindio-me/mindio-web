@@ -64,8 +64,13 @@ class EmbedVideoTool {
       frame.style.cssText = `width:${this.data.widthPercent || 100}%;aspect-ratio:${this.data.aspectRatio || '16/9'};border-radius:8px`
     }
 
-    if (this._playing) {
+    // X 推文例外：拿不到封面图，占位只能是一块黑底，看不出是哪条推文；而推文卡片本身就是
+    // 预览（头像/正文/视频缩略图，不会自动播放），所以直接加载卡片，用 loading=lazy 让屏幕外
+    // 的卡片滚到附近才加载，尽量不拖慢打开笔记。
+    const isTweet = /^https:\/\/platform\.twitter\.com\//.test(this.data.embedUrl)
+    if (this._playing || isTweet) {
       const iframe = document.createElement('iframe')
+      if (isTweet) iframe.loading = 'lazy'
       iframe.src = this.data.embedUrl
       iframe.setAttribute('frameborder', '0')
       iframe.setAttribute('allowfullscreen', 'true')
