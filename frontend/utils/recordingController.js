@@ -8,8 +8,10 @@ import Vue from 'vue'
 const state = Vue.observable({
   status: 'idle', // 'idle' | 'starting' | 'recording' | 'paused' | 'stopping'
   elapsedSeconds: 0,
-  level: 0, // 0..1，实时麦克风音量，给波形条用
-  origin: null // { type: 'block', noteId } | { type: 'topbar' } | null —— 录音是从哪儿发起的
+  level: 0, // 0..1，实时音量（桌面版是混音后的音量），给波形条用
+  origin: null, // { type: 'block', noteId } | { type: 'topbar' } | null —— 录音是从哪儿发起的
+  systemAudio: 'off', // 'off' | 'connecting' | 'on' —— 电脑声音有没有接进混音台
+  systemAudioSupported: false // 桌面版且混音台建起来了才为 true，start() 时更新
 })
 
 const listeners = {}
@@ -41,6 +43,37 @@ let wakeLock = null
 let pendingStopResolve = null
 let pendingErrorPayload = null
 let forcedStopTimer = null
+// 桌面版混音台：mic/电脑声音 → mixBus → mixDest(MediaRecorder 录这个) + analyser(波形条)
+let micSource = null
+let mixBus = null
+let mixDest = null
+let sysStream = null
+let sysSource = null
+// 每次断开/清理都 +1：连接电脑声音要等授权弹窗，期间录音可能已经结束或开关被关掉，
+// 迟到的流靠这个识别出来并立刻停掉
+let systemAudioToken = 0
+
+const SYSTEM_AUDIO_PREF_KEY = 'mindio.recording.systemAudio'
+
+function desktopRecordingApi() {
+  return (typeof window !== 'undefined' && window.mindioDesktop && window.mindioDesktop.recording) || null
+}
+
+function readSystemAudioPref() {
+  try {
+    return window.localStorage.getItem(SYSTEM_AUDIO_PREF_KEY) === '1'
+  } catch (e) {
+    return false
+  }
+}
+
+function writeSystemAudioPref(enabled) {
+  try {
+    window.localStorage.setItem(SYSTEM_AUDIO_PREF_KEY, enabled ? '1' : '0')
+  } catch (e) {
+    // 存不下只是下次不记得选择，不影响录音
+  }
+}
 
 async function start(origin) {
   if (state.status !== 'idle') return
@@ -67,9 +100,10 @@ async function start(origin) {
     return
   }
 
+  const recordStream = setupAudioGraph()
   const preferredType = 'audio/webm;codecs=opus'
   const mimeType = window.MediaRecorder && MediaRecorder.isTypeSupported(preferredType) ? preferredType : ''
-  mediaRecorder = mimeType ? new MediaRecorder(mediaStream, { mimeType }) : new MediaRecorder(mediaStream)
+  mediaRecorder = mimeType ? new MediaRecorder(recordStream, { mimeType }) : new MediaRecorder(recordStream)
 
   chunks = []
   mediaRecorder.ondataavailable = (e) => {
@@ -126,9 +160,14 @@ async function start(origin) {
     emit('tick', state.elapsedSeconds)
   }, 1000)
 
-  setupLevelMeter()
+  startLevelMeter()
   requestWakeLock()
   emit('start', {})
+
+  // 上次录音开着电脑声音就自动接上；不 await，不拖慢 start() 返回，失败只会弹提示、录音照常
+  if (state.systemAudioSupported && readSystemAudioPref()) {
+    setSystemAudio(true).catch(() => {})
+  }
 }
 
 /**
@@ -171,31 +210,69 @@ function forceStop() {
   }, 4000)
 }
 
-function setupLevelMeter() {
+/**
+ * 建音频图，返回 MediaRecorder 该录的流。
+ * 桌面版：mic → mixBus → mixDest，录 mixDest.stream，电脑声音之后也接进 mixBus；
+ * 网页版：和以前一样直接录麦克风流，AudioContext 只给波形条用。
+ * 建不起来（AudioContext 不可用等）就退回直接录麦克风，电脑声音开关显示为不可用。
+ */
+function setupAudioGraph() {
+  const api = desktopRecordingApi()
+  const wantsMixer = !!(api && api.systemAudioSupported)
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext
     audioCtx = new AudioContextClass()
-    const source = audioCtx.createMediaStreamSource(mediaStream)
+    // suspended 状态下 MediaStreamDestination 输出的是静音——必须 resume
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
+    micSource = audioCtx.createMediaStreamSource(mediaStream)
     analyser = audioCtx.createAnalyser()
     analyser.fftSize = 256
-    source.connect(analyser)
-    const data = new Uint8Array(analyser.frequencyBinCount)
-
-    const tick = () => {
-      if (state.status === 'idle') return
-      analyser.getByteTimeDomainData(data)
-      let sumSquares = 0
-      for (let i = 0; i < data.length; i++) {
-        const v = (data[i] - 128) / 128
-        sumSquares += v * v
-      }
-      state.level = Math.sqrt(sumSquares / data.length)
-      levelRafId = requestAnimationFrame(tick)
+    if (!wantsMixer) {
+      micSource.connect(analyser)
+      state.systemAudioSupported = false
+      return mediaStream
     }
-    levelRafId = requestAnimationFrame(tick)
+    mixBus = audioCtx.createGain()
+    mixDest = audioCtx.createMediaStreamDestination()
+    micSource.connect(mixBus)
+    mixBus.connect(mixDest)
+    mixBus.connect(analyser)
+    state.systemAudioSupported = true
+    return mixDest.stream
   } catch (e) {
-    state.level = 0
+    teardownAudioGraph()
+    state.systemAudioSupported = false
+    return mediaStream
   }
+}
+
+function teardownAudioGraph() {
+  if (audioCtx) audioCtx.close().catch(() => {})
+  audioCtx = null
+  analyser = null
+  micSource = null
+  mixBus = null
+  mixDest = null
+}
+
+function startLevelMeter() {
+  if (!analyser) {
+    state.level = 0
+    return
+  }
+  const data = new Uint8Array(analyser.frequencyBinCount)
+  const tick = () => {
+    if (state.status === 'idle' || !analyser) return
+    analyser.getByteTimeDomainData(data)
+    let sumSquares = 0
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128
+      sumSquares += v * v
+    }
+    state.level = Math.sqrt(sumSquares / data.length)
+    levelRafId = requestAnimationFrame(tick)
+  }
+  levelRafId = requestAnimationFrame(tick)
 }
 
 /** 录音期间请求 Screen Wake Lock，防止 macOS/Windows 笔记本几分钟无操作后自动黑屏/待机
@@ -233,6 +310,91 @@ function handleVisibilityChange() {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', handleVisibilityChange)
+}
+
+/**
+ * 录音中接上/断开电脑声音。只改混音台的连接，MediaRecorder 不中断，最后仍是一个文件。
+ * 打开失败时录音继续（退回仅麦克风），并发出 'system-audio-failed'。
+ */
+async function setSystemAudio(enabled) {
+  if (!enabled) {
+    disconnectSystemAudio()
+    writeSystemAudioPref(false)
+    return
+  }
+  if (!state.systemAudioSupported || !mixBus) return
+  if (state.status !== 'recording' && state.status !== 'paused') return
+  if (state.systemAudio !== 'off') return
+
+  state.systemAudio = 'connecting'
+  const token = ++systemAudioToken
+  let stream
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true })
+  } catch (error) {
+    if (token !== systemAudioToken) return
+    failSystemAudio(error)
+    return
+  }
+
+  // 只要声音：画面轨立刻停掉（不停的话 macOS 的屏幕录制指示会一直亮着）
+  stream.getVideoTracks().forEach((t) => t.stop())
+
+  // 等授权期间录音结束了 / 开关被关了——这条流已经没人要，直接停掉
+  if (token !== systemAudioToken || !mixBus) {
+    stream.getTracks().forEach((t) => t.stop())
+    return
+  }
+
+  const audioTracks = stream.getAudioTracks()
+  if (!audioTracks.length) {
+    stream.getTracks().forEach((t) => t.stop())
+    failSystemAudio(new Error('no-audio-track'))
+    return
+  }
+
+  sysStream = stream
+  sysSource = audioCtx.createMediaStreamSource(new MediaStream(audioTracks))
+  sysSource.connect(mixBus)
+  audioTracks.forEach((track) => {
+    track.onended = () => {
+      if (sysStream !== stream) return
+      // 被动断开（授权被收回、系统停止共享）：不改记住的选择，录音继续
+      disconnectSystemAudio()
+      emit('error', { reason: 'system-audio-ended' })
+    }
+  })
+  state.systemAudio = 'on'
+  writeSystemAudioPref(true)
+}
+
+function failSystemAudio(error) {
+  state.systemAudio = 'off'
+  // 失败时把记住的选择改回"关"，免得每次录音都自动重试、反复弹同一条错误
+  writeSystemAudioPref(false)
+  const api = desktopRecordingApi()
+  emit('error', { reason: 'system-audio-failed', error, platform: api ? api.platform : '' })
+}
+
+function disconnectSystemAudio() {
+  systemAudioToken++
+  if (sysSource) {
+    try {
+      sysSource.disconnect()
+    } catch (e) {
+      // 已经断开过
+    }
+  }
+  sysSource = null
+  if (sysStream) {
+    // 先摘 onended 再 stop，避免正常关闭/结束录音时误报"电脑声音已断开"
+    sysStream.getTracks().forEach((t) => {
+      t.onended = null
+      t.stop()
+    })
+  }
+  sysStream = null
+  state.systemAudio = 'off'
 }
 
 function pause() {
@@ -283,6 +445,7 @@ function cleanup() {
   clearTimeout(forcedStopTimer)
   forcedStopTimer = null
   releaseWakeLock()
+  disconnectSystemAudio()
   // 先摘掉 onerror/onended/onstop 再收尾：规范上主动 stop() 不派发 ended，但摘干净更稳妥——
   // 现在 'error' 事件真的会弹 toast 了，正常结束录音时误报"录音意外中断"是不可接受的
   if (mediaRecorder) {
@@ -299,13 +462,11 @@ function cleanup() {
   mediaStream = null
   mediaRecorder = null
   chunks = []
-  if (audioCtx) audioCtx.close().catch(() => {})
-  audioCtx = null
-  analyser = null
+  teardownAudioGraph()
   state.status = 'idle'
   state.elapsedSeconds = 0
   state.level = 0
   state.origin = null
 }
 
-export default { state, on, off, start, pause, resume, stop, cancel }
+export default { state, on, off, start, pause, resume, stop, cancel, setSystemAudio }
