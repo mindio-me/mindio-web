@@ -68,6 +68,23 @@ export function resolveVideoEmbed(url) {
 }
 
 /**
+ * 推文卡片高度随正文长短变化，Tweet.html 加载后会 postMessage 一条 twttr.private.resize
+ * 告诉父页面实际高度（widgets.js 本身就是靠这个调 iframe 高度的）。传入 message 事件和
+ * 对应的 iframe，是这个 iframe 发来的 resize 消息就返回高度（px），否则返回 null。
+ */
+export function getTweetResizeHeight(e, iframe) {
+  if (!iframe || e.source !== iframe.contentWindow || e.origin !== 'https://platform.twitter.com') return null
+  let msg = e.data
+  if (typeof msg === 'string') {
+    try { msg = JSON.parse(msg) } catch (err) { return null }
+  }
+  const embed = msg && msg['twttr.embed']
+  if (!embed || embed.method !== 'twttr.private.resize') return null
+  const height = embed.params && embed.params[0] && Math.ceil(embed.params[0].height)
+  return height || null
+}
+
+/**
  * Vimeo 封面没有固定规律的地址，需要调它的 oEmbed 接口拿 thumbnail_url（该接口允许跨域，
  * 浏览器可直接调）。只在插入链接的那一刻调一次，拿到后连同 embedUrl 一起存进笔记内容里，
  * 以后重新打开笔记读的是已经存好的 posterUrl，不会再发这个请求。失败（网络问题/私有视频）

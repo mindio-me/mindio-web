@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { resolveVideoEmbed as resolveEmbed, fetchVimeoPoster } from './videoEmbedResolver'
+import { resolveVideoEmbed as resolveEmbed, fetchVimeoPoster, getTweetResizeHeight } from './videoEmbedResolver'
 import { createVideoFacade } from './editorjsUiHelpers'
 
 class EmbedVideoTool {
@@ -92,20 +92,12 @@ class EmbedVideoTool {
     }
   }
 
-  // 推文卡片高度随正文长短变化，Tweet.html 加载后会 postMessage 一条 twttr.private.resize
-  // 告诉父页面实际高度（widgets.js 本身就是靠这个调 iframe 高度的）。量到的高度写回 data，
+  // 推文卡片按 iframe 发来的 resize 消息自适应高度（见 getTweetResizeHeight）。量到的高度写回 data，
   // 下次重新打开笔记时封面占位的高度就和真实卡片一致，不会点开后跳一下。
   _listenResize(iframe, frame) {
     this._removeResizeListener()
     this._onMessage = (e) => {
-      if (e.source !== iframe.contentWindow || e.origin !== 'https://platform.twitter.com') return
-      let msg = e.data
-      if (typeof msg === 'string') {
-        try { msg = JSON.parse(msg) } catch (err) { return }
-      }
-      const embed = msg && msg['twttr.embed']
-      if (!embed || embed.method !== 'twttr.private.resize') return
-      const height = embed.params && embed.params[0] && Math.ceil(embed.params[0].height)
+      const height = getTweetResizeHeight(e, iframe)
       if (!height) return
       frame.style.height = `${height}px`
       this.data.fixedHeight = height

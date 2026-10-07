@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import { createEl, createButton, createVideoFacade } from './editorjsUiHelpers'
-import { resolveVideoEmbed, fetchVimeoPoster } from './videoEmbedResolver'
+import { resolveVideoEmbed, fetchVimeoPoster, getTweetResizeHeight } from './videoEmbedResolver'
 
 export default class GalleryTool {
   static get toolbox() {
@@ -27,6 +27,11 @@ export default class GalleryTool {
     // 封面图（见 createVideoFacade 的注释）。用 WeakSet 存 item 引用，不用下标，避免删除
     // 卡片导致下标错位。
     this._playingItems = new WeakSet()
+    // 推文卡片 iframe → 对应 item，以及量到的卡片高度。重绘网格时 iframe 会重建，高度记在
+    // item 上（WeakMap，不进存档）就不会每次重绘都先缩回默认高度再跳回来。
+    this._tweetItems = new WeakMap()
+    this._tweetHeights = new WeakMap()
+    this._onMessage = null
   }
 
   render() {
@@ -50,19 +55,34 @@ export default class GalleryTool {
     const grid = createEl('div', 'cdx-gallery__grid')
     this.data.items.forEach((item, idx) => {
       const card = createEl('div', 'cdx-gallery__card')
+      // 格子是固定大小的区域，媒体比例和它不一致时在里面居中（图片 contain，视频留黑边）
+      const media = createEl('div', 'cdx-gallery__media')
+      card.appendChild(media)
       if (item.type === 'video') {
-        if (this._playingItems.has(item)) {
-          card.appendChild(createEl('iframe', 'cdx-gallery__video', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true }))
+        media.classList.add('cdx-gallery__media--video')
+        const isTweet = item.service === 'twitter'
+        if (this._playingItems.has(item) && isTweet) {
+          // 推文卡片放不进小格子，点开后这一格展开成完整卡片，高度按 resize 消息自适应
+          card.classList.add('cdx-gallery__card--tweet')
+          const iframe = createEl('iframe', 'cdx-gallery__tweet', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true, scrolling: 'no' })
+          const height = this._tweetHeights.get(item)
+          if (height) iframe.style.height = `${height}px`
+          this._tweetItems.set(iframe, item)
+          this._ensureTweetResizeListener()
+          media.appendChild(iframe)
+        } else if (this._playingItems.has(item)) {
+          media.appendChild(createEl('iframe', 'cdx-gallery__video', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true }))
         } else {
-          card.appendChild(createVideoFacade(item.posterUrl, () => {
+          media.appendChild(createVideoFacade(item.posterUrl, () => {
             this._playingItems.add(item)
             this._renderGrid()
           }, 'cdx-gallery__video-facade'))
+          if (isTweet) media.appendChild(createEl('span', 'cdx-gallery__badge', { textContent: 'X' }))
         }
       } else if (item.type === 'audio') {
-        card.appendChild(createEl('audio', 'cdx-gallery__audio', { src: item.url, controls: true }))
+        media.appendChild(createEl('audio', 'cdx-gallery__audio', { src: item.url, controls: true }))
       } else {
-        card.appendChild(createEl('img', 'cdx-gallery__image', { src: item.url, alt: item.caption || '' }))
+        media.appendChild(createEl('img', 'cdx-gallery__image', { src: item.url, alt: item.caption || '' }))
       }
       if (item.caption) card.appendChild(createEl('div', 'cdx-gallery__caption', { textContent: item.caption }))
       if (!this.readOnly) {
@@ -71,6 +91,21 @@ export default class GalleryTool {
       grid.appendChild(card)
     })
     this.wrapper.insertBefore(grid, this.wrapper.firstChild)
+  }
+
+  // 整个画廊共用一个 message 监听，按消息来源找到是哪张推文卡片发来的 resize
+  _ensureTweetResizeListener() {
+    if (this._onMessage) return
+    this._onMessage = (e) => {
+      this.wrapper.querySelectorAll('iframe.cdx-gallery__tweet').forEach((iframe) => {
+        const height = getTweetResizeHeight(e, iframe)
+        if (!height) return
+        iframe.style.height = `${height}px`
+        const item = this._tweetItems.get(iframe)
+        if (item) this._tweetHeights.set(item, height)
+      })
+    }
+    window.addEventListener('message', this._onMessage)
   }
 
   async _handleFiles(fileList) {
@@ -92,18 +127,13 @@ export default class GalleryTool {
   _openLinkInput(toolbar) {
     if (toolbar.querySelector('.cdx-gallery__link-row')) return
     const row = createEl('div', 'cdx-gallery__link-row')
-    const input = createEl('input', 'cdx-gallery__link-input', { placeholder: '粘贴图片链接或 YouTube/B站/Vimeo/抖音 视频链接…' })
+    const input = createEl('input', 'cdx-gallery__link-input', { placeholder: '粘贴图片链接或 YouTube/B站/Vimeo/抖音/X 视频链接…' })
     const doAdd = async () => {
       const url = input.value.trim()
       if (!url) return
       const embed = resolveVideoEmbed(url)
-      // 推文嵌入的是整张推文卡片（高度不定），塞进画廊的小格子会被裁掉，引导去用单独的网络视频块
-      if (embed && embed.service === 'twitter') {
-        this.api.notifier?.show({ message: 'X(Twitter) 视频请用"网络视频"块单独嵌入', style: 'error' })
-        return
-      }
       if (embed) {
-        const item = { type: 'video', embedUrl: embed.embedUrl, caption: '', posterUrl: embed.posterUrl || null }
+        const item = { type: 'video', service: embed.service, embedUrl: embed.embedUrl, caption: '', posterUrl: embed.posterUrl || null }
         this.data.items.push(item)
         row.remove()
         this._renderGrid()
@@ -140,6 +170,13 @@ export default class GalleryTool {
 
   save() {
     return { items: this.data.items }
+  }
+
+  destroy() {
+    if (this._onMessage) {
+      window.removeEventListener('message', this._onMessage)
+      this._onMessage = null
+    }
   }
 
   validate(savedData) {
