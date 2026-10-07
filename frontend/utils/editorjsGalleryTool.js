@@ -54,7 +54,7 @@ export default class GalleryTool {
       fileInput.addEventListener('change', (e) => this._handleFiles(e.target.files))
       toolbar.appendChild(createButton('上传图片/音频', () => fileInput.click()))
       toolbar.appendChild(fileInput)
-      toolbar.appendChild(createButton('粘贴链接（图片/视频）', () => this._openLinkInput(toolbar)))
+      toolbar.appendChild(createButton('粘贴链接（图片/视频）', () => this._openLinkInput()))
       this.wrapper.appendChild(toolbar)
     }
     return this.wrapper
@@ -135,13 +135,29 @@ export default class GalleryTool {
     this._renderGrid()
   }
 
-  _openLinkInput(toolbar) {
-    if (toolbar.querySelector('.cdx-gallery__link-row')) return
-    const row = createEl('div', 'cdx-gallery__link-row')
-    const input = createEl('input', 'cdx-gallery__link-input', { placeholder: '粘贴图片链接或 YouTube/B站/Vimeo/抖音/X 视频链接…' })
+  // 输入区的样式和"网络视频"块的链接输入保持一致：输入框 + 主色按钮，错误提示显示在下方
+  _openLinkInput() {
+    const opened = this.wrapper.querySelector('.cdx-gallery__link')
+    if (opened) {
+      opened.querySelector('input').focus()
+      return
+    }
+    const row = createEl('div', 'cdx-gallery__link')
+    const inputRow = createEl('div', 'cdx-gallery__link-row')
+    const input = createEl('input', 'cdx-gallery__link-input', {
+      type: 'text',
+      placeholder: '粘贴图片链接，或 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频链接...'
+    })
+    const error = createEl('div', 'cdx-gallery__link-error')
+    let btn = null
+    const setBusy = (busy) => {
+      btn.disabled = busy
+      btn.textContent = busy ? '添加中...' : '添加'
+    }
     const doAdd = async () => {
       const url = input.value.trim()
-      if (!url) return
+      if (!url || btn.disabled) return
+      error.textContent = ''
       const embed = resolveVideoEmbed(url)
       if (embed) {
         const item = { type: 'video', service: embed.service, embedUrl: embed.embedUrl, caption: '', posterUrl: embed.posterUrl || null }
@@ -161,6 +177,7 @@ export default class GalleryTool {
         return
       }
       // 不是已知视频平台链接，当图片链接处理：走远程上传接口重新托管
+      setBusy(true)
       if (this.config.uploader?.uploadByUrl) {
         try {
           const result = await this.config.uploader.uploadByUrl(url)
@@ -180,11 +197,15 @@ export default class GalleryTool {
         this._renderGrid()
         return
       }
-      this.api.notifier?.show({ message: '无法识别这个链接，请检查后重试', style: 'error' })
+      setBusy(false)
+      error.textContent = '无法识别链接，请粘贴图片地址，或 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频地址'
     }
+    btn = createButton('添加', doAdd, 'cdx-gallery__link-btn')
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd() })
-    row.append(input, createButton('添加', doAdd))
-    toolbar.appendChild(row)
+    inputRow.append(input, btn)
+    row.append(inputRow, error)
+    this.wrapper.appendChild(row)
+    setTimeout(() => input.focus(), 0)
   }
 
   save() {
