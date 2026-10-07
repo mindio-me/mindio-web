@@ -5,6 +5,17 @@
 import { createEl, createButton, createVideoFacade } from './editorjsUiHelpers'
 import { resolveVideoEmbed, fetchVimeoPoster, getTweetResizeHeight } from './videoEmbedResolver'
 
+/** 在浏览器里试加载一个地址，能解码成图片就算图片（不看扩展名），超时按失败处理 */
+function loadsAsImage(url, timeoutMs = 10000) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const timer = setTimeout(() => { img.src = ''; resolve(false) }, timeoutMs)
+    img.onload = () => { clearTimeout(timer); resolve(img.naturalWidth > 0) }
+    img.onerror = () => { clearTimeout(timer); resolve(false) }
+    img.src = url
+  })
+}
+
 export default class GalleryTool {
   static get toolbox() {
     return {
@@ -159,7 +170,15 @@ export default class GalleryTool {
             this._renderGrid()
             return
           }
-        } catch (e) { /* fallthrough to error message below */ }
+        } catch (e) { /* fallthrough to browser probe below */ }
+      }
+      // 后端拉不到（防盗链、拒绝非浏览器 UA、后端连不上外网等）时，在浏览器里试加载一次：
+      // 能显示成图片就直接引用原地址，不管链接里有没有扩展名。代价是原站删图后这张会失效。
+      if (/^https?:\/\//i.test(url) && await loadsAsImage(url)) {
+        this.data.items.push({ type: 'image', url, caption: '' })
+        row.remove()
+        this._renderGrid()
+        return
       }
       this.api.notifier?.show({ message: '无法识别这个链接，请检查后重试', style: 'error' })
     }

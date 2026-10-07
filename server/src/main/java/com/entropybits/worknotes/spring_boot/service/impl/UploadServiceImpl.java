@@ -143,8 +143,9 @@ public class UploadServiceImpl implements UploadService {
             String extName = UploadUtil.getFileExtension(filename);
             boolean isImage = ALLOWED_IMAGE_EXTENSIONS.contains(extName.toLowerCase());
             if (!isImage && !ALLOWED_FILE_EXTENSIONS.contains(extName.toLowerCase())) {
-                // 兜底：不给扩展名也允许，默认按文件处理并用 bin
-                extName = extName.isBlank() ? "bin" : extName;
+                // 没有扩展名，或者取到的"扩展名"其实是 .php/.aspx/版本号之类的路径片段，都当未知类型，
+                // 先记成 bin，下面按 Content-Type 推断，推断不出再在下载后看文件头
+                extName = "bin";
             }
 
             // 下载文件（限制大小：按图片/文件的默认限制）
@@ -212,6 +213,26 @@ public class UploadServiceImpl implements UploadService {
                 //noinspection ResultOfMethodCallIgnored
                 file.delete();
                 throw new BadRequestException("远程文件过大，最大允许: " + (maxSizeBytes / 1024 / 1024) + "MB");
+            }
+
+            // 地址和 Content-Type 都看不出类型（比如 CDN 一律返回 application/octet-stream），
+            // 按文件头魔数认一次图片，认出来就换成正确扩展名，免得存成 .bin 显示不出来
+            if ("bin".equals(extName)) {
+                String sniffedExt = sniffImageExtension(file);
+                if (sniffedExt != null) {
+                    long maxImageBytes = DEFAULT_MAX_IMAGE_SIZE_MB * 1024L * 1024L;
+                    if (written > maxImageBytes) {
+                        //noinspection ResultOfMethodCallIgnored
+                        file.delete();
+                        throw new BadRequestException("远程文件过大，最大允许: " + DEFAULT_MAX_IMAGE_SIZE_MB + "MB");
+                    }
+                    extName = sniffedExt;
+                    isImage = true;
+                    newFileName = UploadUtil.fileName(extName);
+                    File renamed = new File(serverPath + newFileName);
+                    Files.move(file.toPath(), renamed.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    file = renamed;
+                }
             }
 
             FileResultVo result = new FileResultVo();
@@ -438,6 +459,24 @@ public class UploadServiceImpl implements UploadService {
      * @param contentType HTTP Content-Type 头
      * @return 文件扩展名（不含点），如果无法推断则返回 null
      */
+    /**
+     * 按文件头魔数识别常见图片格式，识别不出返回 null
+     */
+    private String sniffImageExtension(File file) throws IOException {
+        byte[] head = new byte[12];
+        int n;
+        try (InputStream in = Files.newInputStream(file.toPath())) {
+            n = in.readNBytes(head, 0, head.length);
+        }
+        if (n >= 3 && (head[0] & 0xFF) == 0xFF && (head[1] & 0xFF) == 0xD8 && (head[2] & 0xFF) == 0xFF) return "jpg";
+        if (n >= 4 && (head[0] & 0xFF) == 0x89 && head[1] == 'P' && head[2] == 'N' && head[3] == 'G') return "png";
+        if (n >= 4 && head[0] == 'G' && head[1] == 'I' && head[2] == 'F' && head[3] == '8') return "gif";
+        if (n >= 12 && head[0] == 'R' && head[1] == 'I' && head[2] == 'F' && head[3] == 'F'
+                && head[8] == 'W' && head[9] == 'E' && head[10] == 'B' && head[11] == 'P') return "webp";
+        if (n >= 2 && head[0] == 'B' && head[1] == 'M') return "bmp";
+        return null;
+    }
+
     private String guessExtensionFromContentType(String contentType) {
         if (contentType == null || contentType.isBlank()) {
             return null;
