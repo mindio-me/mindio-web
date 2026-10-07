@@ -7,13 +7,18 @@
 -- 它前面建了多少张表/约束，在这份 480 多行的完整 schema 里不是能硬编码猜出来的数字。
 -- 用 EXECUTE IMMEDIATE 拼出真实约束名（按 check_clause 内容匹配，而不是猜名字）再动态执行
 -- DROP，这个做法已经用一个独立的 H2 2.2.224 内存库验证过，在约束名不可预测的情况下能稳定生效。
-EXECUTE IMMEDIATE
+--
+-- 2026-10-07：约束不存在时（早期 ddl-auto 建出、后来 baseline-on-migrate 接入的存量桌面库，
+-- 以及 mindio 系自己的 h2/V1，都没有这个内联 CHECK）子查询返回 NULL，旧写法拼出 NULL 语句
+-- 导致整条迁移失败；用 COALESCE 退化成空操作，后面的 ADD CONSTRAINT 照常执行。
+EXECUTE IMMEDIATE COALESCE(
     'ALTER TABLE source_clips DROP CONSTRAINT ' ||
     (SELECT cc.constraint_name FROM information_schema.check_constraints cc
      JOIN information_schema.table_constraints tc
        ON tc.constraint_name = cc.constraint_name AND tc.constraint_schema = cc.constraint_schema
      WHERE tc.table_name = 'SOURCE_CLIPS' AND tc.constraint_type = 'CHECK'
-       AND cc.check_clause LIKE '%SOURCE_TYPE%' LIMIT 1);
+       AND cc.check_clause LIKE '%SOURCE_TYPE%' LIMIT 1),
+    'SET @v14_noop = 0');
 
 ALTER TABLE source_clips ADD CONSTRAINT ck_source_clips_source_type
     CHECK (source_type IN ('WEBPAGE','WECHAT_ARTICLE','WECHAT_CHAT_TEXT','WECHAT_CHAT_IMAGE','AUDIO_RECORDING'));
