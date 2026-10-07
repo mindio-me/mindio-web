@@ -41,7 +41,8 @@ const SERVICES = [
     // X 没有"纯视频播放器"的嵌入地址，只能嵌整张推文卡片（视频在卡片里点开播放），
     // 这个页面就是官方 widgets.js 自己创建的 iframe，直接用可以避免往笔记里注入第三方脚本。
     embed: (m) => `https://platform.twitter.com/embed/Tweet.html?id=${m[1]}&dnt=true`,
-    // 封面接口 cdn.syndication.twimg.com 只允许 platform.twitter.com 跨域，浏览器拿不到，用通用占位图。
+    // 封面接口 cdn.syndication.twimg.com 只允许 platform.twitter.com 跨域，浏览器拿不到，
+    // 需要封面的地方（媒体画廊）经后端 /v1/embed/tweet-poster 转一手，见 getTweetIdFromEmbedUrl。
     // 推文卡片高度随正文长短变化，这里只是初始高度，播放后按 iframe 发来的 resize 消息自适应。
     fixedWidth: 550,
     fixedHeight: 640,
@@ -65,6 +66,20 @@ export function resolveVideoEmbed(url) {
     }
   }
   return null
+}
+
+/** 从推文嵌入地址（Tweet.html?id=...）里取推文 ID，不是推文嵌入地址返回 null */
+export function getTweetIdFromEmbedUrl(embedUrl) {
+  const m = /^https:\/\/platform\.twitter\.com\/embed\/Tweet\.html\?id=(\d+)/.exec(embedUrl || '')
+  return m ? m[1] : null
+}
+
+/**
+ * syndication 接口要求带一个由推文 ID 算出的 token（嵌入卡片自己用的同款算法）。
+ * 目前接口只检查有没有带、不校验值，但照原算法算，接口哪天开始校验也不受影响。
+ */
+export function tweetSyndicationToken(tweetId) {
+  return ((Number(tweetId) / 1e15) * Math.PI).toString(36).replace(/(0+|\.)/g, '')
 }
 
 /**

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import { createEl, createButton, createVideoFacade } from './editorjsUiHelpers'
-import { resolveVideoEmbed, fetchVimeoPoster, getTweetResizeHeight } from './videoEmbedResolver'
+import { resolveVideoEmbed, fetchVimeoPoster, getTweetResizeHeight, getTweetIdFromEmbedUrl } from './videoEmbedResolver'
 
 /** 在浏览器里试加载一个地址，能解码成图片就算图片（不看扩展名），超时按失败处理 */
 function loadsAsImage(url, timeoutMs = 10000) {
@@ -28,8 +28,9 @@ export default class GalleryTool {
     return true
   }
 
-  constructor({ data, config, api, readOnly }) {
+  constructor({ data, config, api, readOnly, block }) {
     this.api = api
+    this.block = block
     this.readOnly = readOnly
     this.config = config || {}
     this.data = { items: Array.isArray(data?.items) ? data.items : [] }
@@ -40,6 +41,7 @@ export default class GalleryTool {
     this._playingItems = new WeakSet()
     // 推文卡片 iframe → 对应 item，收到 resize 消息时把高度写回 item.tweetHeight
     this._tweetItems = new WeakMap()
+    this._posterRequested = new WeakSet()
     this._onMessage = null
   }
 
@@ -70,12 +72,11 @@ export default class GalleryTool {
       if (item.type === 'video') {
         media.classList.add('cdx-gallery__media--video')
         const isTweet = item.service === 'twitter'
-        if (isTweet) {
-          // 推文拿不到封面图，小格子里的占位只能是一块黑底；推文卡片本身就是预览（不会自动播放），
-          // 所以这一格直接展开成完整卡片，loading=lazy 让屏幕外的卡片滚到附近才加载。
-          // 高度按 resize 消息自适应，量到的高度存进 item，下次打开先按它占位，加载出来不跳。
+        if (isTweet && this._playingItems.has(item)) {
+          // 推文卡片放不进小格子，点开后这一格展开成完整卡片。高度按 resize 消息自适应，
+          // 量到的高度存进 item，下次点开先按它占位，加载出来不跳。
           card.classList.add('cdx-gallery__card--tweet')
-          const iframe = createEl('iframe', 'cdx-gallery__tweet', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true, scrolling: 'no', loading: 'lazy' })
+          const iframe = createEl('iframe', 'cdx-gallery__tweet', { src: item.embedUrl, frameBorder: '0', allowFullscreen: true, scrolling: 'no' })
           if (item.tweetHeight) iframe.style.height = `${item.tweetHeight}px`
           this._tweetItems.set(iframe, item)
           this._ensureTweetResizeListener()
@@ -87,6 +88,7 @@ export default class GalleryTool {
             this._playingItems.add(item)
             this._renderGrid()
           }, 'cdx-gallery__video-facade'))
+          if (isTweet && !item.posterUrl) this._fetchTweetPoster(item)
         }
       } else if (item.type === 'audio') {
         media.appendChild(createEl('audio', 'cdx-gallery__audio', { src: item.url, controls: true }))
@@ -100,6 +102,22 @@ export default class GalleryTool {
       grid.appendChild(card)
     })
     this.wrapper.insertBefore(grid, this.wrapper.firstChild)
+  }
+
+  // 推文封面浏览器跨域拿不到，经后端取一次（见 editorjsHost 的 fetchTweetPoster），拿到后存进 item
+  // 随笔记持久化，以后打开不再请求。刚插入的和之前插入时没取到封面的推文都走这里，每个 item 只试一次。
+  _fetchTweetPoster(item) {
+    if (this.readOnly || !this.config.fetchTweetPoster || this._posterRequested.has(item)) return
+    const tweetId = getTweetIdFromEmbedUrl(item.embedUrl)
+    if (!tweetId) return
+    this._posterRequested.add(item)
+    this.config.fetchTweetPoster(tweetId).then((posterUrl) => {
+      if (!posterUrl) return
+      item.posterUrl = posterUrl
+      // 不是用户编辑触发的数据变化，主动通知编辑器，让封面随下一次自动保存写进笔记
+      this.block?.dispatchChange?.()
+      if (!this._playingItems.has(item)) this._renderGrid()
+    })
   }
 
   // 整个画廊共用一个 message 监听，按消息来源找到是哪张推文卡片发来的 resize

@@ -5,6 +5,7 @@
 
 import { createEditorImageResizer } from '~/utils/editorjsImageResize'
 import { clipboardMayContainImage, getClipboardImagePayload, uploadClipboardImage } from '~/utils/clipboardImage'
+import { tweetSyndicationToken } from '~/utils/videoEmbedResolver'
 
 export default {
   data() {
@@ -187,6 +188,17 @@ export default {
                   console.error('画廊图片链接抓取失败:', e)
                   return { success: 0 }
                 }
+              }
+            },
+            // X 推文封面浏览器跨域拿不到，经后端转一手；失败返回 null，画廊退回通用占位图
+            fetchTweetPoster: async (tweetId) => {
+              try {
+                const res = await this.$axios.get('/v1/embed/tweet-poster', {
+                  params: { id: tweetId, token: tweetSyndicationToken(tweetId) }
+                })
+                return res.data?.posterUrl || null
+              } catch (e) {
+                return null
               }
             }
           }
