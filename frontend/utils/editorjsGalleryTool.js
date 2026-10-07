@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 import { createEl, createButton, createVideoFacade } from './editorjsUiHelpers'
-import { resolveVideoEmbed, fetchVimeoPoster, getTweetIdFromEmbedUrl } from './videoEmbedResolver'
+import { resolveVideoEmbed, fetchVimeoPoster, getTweetIdFromEmbedUrl, isYouTubeEmbed } from './videoEmbedResolver'
 import { openMediaLightbox } from './editorjsMediaLightbox'
 
 /** 在浏览器里试加载一个地址，能解码成图片就算图片（不看扩展名），超时按失败处理 */
@@ -68,7 +68,7 @@ export default class GalleryTool {
       card.appendChild(media)
       if (item.type === 'video') {
         media.classList.add('cdx-gallery__media--video')
-        media.appendChild(createVideoFacade(item.posterUrl, () => this._openLightbox(item), 'cdx-gallery__video-facade'))
+        media.appendChild(createVideoFacade(item.posterUrl, () => this._openLightbox(item), 'cdx-gallery__video-facade', { youtube: isYouTubeEmbed(item.embedUrl) }))
         if (getTweetIdFromEmbedUrl(item.embedUrl) && !item.posterUrl) this._fetchTweetPoster(item)
       } else if (item.type === 'audio') {
         media.appendChild(createEl('audio', 'cdx-gallery__audio', { src: item.url, controls: true }))

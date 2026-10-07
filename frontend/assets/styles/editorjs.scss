@@ -147,6 +147,7 @@
       background-color: #000; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       &__poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      &__play--youtube.embed-video-tool__facade__play { width: 68px; height: 48px; border-radius: 0; background: none; }
       &__play {
         position: relative; width: 56px; height: 56px; border-radius: 50%; background: rgba(0, 0, 0, 0.55);
         display: flex; align-items: center; justify-content: center;
@@ -278,6 +279,7 @@
       align-items: center;
       justify-content: center;
     }
+    &__video-facade__play--youtube.cdx-gallery__video-facade__play { width: 42px; height: 30px; border-radius: 0; background: none; }
     &__audio { width: 100%; }
     &__caption { font-size: 0.8em; color: var(--text-muted, #999); text-align: center; }
     &__delete { position: absolute; z-index: 1; top: 2px; right: 2px; background: rgba(0,0,0,0.5); color: #fff; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; }

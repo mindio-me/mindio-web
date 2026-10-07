@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
-import { resolveVideoEmbed as resolveEmbed, fetchVimeoPoster, getTweetResizeHeight } from './videoEmbedResolver'
+import { resolveVideoEmbed as resolveEmbed, fetchVimeoPoster, getTweetResizeHeight, isYouTubeEmbed } from './videoEmbedResolver'
 import { createVideoFacade } from './editorjsUiHelpers'
 
 class EmbedVideoTool {
@@ -84,7 +84,7 @@ class EmbedVideoTool {
         this._playing = true
         wrapper.innerHTML = ''
         this._renderEmbed(wrapper)
-      }, 'embed-video-tool__facade'))
+      }, 'embed-video-tool__facade', { youtube: isYouTubeEmbed(this.data.embedUrl) }))
     }
 
     wrapper.appendChild(frame)

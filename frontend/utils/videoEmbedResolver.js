@@ -79,6 +79,11 @@ export function withAutoplay(embedUrl) {
   }
 }
 
+/** 是否 YouTube 播放器地址（封面占位要用 YouTube 样式的播放按钮） */
+export function isYouTubeEmbed(embedUrl) {
+  return /^https:\/\/www\.youtube(?:-nocookie)?\.com\/embed\//.test(embedUrl || '')
+}
+
 /** 从推文嵌入地址（Tweet.html?id=...）里取推文 ID，不是推文嵌入地址返回 null */
 export function getTweetIdFromEmbedUrl(embedUrl) {
   const m = /^https:\/\/platform\.twitter\.com\/embed\/Tweet\.html\?id=(\d+)/.exec(embedUrl || '')
