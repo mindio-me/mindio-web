@@ -4,6 +4,7 @@
  */
 
 import Vue from 'vue'
+import recordingStash from './recordingStash'
 
 const state = Vue.observable({
   status: 'idle', // 'idle' | 'starting' | 'recording' | 'paused' | 'stopping'
@@ -11,7 +12,10 @@ const state = Vue.observable({
   level: 0, // 0..1，实时音量（桌面版是混音后的音量），给波形条用
   origin: null, // { type: 'block', noteId } | { type: 'topbar' } | null —— 录音是从哪儿发起的
   systemAudio: 'off', // 'off' | 'connecting' | 'on' —— 电脑声音有没有接进混音台
-  systemAudioSupported: false // 桌面版且混音台建起来了才为 true，start() 时更新
+  systemAudioSupported: false, // 桌面版且混音台建起来了才为 true，start() 时更新
+  // 录完了但还没存成功、正等着用户在右下角面板里选保存位置的那段录音，是从哪个录音块发起的。
+  // 录音块靠它显示"保存失败，录音还在右下角"，而不是一直停在"录音中"或误报"没能正常完成"
+  pendingBlockId: null
 })
 
 const listeners = {}
@@ -53,6 +57,11 @@ let sysSource = null
 // 迟到的流靠这个识别出来并立刻停掉
 let systemAudioToken = 0
 
+// 本地副本（IndexedDB，见 recordingStash.js）：begin() 是异步的，这里存它的 Promise，
+// 每个数据块都排在它后面写进去，录音一开始的几秒也不会漏
+let currentStash = null
+let stashOwner = null
+
 const SYSTEM_AUDIO_PREF_KEY = 'mindio.recording.systemAudio'
 
 function desktopRecordingApi() {
@@ -73,6 +82,29 @@ function writeSystemAudioPref(enabled) {
   } catch (e) {
     // 存不下只是下次不记得选择，不影响录音
   }
+}
+
+/** 本地副本记在谁名下（换账号登录后不把别人的录音弹给他） */
+function setOwner(owner) {
+  stashOwner = owner || null
+}
+
+function setPendingBlock(blockId) {
+  const next = blockId || null
+  if (state.pendingBlockId === next) return
+  state.pendingBlockId = next
+  emit('pending-change', next)
+}
+
+/** 录音没能通过 onstop 正常收尾（内存里的数据拿不到了），把本地副本交出去让界面恢复 */
+function emitOrphaned(stash, durationSeconds, origin) {
+  if (!stash) return
+  stash.then((id) => {
+    if (!id) return
+    recordingStash.markStopped(id, durationSeconds).then(() => {
+      emit('orphaned', { stashId: id, durationSeconds, origin })
+    })
+  })
 }
 
 async function start(origin) {
@@ -106,8 +138,18 @@ async function start(origin) {
   mediaRecorder = mimeType ? new MediaRecorder(recordStream, { mimeType }) : new MediaRecorder(recordStream)
 
   chunks = []
+  const stash = recordingStash.begin({
+    mimeType: mediaRecorder.mimeType || mimeType || 'audio/webm',
+    origin: state.origin,
+    owner: stashOwner
+  })
+  currentStash = stash
+  let stashSeq = 0
   mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size) chunks.push(e.data)
+    if (!e.data || !e.data.size) return
+    chunks.push(e.data)
+    const seq = stashSeq++
+    stash.then((id) => recordingStash.append(id, e.data, seq))
   }
 
   // 统一的收尾出口：不管是用户主动点停止，还是设备被拔掉/系统睡眠把 track 掐断，
@@ -123,8 +165,10 @@ async function start(origin) {
     const errorPayload = pendingErrorPayload
     pendingErrorPayload = null
     cleanup()
+    stash.then((id) => recordingStash.markStopped(id, durationSeconds))
     if (interrupted && errorPayload) emit('error', errorPayload)
-    const result = { blob, durationSeconds, origin: stopOrigin, interrupted }
+    // stash: 本地副本的 id（Promise）。保存成功或确认放弃后由调用方删掉它
+    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash }
     emit('stop', result)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
@@ -158,6 +202,10 @@ async function start(origin) {
     if (state.status !== 'recording') return
     state.elapsedSeconds += 1
     emit('tick', state.elapsedSeconds)
+    if (state.elapsedSeconds % 5 === 0) {
+      const seconds = state.elapsedSeconds
+      stash.then((id) => recordingStash.update(id, { durationSeconds: seconds }))
+    }
   }, 1000)
 
   startLevelMeter()
@@ -179,8 +227,12 @@ function forceStop() {
   if (!mediaRecorder || mediaRecorder.state === 'inactive') {
     const errorPayload = pendingErrorPayload
     pendingErrorPayload = null
+    const stash = currentStash
+    const durationSeconds = state.elapsedSeconds
+    const origin = state.origin
     cleanup()
     if (errorPayload) emit('error', errorPayload)
+    emitOrphaned(stash, durationSeconds, origin)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
       pendingStopResolve = null
@@ -200,8 +252,13 @@ function forceStop() {
     if (state.status === 'idle') return
     const errorPayload = pendingErrorPayload || { reason: 'track-ended' }
     pendingErrorPayload = null
+    const stash = currentStash
+    const durationSeconds = state.elapsedSeconds
+    const origin = state.origin
     cleanup()
     emit('error', errorPayload)
+    // 内存里的数据拿不到了，但本地副本里有已经录到的部分
+    emitOrphaned(stash, durationSeconds, origin)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
       pendingStopResolve = null
@@ -434,7 +491,10 @@ function cancel() {
     return
   }
   if (state.status === 'idle') return
+  const stash = currentStash
   cleanup()
+  // 主动取消 = 不要这段录音了，本地副本一起删掉
+  if (stash) stash.then((id) => recordingStash.remove(id))
 }
 
 function cleanup() {
@@ -462,6 +522,7 @@ function cleanup() {
   mediaStream = null
   mediaRecorder = null
   chunks = []
+  currentStash = null
   teardownAudioGraph()
   state.status = 'idle'
   state.elapsedSeconds = 0
@@ -469,4 +530,4 @@ function cleanup() {
   state.origin = null
 }
 
-export default { state, on, off, start, pause, resume, stop, cancel, setSystemAudio }
+export default { state, on, off, start, pause, resume, stop, cancel, setSystemAudio, setOwner, setPendingBlock }

@@ -54,7 +54,7 @@
     <div v-if="(showAttachPopover && stopResult) || toast" class="recording-stack" :style="dragStyle">
       <div v-if="showAttachPopover && stopResult" class="recording-attach-pop">
         <div class="rap-hd">
-          <span>保存录音到</span>
+          <span>{{ stopResult.recovered ? '恢复的录音 · ' + formatStartedAt(stopResult.startedAt) : '保存录音到' }}</span>
           <span class="rap-hd-right">
             <span class="rap-dur">{{ formatDuration(stopResult.durationSeconds) }}</span>
             <button class="rap-close-btn" title="放弃这段录音" @click="discardRecording">✕</button>
@@ -69,6 +69,10 @@
         <button class="rap-opt" @click="chooseTarget('library')">
           <div class="rap-opt-title">仅存入素材库</div>
           <div class="rap-opt-sub">之后可在任意笔记中插入</div>
+        </button>
+        <button class="rap-opt" @click="downloadRecording">
+          <div class="rap-opt-title">下载到本地</div>
+          <div class="rap-opt-sub">不需要网络；下载后这里仍保留，确认存好了再关</div>
         </button>
       </div>
 
@@ -85,6 +89,7 @@
 
 <script>
 import recordingController from '~/utils/recordingController'
+import recordingStash from '~/utils/recordingStash'
 import { attachRecording, resolveBlockInNote, blobToFile } from '~/services/noteAttachService'
 
 // 等页面（editor.vue / notes/index.vue）回执的超时时间：插入/替换块 + 一次直存的
@@ -102,6 +107,9 @@ export default {
       toast: '',
       toastAction: null, // { label, handler } —— 有值时 toast 带一个操作按钮
       toastTimer: null,
+      orphanTimer: null,
+      orphanInterval: null,
+      recovering: false,
       broadcastNoteId: null,
       dragPos: null // {left, top} once dragged; else default bottom-right via CSS
     }
@@ -154,6 +162,11 @@ export default {
     }
   },
   watch: {
+    // 录音块靠这个知道"录完了但还没存成功"，显示成"录音还在右下角"
+    stopResult(result) {
+      const origin = result && result.origin
+      recordingController.setPendingBlock(origin && origin.type === 'block' ? origin.blockId : null)
+    },
     'recording.status'(next, prev) {
       // 有了 'starting' 中间态后，真正的"开始录音"过渡是 starting -> recording
       // （极端情况下 starting 环节被跳过也兼容 idle -> recording）
@@ -169,12 +182,21 @@ export default {
     this.$nuxt.$emit('workspace:request-current-note-id')
     recordingController.on('error', this.onRecordingError)
     recordingController.on('stop', this.onControllerStop)
+    recordingController.on('orphaned', this.onOrphaned)
+    recordingController.setOwner(this.$auth && this.$auth.user && this.$auth.user.username)
+    // 上次没存成功的录音（刷新/崩溃/关页签/上传失败后离开）：页面稳定下来后找一次，之后每分钟再看一次
+    // （浏览器不支持 BroadcastChannel 时只能等旧会话的心跳过期，要过两三分钟）
+    this.orphanTimer = setTimeout(() => this.recoverOrphans(), 1500)
+    this.orphanInterval = setInterval(() => this.recoverOrphans(), 60000)
   },
   beforeDestroy() {
     this.$nuxt.$off('workspace:current-note-id', this.onBroadcastNoteId)
     recordingController.off('error', this.onRecordingError)
     recordingController.off('stop', this.onControllerStop)
+    recordingController.off('orphaned', this.onOrphaned)
     clearTimeout(this.toastTimer)
+    clearTimeout(this.orphanTimer)
+    clearInterval(this.orphanInterval)
   },
   methods: {
     onBroadcastNoteId(id) {
@@ -186,13 +208,94 @@ export default {
     // 点按钮，必须靠事件才能拿到抢救下来的录音内容，走一遍同样的保存管线。
     onControllerStop(result) {
       if (!result || !result.interrupted) return
+      this.adoptStopResult(result)
+    },
+    /**
+     * 录音没能正常收尾（onstop 没触发，内存里的数据拿不到了），但本地副本里有已经录到的部分：
+     * 从本地副本拼回来，走和正常停止一样的保存流程
+     */
+    async onOrphaned({ stashId, durationSeconds, origin }) {
+      const blob = await recordingStash.loadBlob(stashId)
+      if (!blob) return
+      this.adoptStopResult({ blob, durationSeconds, origin, interrupted: true, stash: Promise.resolve(stashId) })
+    },
+    /** 找本地副本里"没人管"的录音，一次恢复一段；手上已经有一段待保存、或正在录音时先不管 */
+    async recoverOrphans() {
+      if (this.recovering || this.stopResult || this.recording.status !== 'idle') return
+      this.recovering = true
+      try {
+        const owner = this.$auth && this.$auth.user && this.$auth.user.username
+        const sessions = await recordingStash.listOrphans(owner)
+        for (const session of sessions) {
+          if (this.stopResult || this.recording.status !== 'idle') return
+          if (!(await recordingStash.claim(session))) continue
+          const blob = await recordingStash.loadBlob(session.id)
+          if (!blob) {
+            await recordingStash.remove(session.id)
+            continue
+          }
+          this.showToast(`找到一段没保存成功的录音（${this.formatStartedAt(session.startedAt)}，${this.formatDuration(session.durationSeconds)}）`)
+          this.adoptStopResult({
+            blob,
+            durationSeconds: session.durationSeconds,
+            origin: session.origin,
+            interrupted: true,
+            recovered: true,
+            startedAt: session.startedAt,
+            stash: Promise.resolve(session.id)
+          })
+          return
+        }
+      } finally {
+        this.recovering = false
+      }
+    },
+    /** 接手一段录完了但还没保存的录音：从录音块发起的先自动放回那个块，不行再弹面板让用户选 */
+    adoptStopResult(result) {
       this.stopResult = result
       const origin = result.origin
       if (origin && origin.type === 'block' && origin.blockId) {
-        this.autoResolveBlock(origin)
+        this.autoResolveBlock(origin).then((ok) => {
+          if (!ok) this.showAttachPopover = true
+        })
       } else {
         this.showAttachPopover = true
       }
+    },
+    /** 这段录音的去向定了（存好了，或确认放弃）：删掉本地副本，再看看还有没有别的待恢复 */
+    settleStopResult() {
+      const result = this.stopResult
+      this.stopResult = null
+      this.showAttachPopover = false
+      if (result && result.stash) result.stash.then((id) => recordingStash.remove(id))
+      clearTimeout(this.orphanTimer)
+      this.orphanTimer = setTimeout(() => this.recoverOrphans(), 1000)
+    },
+    downloadRecording() {
+      if (!this.stopResult) return
+      const { blob, startedAt } = this.stopResult
+      const ext = (blob.type || 'audio/webm').split('/')[1].split(';')[0] || 'webm'
+      const d = new Date(startedAt || Date.now())
+      const pad = (n) => (n < 10 ? '0' : '') + n
+      const name = `录音-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${ext}`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      this.showToast('已开始下载。确认文件存好后，再点 ✕ 关掉这段录音')
+    },
+    formatStartedAt(ts) {
+      if (!ts) return ''
+      const d = new Date(ts)
+      const pad = (n) => (n < 10 ? '0' : '') + n
+      return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    },
+    uploadProgressHandler() {
+      return (percent) => this.showPendingToast(percent >= 100 ? '上传完成，正在保存…' : `正在上传 ${percent}%…`)
     },
     onRecordingError(payload) {
       const reason = (payload && payload.reason) || ''
@@ -277,7 +380,9 @@ export default {
 
       try {
         const file = blobToFile(blob)
-        const uploadResult = await this.$uploadService.uploadLocal(file, 'note', origin.noteId || 0)
+        const uploadResult = await this.$uploadService.uploadLocal(file, 'note', origin.noteId || 0, {
+          onProgress: this.uploadProgressHandler()
+        })
 
         // 先挂上回执监听再广播，免得页面回得太快而漏接
         const ackPromise = this.waitForResolveAck(origin.noteId, origin.blockId)
@@ -302,7 +407,7 @@ export default {
         }
 
         this.showToast('已保存')
-        this.stopResult = null
+        this.settleStopResult()
         return true
       } catch (e) {
         this.showToast((e && e.message) || '自动保存失败，请手动选择保存位置')
@@ -338,7 +443,9 @@ export default {
         const targetNoteId = this.attachTargetNoteId
         if (target === 'current' && this.isEditorLiveOnNote(targetNoteId)) {
           const file = blobToFile(blob)
-          const uploadResult = await this.$uploadService.uploadLocal(file, 'note', targetNoteId || 0)
+          const uploadResult = await this.$uploadService.uploadLocal(file, 'note', targetNoteId || 0, {
+            onProgress: this.uploadProgressHandler()
+          })
           // 先挂上回执监听再广播，免得 editor.vue 回得太快而漏接
           const ackPromise = this.waitForInsertBlockAck(targetNoteId)
           this.$nuxt.$emit('recording:insert-block', {
@@ -362,7 +469,8 @@ export default {
           noteId: this.currentNoteId,
           uploadService: this.$uploadService,
           noteService: this.$noteService,
-          clipService: this.$clipService
+          clipService: this.$clipService,
+          onProgress: this.uploadProgressHandler()
         })
 
         if (result.mode === 'library') {
@@ -377,7 +485,7 @@ export default {
         this.showToast(e.message || '保存失败，请重试')
       } finally {
         if (succeeded) {
-          this.stopResult = null
+          this.settleStopResult()
         } else {
           // 失败时绝不能丢掉 blob —— 那是这段录音唯一的副本。把选择面板重新弹出来，
           // 用户可以换一个目标重试（比如改存素材库）。
@@ -406,11 +514,15 @@ export default {
       })
     },
     discardRecording() {
-      // blob 已经由 recordingController.stop() 产出，controller 这边没什么可再 cancel 的，
-      // 丢掉本地这份引用即可
-      this.stopResult = null
-      this.showAttachPopover = false
-      this.showToast('已放弃录音')
+      // 这可能是一场会议唯一的录音，放弃前必须确认；确认后连本地副本一起删
+      this.$confirm('放弃后这段录音无法恢复。还没存好的话，可以先选"下载到本地"。', '放弃这段录音？', {
+        type: 'warning',
+        confirmButtonText: '放弃录音',
+        cancelButtonText: '再想想'
+      }).then(() => {
+        this.settleStopResult()
+        this.showToast('已放弃录音')
+      }).catch(() => {})
     },
     showToast(text, action) {
       clearTimeout(this.toastTimer)

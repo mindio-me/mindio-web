@@ -46,6 +46,13 @@ function injectStyles() {
   color: #b0b6cc;
   border-color: #e2c9c9;
 }
+.record-tool__placeholder--pending,
+.record-tool__placeholder--pending:hover {
+  cursor: default;
+  color: #b45309;
+  border-color: #f5d9a8;
+  background: rgba(245,158,11,0.05);
+}
 .record-tool__dot {
   width: 8px;
   height: 8px;
@@ -160,6 +167,7 @@ class RecordTool {
     recordingController.on('start', this._onControllerChange)
     recordingController.on('stop', this._onControllerChange)
     recordingController.on('error', this._onControllerChange)
+    recordingController.on('pending-change', this._onControllerChange)
     return wrapper
   }
 
@@ -167,11 +175,13 @@ class RecordTool {
     recordingController.off('start', this._onControllerChange)
     recordingController.off('stop', this._onControllerChange)
     recordingController.off('error', this._onControllerChange)
+    recordingController.off('pending-change', this._onControllerChange)
   }
 
   _onControllerChange() {
-    // data 一旦变成 recording/url 就不用再管了，交给 delete+insert 的重建流程
-    if (!this._element || this.data.recording || this.data.url) return
+    // 有了 url 就是播放器，不用再管；"录音中"的块也要跟着刷新：录音停了但没存成功时，
+    // 它得从"录音中"变成"保存失败，录音还在右下角"，不能一直停在"录音中"
+    if (!this._element || this.data.url) return
     this._renderCurrentState(this._element)
   }
 
@@ -242,8 +252,15 @@ class RecordTool {
     const el = document.createElement('div')
     el.classList.add('record-tool__placeholder', 'record-tool__placeholder--recording')
 
+    const isPendingSave = this.block && recordingController.state.pendingBlockId === this.block.id
+
     if (isThisBlockRecording) {
       el.innerHTML = `<span class="record-tool__dot"></span><span>录音中，看右下角胶囊</span>`
+    } else if (isPendingSave) {
+      // 录完了但还没存成功（比如上传失败）：录音在右下角面板里，没丢。不给"移除"，免得误删
+      el.classList.remove('record-tool__placeholder--recording')
+      el.classList.add('record-tool__placeholder--pending')
+      el.innerHTML = `<span>录音还没保存成功，在右下角面板里，可以重试或下载到本地</span>`
     } else {
       // 全局并没有一段"正对着这个块"的录音在跑——多半是页面刷新过、或者上次录音
       // 中途出了意外（浏览器崩溃/关闭）没能正常收尾。留着一个转不动的"录音中"

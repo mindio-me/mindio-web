@@ -41,13 +41,33 @@ async function normalizeImageFile(file) {
 }
 
 /**
+ * 把上传失败换成用户看得懂的错误。413 有两种来源：后端自己的上限（JSON，带具体上限），
+ * 或者前面的 nginx（HTML 页面，请求根本没到后端）——后者只能提示去调 client_max_body_size。
+ */
+function describeUploadError(error, file) {
+  const status = error && error.response && error.response.status
+  const sizeMb = file && file.size ? (file.size / 1024 / 1024).toFixed(1) : '?'
+  const serverMessage = error && error.response && error.response.data && error.response.data.message
+  if (status === 413) {
+    const message = serverMessage
+      ? `文件 ${sizeMb} MB，${serverMessage}`
+      : `文件 ${sizeMb} MB，超过了服务器（nginx）允许的上传大小，请让管理员调大 client_max_body_size`
+    const wrapped = new Error(message)
+    wrapped.response = error.response
+    return wrapped
+  }
+  if (serverMessage && error instanceof Error) error.message = serverMessage
+  return error
+}
+
+/**
  * 上传服务 - 本地上传 / 网络链接上传 / 扫码会话上传
  */
 class UploadService extends ApiService {
   /**
    * 本地文件上传（自动区分图片/文件）
    */
-  async uploadLocal(file, model = 'note', pid = 0) {
+  async uploadLocal(file, model = 'note', pid = 0, { onProgress } = {}) {
     if (!file) throw new Error('请选择文件')
 
     const uploadFile = isImageFile(file) ? await normalizeImageFile(file) : file
@@ -58,10 +78,17 @@ class UploadService extends ApiService {
     formData.append('model', model)
     formData.append('pid', String(pid))
 
-    const response = await this.$axios.post(endpoint, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    return response.data
+    try {
+      const response = await this.$axios.post(endpoint, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: onProgress
+          ? (e) => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)) }
+          : undefined
+      })
+      return response.data
+    } catch (e) {
+      throw describeUploadError(e, uploadFile)
+    }
   }
 
   /**

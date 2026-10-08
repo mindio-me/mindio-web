@@ -41,11 +41,11 @@ async function saveNotePreservingFields(noteId, note, content, noteService) {
   })
 }
 
-export async function attachRecording({ target, blob, durationSeconds, noteId, uploadService, noteService, clipService }) {
+export async function attachRecording({ target, blob, durationSeconds, noteId, uploadService, noteService, clipService, onProgress }) {
   const file = blobToFile(blob)
 
   if (target === 'library') {
-    const uploadResult = await uploadService.uploadLocal(file, 'note', 0)
+    const uploadResult = await uploadService.uploadLocal(file, 'note', 0, { onProgress })
     const clip = await clipService.createClip({
       sourceType: 'AUDIO_RECORDING',
       sourceUrl: uploadResult.url,
@@ -57,7 +57,7 @@ export async function attachRecording({ target, blob, durationSeconds, noteId, u
   }
 
   if (target === 'new') {
-    const uploadResult = await uploadService.uploadLocal(file, 'note', 0)
+    const uploadResult = await uploadService.uploadLocal(file, 'note', 0, { onProgress })
     const block = { type: 'audioRecord', data: { url: uploadResult.url, duration: durationSeconds } }
     const note = await noteService.createNote({
       title: '未命名笔记',
@@ -78,7 +78,7 @@ export async function attachRecording({ target, blob, durationSeconds, noteId, u
     throw new Error('这篇笔记不是 EditorJS 格式，暂不支持插入录音块，请选择"新建笔记"')
   }
 
-  const uploadResult = await uploadService.uploadLocal(file, 'note', noteId || 0)
+  const uploadResult = await uploadService.uploadLocal(file, 'note', noteId || 0, { onProgress })
   const content = JSON.parse(note.content || `{"time":0,"blocks":[],"version":"${EDITORJS_VERSION}"}`)
   content.blocks = content.blocks || []
   content.blocks.push({ type: 'audioRecord', data: { url: uploadResult.url, duration: durationSeconds } })
