@@ -21,6 +21,9 @@ import com.entropybits.worknotes.spring_boot.service.RetrievedChunk;
 import com.entropybits.worknotes.spring_boot.service.TopicBlockService;
 import com.entropybits.worknotes.spring_boot.service.MediaBlockService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -83,6 +86,18 @@ public class InternalAgentController {
     @GetMapping("/notes/{noteId}/blocks/{blockId}/content")
     public Map<String, Object> blockContent(@PathVariable Long noteId, @PathVariable String blockId) {
         return mediaBlockService.getBlockFile(noteId, blockId);
+    }
+
+    /** 音频原始字节（整段或第 segment 段）。长录音转写用，体积可能上百 MB，不能像图片那样塞进 JSON */
+    @GetMapping("/notes/{noteId}/blocks/{blockId}/audio")
+    public ResponseEntity<Resource> blockAudio(
+            @PathVariable Long noteId,
+            @PathVariable String blockId,
+            @RequestParam(required = false) Integer segment) {
+        MediaBlockService.AudioFile audio = mediaBlockService.resolveAudioFile(noteId, blockId, segment);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(audio.mimeType()))
+                .body(new FileSystemResource(audio.path()));
     }
 
     @PatchMapping("/notes/{noteId}/blocks/{blockId}")

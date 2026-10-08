@@ -183,6 +183,34 @@ async def test_get_block_media_wraps_http_errors(test_settings):
         await client.get_block_media(9, "missing")
 
 
+async def test_get_block_audio_returns_raw_bytes_for_whole_file(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/internal/notes/9/blocks/r1/audio"
+        assert "segment" not in request.url.params
+        return httpx.Response(200, content=b"RAW-webm-bytes", headers={"Content-Type": "audio/webm"})
+
+    client = _client_with_transport(test_settings, handler)
+    assert await client.get_block_audio(9, "r1") == b"RAW-webm-bytes"
+
+
+async def test_get_block_audio_requests_one_segment(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["segment"] == "2"
+        return httpx.Response(200, content=b"seg2")
+
+    client = _client_with_transport(test_settings, handler)
+    assert await client.get_block_audio(9, "r1", segment=2) == b"seg2"
+
+
+async def test_get_block_audio_wraps_http_errors(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": "not found"})
+
+    client = _client_with_transport(test_settings, handler)
+    with pytest.raises(JavaClientError):
+        await client.get_block_audio(9, "r1", segment=0)
+
+
 async def test_patch_media_block_sends_expected_request_and_parses_response(test_settings):
     captured = {}
 

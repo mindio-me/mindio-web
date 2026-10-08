@@ -96,6 +96,21 @@ class JavaClient:
                 f"get_block_media failed for note_id={note_id!r} block_id={block_id!r}: {e}"
             ) from e
 
+    async def get_block_audio(self, note_id: int, block_id: str, segment: int | None = None) -> bytes:
+        """音频块的原始字节：整段，或录音时切好的第 segment 段。长录音可能上百 MB，
+        所以不走 get_block_media 那种 base64 JSON，读超时也放宽。"""
+        params = {"segment": segment} if segment is not None else None
+        try:
+            resp = await self._client.get(
+                f"/internal/notes/{note_id}/blocks/{block_id}/audio", params=params, timeout=300.0,
+            )
+            resp.raise_for_status()
+            return resp.content
+        except httpx.HTTPError as e:
+            raise JavaClientError(
+                f"get_block_audio failed for note_id={note_id!r} block_id={block_id!r} segment={segment!r}: {e}"
+            ) from e
+
     async def patch_media_block(self, note_id: int, block_id: str, fields: dict) -> dict:
         try:
             resp = await self._client.patch(

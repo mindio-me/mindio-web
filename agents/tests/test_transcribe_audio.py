@@ -5,6 +5,8 @@
 Copyright (c) 2026 Fasong Wu
 SPDX-License-Identifier: AGPL-3.0-only
 """
+import base64
+
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
@@ -15,16 +17,20 @@ from tools.transcribe_audio import make_transcribe_audio_tool
 
 
 class FakeJavaClient:
-    def __init__(self, media_blocks=None, media=None):
+    def __init__(self, media_blocks=None, audio=b"abc"):
         self.media_blocks = media_blocks or []
-        self.media = media or {"mimeType": "audio/mpeg", "base64Data": "abc"}
+        self.audio = audio
+        self.audio_requests: list[tuple] = []
         self.patched: list[tuple] = []
 
     async def list_media_blocks(self, note_id):
         return self.media_blocks
 
-    async def get_block_media(self, note_id, block_id):
-        return self.media
+    async def get_block_audio(self, note_id, block_id, segment=None):
+        self.audio_requests.append((note_id, block_id, segment))
+        if segment is None:
+            return self.audio
+        return f"segment-{segment}".encode()
 
     async def patch_media_block(self, note_id, block_id, fields):
         self.patched.append((note_id, block_id, fields))
@@ -40,6 +46,20 @@ class FakeAsrClient:
         if self._error:
             raise self._error
         return self._text
+
+
+class EchoSegmentAsrClient:
+    """把收到的分段字节原样当成识别结果，方便断言顺序；failing 里的分段抛错"""
+    def __init__(self, failing=()):
+        self.failing = set(failing)
+        self.calls: list[str] = []
+
+    async def transcribe(self, audio_base64: str) -> str:
+        name = base64.b64decode(audio_base64).decode()
+        self.calls.append(name)
+        if name in self.failing:
+            raise AsrClientError("超时")
+        return f"<{name}>"
 
 
 class FakeSummaryModel:
@@ -193,3 +213,63 @@ async def test_transcribe_audio_silent_audio_returns_message_without_writing():
     tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
     assert "静音" in tool_messages[0].content
     assert java.patched == []
+
+
+def _run_transcribe(java, asr, monkeypatch, summary="摘要"):
+    import tools.transcribe_audio as transcribe_audio_route
+    monkeypatch.setattr(transcribe_audio_route, "resolve_chat_model", lambda provider: FakeSummaryModel(summary))
+    tool_ = make_transcribe_audio_tool(java, asr)
+    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
+    model = FakeMessagesListChatModel(responses=[tool_call_msg, AIMessage(content="好了")])
+    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
+    return graph.ainvoke(_agent_input("转录一下", current_note_id=9), config=_run_config())
+
+
+async def test_transcribe_audio_segmented_recording_transcribes_each_segment_in_order(monkeypatch):
+    java = FakeJavaClient(media_blocks=[{"blockId": "r1", "blockType": "audioRecord", "url": "a.webm", "segmentCount": 3}])
+    asr = EchoSegmentAsrClient()
+
+    await _run_transcribe(java, asr, monkeypatch)
+
+    # 有分段就只取分段，不取整段文件
+    assert java.audio_requests == [(9, "r1", 0), (9, "r1", 1), (9, "r1", 2)]
+    assert java.patched[0][2]["transcript"] == "<segment-0>\n\n<segment-1>\n\n<segment-2>"
+
+
+async def test_transcribe_audio_failed_segment_is_marked_and_others_are_kept(monkeypatch):
+    java = FakeJavaClient(media_blocks=[{"blockId": "r1", "blockType": "audioRecord", "url": "a.webm", "segmentCount": 3}])
+    asr = EchoSegmentAsrClient(failing={"segment-1"})
+
+    result = await _run_transcribe(java, asr, monkeypatch)
+
+    transcript = java.patched[0][2]["transcript"]
+    assert transcript.startswith("<segment-0>")
+    assert "[第 2 段转写失败" in transcript
+    assert transcript.endswith("<segment-2>")
+    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
+    assert "第 2 段" in tool_messages[0].content
+
+
+async def test_transcribe_audio_all_segments_failing_writes_nothing(monkeypatch):
+    java = FakeJavaClient(media_blocks=[{"blockId": "r1", "blockType": "audioRecord", "url": "a.webm", "segmentCount": 2}])
+    asr = EchoSegmentAsrClient(failing={"segment-0", "segment-1"})
+
+    result = await _run_transcribe(java, asr, monkeypatch)
+
+    assert java.patched == []
+    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
+    assert "语音识别失败" in tool_messages[0].content
+
+
+async def test_transcribe_audio_rejects_unsegmented_audio_over_the_asr_limit(monkeypatch):
+    import tools.transcribe_audio as transcribe_audio_route
+    monkeypatch.setattr(transcribe_audio_route, "ASR_MAX_BYTES", 10)
+    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "audio", "url": "a.mp3"}], audio=b"x" * 11)
+    asr = EchoSegmentAsrClient()
+
+    result = await _run_transcribe(java, asr, monkeypatch)
+
+    assert asr.calls == []
+    assert java.patched == []
+    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
+    assert "100MB" in tool_messages[0].content

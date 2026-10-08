@@ -70,6 +70,10 @@ public class MediaBlockService {
                     entry.put(field, data.get(field).asText());
                 }
             }
+            // 长录音录制时同时按 30 分钟切了段（专供转写），agent 据此逐段取文件
+            if (data.path("segments").isArray() && !data.get("segments").isEmpty()) {
+                entry.put("segmentCount", data.get("segments").size());
+            }
             result.add(entry);
         }
         return result;
@@ -99,6 +103,36 @@ public class MediaBlockService {
         } catch (IOException e) {
             throw new RuntimeException("读取文件失败: " + e.getMessage(), e);
         }
+    }
+
+    /** 音频块的原始文件（整段，或者录音时切好的某一段），供 agent 转写时直接取字节，不走 base64 */
+    public record AudioFile(Path path, String mimeType) {}
+
+    public AudioFile resolveAudioFile(Long noteId, String blockId, Integer segment) {
+        JsonNode block = findBlockOrThrow(loadBlocks(noteId), blockId);
+        String type = block.path("type").asText();
+        if (!"audio".equals(type) && !"audioRecord".equals(type)) {
+            throw new BadRequestException("这个块不是音频: " + type);
+        }
+        JsonNode data = block.path("data");
+        String url;
+        if (segment == null) {
+            url = resolveUrl(data);
+        } else {
+            JsonNode segments = data.path("segments");
+            if (!segments.isArray() || segment < 0 || segment >= segments.size()) {
+                throw new BadRequestException("没有第 " + segment + " 段");
+            }
+            url = segments.get(segment).path("url").asText("");
+        }
+        if (url.isBlank()) {
+            throw new BadRequestException("这个块还没有上传文件");
+        }
+        Path filePath = resolveLocalFilePath(url);
+        if (!Files.exists(filePath)) {
+            throw new ResourceNotFoundException("文件不存在: " + url);
+        }
+        return new AudioFile(filePath, guessMimeType(filePath.getFileName().toString()));
     }
 
     public Map<String, Object> patchBlock(Long noteId, String blockId, Map<String, Object> fields) {

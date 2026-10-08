@@ -164,6 +164,86 @@ class MediaBlockServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
+    private Path writeUpload(String relative, String content) throws Exception {
+        Path file = tempDir.resolve(relative);
+        Files.createDirectories(file.getParent());
+        Files.write(file, content.getBytes());
+        return file;
+    }
+
+    private static final String SEGMENTED_RECORDING = "[{\"id\":\"r1\",\"type\":\"audioRecord\",\"data\":{"
+            + "\"url\":\"/api/uploads/public/note/full.webm\",\"duration\":3700,"
+            + "\"segments\":["
+            + "{\"url\":\"/api/uploads/public/note/seg0.webm\",\"start\":0,\"duration\":1803},"
+            + "{\"url\":\"/api/uploads/public/note/seg1.webm\",\"start\":1800,\"duration\":1900}"
+            + "]}}]";
+
+    @Test
+    void listMediaBlocks_reportsSegmentCountForSegmentedRecording() {
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(noteWithBlocks(SEGMENTED_RECORDING)));
+
+        List<Map<String, Object>> result = service.listMediaBlocks(1L);
+
+        assertThat(result.get(0)).containsEntry("segmentCount", 2);
+    }
+
+    @Test
+    void resolveAudioFile_returnsWholeRecordingWhenNoSegmentRequested() throws Exception {
+        Path full = writeUpload("public/note/full.webm", "full");
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(noteWithBlocks(SEGMENTED_RECORDING)));
+
+        MediaBlockService.AudioFile audio = service.resolveAudioFile(1L, "r1", null);
+
+        assertThat(audio.path()).isEqualTo(full.toAbsolutePath().normalize());
+        assertThat(audio.mimeType()).isEqualTo("audio/webm");
+    }
+
+    @Test
+    void resolveAudioFile_returnsRequestedSegment() throws Exception {
+        Path seg1 = writeUpload("public/note/seg1.webm", "second");
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(noteWithBlocks(SEGMENTED_RECORDING)));
+
+        MediaBlockService.AudioFile audio = service.resolveAudioFile(1L, "r1", 1);
+
+        assertThat(audio.path()).isEqualTo(seg1.toAbsolutePath().normalize());
+    }
+
+    @Test
+    void resolveAudioFile_rejectsSegmentIndexOutOfRange() {
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(noteWithBlocks(SEGMENTED_RECORDING)));
+
+        assertThatThrownBy(() -> service.resolveAudioFile(1L, "r1", 2))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void resolveAudioFile_rejectsNonAudioBlock() {
+        Note note = noteWithBlocks("[{\"id\":\"b1\",\"type\":\"image\",\"data\":{\"url\":\"/api/uploads/a.png\"}}]");
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(note));
+
+        assertThatThrownBy(() -> service.resolveAudioFile(1L, "b1", null))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void resolveAudioFile_rejectsPathTraversalInSegmentUrl() {
+        Note note = noteWithBlocks("[{\"id\":\"r1\",\"type\":\"audioRecord\",\"data\":{\"url\":\"/api/uploads/a.webm\","
+                + "\"segments\":[{\"url\":\"/api/uploads/../../../etc/passwd\",\"start\":0,\"duration\":10}]}}]");
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(note));
+
+        assertThatThrownBy(() -> service.resolveAudioFile(1L, "r1", 0))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("非法的文件路径");
+    }
+
+    @Test
+    void resolveAudioFile_throwsWhenFileMissingOnDisk() {
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(noteWithBlocks(SEGMENTED_RECORDING)));
+
+        assertThatThrownBy(() -> service.resolveAudioFile(1L, "r1", null))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
     @Test
     void patchBlock_writesCaptionOntoImageBlockAndReturnsFullData() {
         Note note = noteWithBlocks("[{\"id\":\"b1\",\"type\":\"image\","

@@ -8,6 +8,7 @@ block的transcript+summary字段。同analyze_image，不走interrupt()确认卡
 """
 from __future__ import annotations
 
+import base64
 from typing import Annotated
 
 from langchain_core.messages import HumanMessage
@@ -22,6 +23,8 @@ from app.models import resolve_chat_model
 from app.state import AgentState
 
 AUDIO_BLOCK_TYPES = ("audio", "audioRecord")
+# 火山极速版单次上限：文件 100MB、时长 2 小时（录音按 30 分钟分段，远低于这两个数）
+ASR_MAX_BYTES = 100 * 1024 * 1024
 SUMMARY_PROMPT_PREFIX = (
     "下面是一段语音的转录文字，请整理成简洁的摘要和要点列表（用短句或要点符号），"
     "只输出摘要本身，不要加解释或前后缀：\n\n"
@@ -59,17 +62,41 @@ def make_transcribe_audio_tool(
         else:
             return f"这篇笔记里有{len(audios)}段音频，请告诉我具体是第几段（从上到下数，从1开始）。"
 
-        try:
-            media = await java_client.get_block_media(note_id, target["blockId"])
-        except JavaClientError as e:
-            return f"读取音频文件失败：{e}"
-
-        try:
-            transcript = await asr_client.transcribe(media["base64Data"])
-        except AsrClientError as e:
-            return f"语音识别失败：{e}"
-        if not transcript:
-            return "这段音频没有识别出内容（可能是静音）。"
+        segment_count = int(target.get("segmentCount") or 0)
+        failed_segments: list[int] = []
+        if segment_count:
+            # 长录音录制时已按 30 分钟切好段：逐段识别再按顺序拼起来，某一段失败不连累其他段
+            parts: list[str] = []
+            for i in range(segment_count):
+                try:
+                    audio = await java_client.get_block_audio(note_id, target["blockId"], segment=i)
+                    if len(audio) > ASR_MAX_BYTES:
+                        raise AsrClientError("这一段超过 100MB")
+                    parts.append(await asr_client.transcribe(base64.b64encode(audio).decode()))
+                except (JavaClientError, AsrClientError) as e:
+                    failed_segments.append(i + 1)
+                    parts.append(f"[第 {i + 1} 段转写失败：{e}]")
+            if len(failed_segments) == segment_count:
+                return f"语音识别失败：{segment_count} 段全部失败（{parts[0]}）"
+            transcript = "\n\n".join(p for p in parts if p)
+            if all(not p for p in parts):
+                return "这段音频没有识别出内容（可能是静音）。"
+        else:
+            try:
+                audio = await java_client.get_block_audio(note_id, target["blockId"])
+            except JavaClientError as e:
+                return f"读取音频文件失败：{e}"
+            if len(audio) > ASR_MAX_BYTES:
+                return (
+                    "这段音频超过 100MB，语音识别一次处理不了。"
+                    "在 mindio 里录的长录音会自动分段、不受这个限制；上传的长音频暂不支持转写。"
+                )
+            try:
+                transcript = await asr_client.transcribe(base64.b64encode(audio).decode())
+            except AsrClientError as e:
+                return f"语音识别失败：{e}"
+            if not transcript:
+                return "这段音频没有识别出内容（可能是静音）。"
 
         model = resolve_chat_model(current_settings().default_provider)
         # 摘要失败不能连累已经花钱做完的转录：退回截断的逐字稿当摘要，保证 transcript 写得进去
@@ -92,6 +119,9 @@ def make_transcribe_audio_tool(
                 "blockType": target["blockType"], "data": updated_data,
             })
 
+        if failed_segments:
+            failed = "、".join(f"第 {n} 段" for n in failed_segments)
+            return f"已完成转录并生成摘要，写入笔记，但{failed}转写失败（逐字稿里已标出），可以稍后再试。摘要：{summary}"
         return f"已完成转录并生成摘要，写入笔记。摘要：{summary}"
 
     return transcribe_audio
