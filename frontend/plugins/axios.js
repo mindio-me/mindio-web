@@ -3,7 +3,16 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { Message } from 'element-ui'
+
+// 插件上下文里的 app 是根组件的选项对象，不是 Vue 实例，上面没有 $message——
+// 以前写成 app.$message.error 会在拦截器里抛 TypeError，把原本的请求错误整个换掉
 export default function ({ $axios, redirect, app }) {
+  // Message 要操作 DOM，服务端渲染时发出的请求出错不弹
+  const toastError = (text) => {
+    if (process.client) Message.error(text)
+  }
+
   // 请求拦截器
   $axios.onRequest((config) => {
     // 添加 JWT token 到请求头
@@ -46,17 +55,20 @@ export default function ({ $axios, redirect, app }) {
         // 这样它会把当前路径记进 storage，登录成功后才能跳回来
         app.$auth.logout()
         app.$auth.redirect('login')
-        app.$message.error('登录已过期，请重新登录')
+        toastError('登录已过期，请重新登录')
       }
     } else if (code !== 401 && !suppressToast) {
       if (code === 403) {
-        app.$message.error('无权限访问')
+        toastError('无权限访问')
       } else if (code === 404) {
-        app.$message.error('资源不存在')
+        toastError('资源不存在')
+      } else if (code === 413) {
+        // nginx 拦下的 413 返回的是 HTML 页面，没有 message 字段
+        toastError(error.response?.data?.message || '文件太大，超过服务器上传上限')
       } else if (code === 500) {
-        app.$message.error('服务器错误')
+        toastError('服务器错误')
       } else {
-        app.$message.error(message)
+        toastError(message)
       }
     }
 
