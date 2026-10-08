@@ -21,7 +21,8 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from app.checkpointer import JavaBackedCheckpointer
-from app.config import settings
+from app.config import use_settings
+from app.effective_settings import load_effective_settings
 from app.graph import RECURSION_LIMIT, build_default_graph_builder
 from app.java_client import JavaClient
 from app.multimodal import build_human_message
@@ -133,10 +134,17 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
     block_updates: list[dict] = []
     media_block_updates: list[dict] = []
     project_field_updates: list[dict] = []
+    settings_token = None
     try:
         await checkpointer.hydrate()
+        cfg = await load_effective_settings(java_client)
+        settings_token = use_settings(cfg)
+        provider_cfg = cfg.providers.get(cfg.default_provider)
+        if provider_cfg is None or not provider_cfg.api_key:
+            yield _event("error", content="请到 设置 → AI 服务 填写 API Key")
+            return
         graph_builder, _tools = build_default_graph_builder(
-            java_client, settings.default_provider,
+            java_client, cfg.default_provider,
             citations_sink=citations, block_update_sink=block_updates,
             media_block_update_sink=media_block_updates,
             project_field_update_sink=project_field_updates,
@@ -187,7 +195,7 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
             cleanup_rounds += 1
 
         attachments = [a.model_dump() for a in request.attachments] if request.attachments else None
-        human_message = build_human_message(request.content, attachments, settings.default_provider)
+        human_message = build_human_message(request.content, attachments, cfg.default_provider)
 
         input_state = {
             "messages": [human_message],
@@ -214,6 +222,12 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
             # 冻结在坏状态里，排查花了很久才追到根上。至少要留一条日志能看见。
             logger.exception("flush checkpointer state failed for conversation_id=%r", request.conversationId)
         await java_client.aclose()
+        if settings_token is not None:
+            try:
+                settings_token.var.reset(settings_token)
+            except ValueError:
+                # 流式响应若跨 Context 迭代，reset 会报错；请求结束后这个值本来也随任务丢弃
+                pass
 
 
 async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
@@ -223,10 +237,17 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
     block_updates: list[dict] = []
     media_block_updates: list[dict] = []
     project_field_updates: list[dict] = []
+    settings_token = None
     try:
         await checkpointer.hydrate()
+        cfg = await load_effective_settings(java_client)
+        settings_token = use_settings(cfg)
+        provider_cfg = cfg.providers.get(cfg.default_provider)
+        if provider_cfg is None or not provider_cfg.api_key:
+            yield _event("error", content="请到 设置 → AI 服务 填写 API Key")
+            return
         graph_builder, _tools = build_default_graph_builder(
-            java_client, settings.default_provider,
+            java_client, cfg.default_provider,
             citations_sink=citations, block_update_sink=block_updates,
             media_block_update_sink=media_block_updates,
             project_field_update_sink=project_field_updates,
@@ -259,6 +280,12 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
             # 冻结在坏状态里，排查花了很久才追到根上。至少要留一条日志能看见。
             logger.exception("flush checkpointer state failed for conversation_id=%r", request.conversationId)
         await java_client.aclose()
+        if settings_token is not None:
+            try:
+                settings_token.var.reset(settings_token)
+            except ValueError:
+                # 流式响应若跨 Context 迭代，reset 会报错；请求结束后这个值本来也随任务丢弃
+                pass
 
 
 @router.post("/internal/chat/stream")

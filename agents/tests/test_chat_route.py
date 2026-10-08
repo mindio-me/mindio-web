@@ -1,6 +1,7 @@
 # Copyright (c) 2026 Fasong Wu
 # SPDX-License-Identifier: AGPL-3.0-only
 
+import dataclasses
 import json
 
 import pytest
@@ -468,3 +469,20 @@ class FakeVisionModel:
 
     async def ainvoke(self, messages):
         return AIMessage(content=self._content)
+
+
+async def test_missing_api_key_yields_a_settings_hint_instead_of_calling_the_model(monkeypatch, fake_java_client, test_settings):
+    no_key = dataclasses.replace(test_settings, providers={
+        **test_settings.providers,
+        "anthropic": dataclasses.replace(test_settings.providers["anthropic"], api_key=""),
+    })
+
+    async def fake_load(java_client, base=None):
+        return no_key
+
+    monkeypatch.setattr(chat_route, "load_effective_settings", fake_load)
+    _patch_graph(monkeypatch, GenericFakeChatModel(messages=iter([AIMessage(content="不应该被调用")])), [dummy_tool])
+
+    events = await _collect_events(ChatStreamRequest(username="alice", content="hi", conversationId="alice"))
+
+    assert events == [{"type": "error", "content": "请到 设置 → AI 服务 填写 API Key"}]

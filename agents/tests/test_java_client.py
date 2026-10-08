@@ -259,3 +259,19 @@ async def test_patch_project_field_wraps_http_errors(test_settings):
     client = _client_with_transport(test_settings, handler)
     with pytest.raises(JavaClientError):
         await client.patch_project_field(9, "projectUrl", "x")
+
+
+async def test_get_ai_config_calls_internal_endpoint(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "http://java.internal.test/internal/ai-config"
+        assert request.headers["x-internal-token"] == "test-token"
+        return httpx.Response(200, json={"defaultProvider": "doubao"})
+
+    client = _client_with_transport(test_settings, handler)
+    assert await client.get_ai_config() == {"defaultProvider": "doubao"}
+
+
+async def test_get_ai_config_wraps_http_errors(test_settings):
+    client = _client_with_transport(test_settings, lambda request: httpx.Response(500))
+    with pytest.raises(JavaClientError):
+        await client.get_ai_config()

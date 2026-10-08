@@ -11,7 +11,9 @@ from fastapi import APIRouter
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from app.config import settings
+from app.config import use_settings
+from app.effective_settings import load_effective_settings
+from app.java_client import JavaClient
 from app.message_content import extract_text_content
 from app.models import resolve_chat_model
 
@@ -34,7 +36,13 @@ class VisionExtractResponse(BaseModel):
 
 @router.post("/internal/vision-extract")
 async def vision_extract(request: VisionExtractRequest) -> VisionExtractResponse:
-    model = resolve_chat_model(settings.default_provider)
+    java_client = JavaClient()
+    try:
+        cfg = await load_effective_settings(java_client)
+    finally:
+        await java_client.aclose()
+    use_settings(cfg)
+    model = resolve_chat_model(cfg.default_provider)
     message = HumanMessage(content=[
         {"type": "text", "text": request.prompt or DEFAULT_PROMPT},
         {"type": "image_url", "image_url": {"url": request.imageDataUri}},

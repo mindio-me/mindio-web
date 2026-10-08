@@ -13,7 +13,7 @@ import uuid
 
 import httpx
 
-from app.config import Settings, settings as default_settings
+from app.config import Settings, current_settings
 
 VOLCENGINE_ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
 SUCCESS_STATUS_CODE = "20000000"
@@ -24,29 +24,30 @@ class AsrClientError(Exception):
 
 
 class VolcengineAsrClient:
-    def __init__(self, cfg: Settings = default_settings, client: httpx.AsyncClient | None = None):
+    def __init__(self, cfg: Settings | None = None, client: httpx.AsyncClient | None = None):
         self._cfg = cfg
         self._client = client or httpx.AsyncClient(timeout=180.0)
 
     async def transcribe(self, audio_base64: str) -> str:
+        cfg = self._cfg or current_settings()
         # 新版"豆包语音"控制台签发的是单个 API Key，只认 X-Api-Key 这一个头；
         # 老控制台是 App ID + Access Token 两个头。两种鉴权模式互斥，混着发会
         # 导致服务端按老模式去查grant、查不到（“load grant: requested grant not
         # found”），跟key本身对不对无关。用 access_key 是否留空来区分走哪条。
-        if self._cfg.volcengine_asr_access_key:
+        if cfg.volcengine_asr_access_key:
             headers = {
-                "X-Api-App-Key": self._cfg.volcengine_asr_app_key,
-                "X-Api-Access-Key": self._cfg.volcengine_asr_access_key,
+                "X-Api-App-Key": cfg.volcengine_asr_app_key,
+                "X-Api-Access-Key": cfg.volcengine_asr_access_key,
             }
         else:
-            headers = {"X-Api-Key": self._cfg.volcengine_asr_app_key}
+            headers = {"X-Api-Key": cfg.volcengine_asr_app_key}
         headers.update({
             "X-Api-Resource-Id": "volc.bigasr.auc_turbo",
             "X-Api-Request-Id": str(uuid.uuid4()),
             "X-Api-Sequence": "-1",
         })
         body = {
-            "user": {"uid": self._cfg.volcengine_asr_app_key},
+            "user": {"uid": cfg.volcengine_asr_app_key},
             "audio": {"data": audio_base64},
             "request": {"model_name": "bigmodel", "enable_itn": True, "enable_punc": True},
         }

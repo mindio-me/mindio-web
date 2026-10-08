@@ -22,3 +22,15 @@ def test_settings() -> Settings:
         volcengine_asr_app_key="asr-app-key",
         volcengine_asr_access_key="asr-access-key",
     )
+
+
+@pytest.fixture(autouse=True)
+def _no_backend_ai_config(monkeypatch, test_settings):
+    import app.routes.chat as chat_route
+    import app.routes.vision as vision_route
+
+    async def fake_load(java_client, base=None):
+        return test_settings
+
+    monkeypatch.setattr(chat_route, "load_effective_settings", fake_load)
+    monkeypatch.setattr(vision_route, "load_effective_settings", fake_load)

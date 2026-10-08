@@ -15,7 +15,7 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from app.asr_client import AsrClientError, VolcengineAsrClient
-from app.config import settings
+from app.config import current_settings
 from app.java_client import JavaClient, JavaClientError
 from app.message_content import extract_text_content
 from app.models import resolve_chat_model
@@ -71,7 +71,7 @@ def make_transcribe_audio_tool(
         if not transcript:
             return "这段音频没有识别出内容（可能是静音）。"
 
-        model = resolve_chat_model(settings.default_provider)
+        model = resolve_chat_model(current_settings().default_provider)
         # 摘要失败不能连累已经花钱做完的转录：退回截断的逐字稿当摘要，保证 transcript 写得进去
         try:
             summary_response = await model.ainvoke([HumanMessage(SUMMARY_PROMPT_PREFIX + transcript)])

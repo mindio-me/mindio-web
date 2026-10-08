@@ -16,12 +16,13 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
-from app.config import Settings, settings as default_settings
+from app.config import Settings, current_settings
 
 DEFAULT_MAX_TOKENS = 4096
 
 
-def resolve_chat_model(provider: str, cfg: Settings = default_settings) -> BaseChatModel:
+def resolve_chat_model(provider: str, cfg: Settings | None = None) -> BaseChatModel:
+    cfg = cfg or current_settings()
     provider_cfg = cfg.providers[provider]
     if provider == "anthropic":
         return ChatAnthropic(

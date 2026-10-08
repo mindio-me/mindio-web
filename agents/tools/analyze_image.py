@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
-from app.config import settings
+from app.config import current_settings
 from app.java_client import JavaClient, JavaClientError
 from app.message_content import extract_text_content
 from app.models import resolve_chat_model
@@ -60,7 +60,7 @@ def make_analyze_image_tool(java_client: JavaClient, media_block_updates: list |
             return f"读取图片文件失败：{e}"
 
         data_uri = f"data:{media['mimeType']};base64,{media['base64Data']}"
-        model = resolve_chat_model(settings.default_provider)
+        model = resolve_chat_model(current_settings().default_provider)
         message = HumanMessage(content=[
             {"type": "text", "text": CAPTION_PROMPT},
             {"type": "image_url", "image_url": {"url": data_uri}},

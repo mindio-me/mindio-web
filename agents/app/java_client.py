@@ -109,6 +109,14 @@ class JavaClient:
                 f"patch_media_block failed for note_id={note_id!r} block_id={block_id!r}: {e}"
             ) from e
 
+    async def get_ai_config(self) -> dict:
+        try:
+            resp = await self._client.get("/internal/ai-config")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"get_ai_config failed: {e}") from e
+
     async def get_state(self, conversation_id: str) -> str | None:
         try:
             resp = await self._client.get(f"/internal/agent-state/{conversation_id}")
