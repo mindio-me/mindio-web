@@ -6,6 +6,8 @@
 package com.entropybits.worknotes.spring_boot.ai.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingKeys;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * 通用 OpenAI Chat Completions 兼容实现。
@@ -28,17 +31,17 @@ import java.util.Map;
 @Slf4j
 public class OpenAiCompatibleTranslationService implements AiTranslationService {
 
-    private final AiProperties.ProviderConfig config;
+    private final Supplier<AiProperties.ProviderConfig> configSupplier;
     private final String providerName;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(15))
         .build();
 
-    public OpenAiCompatibleTranslationService(AiProperties.ProviderConfig config,
+    public OpenAiCompatibleTranslationService(Supplier<AiProperties.ProviderConfig> configSupplier,
                                                String providerName,
                                                ObjectMapper objectMapper) {
-        this.config = config;
+        this.configSupplier = configSupplier;
         this.providerName = providerName;
         this.objectMapper = objectMapper;
     }
@@ -251,6 +254,10 @@ public class OpenAiCompatibleTranslationService implements AiTranslationService 
     }
 
     private String callApi(String prompt) throws Exception {
+        AiProperties.ProviderConfig config = configSupplier.get();
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            throw new BadRequestException(AiSettingKeys.MISSING_API_KEY_MESSAGE);
+        }
         String url = config.getBaseUrl() + config.getChatPath();
 
         Map<String, Object> body = Map.of(

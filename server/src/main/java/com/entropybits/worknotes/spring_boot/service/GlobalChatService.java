@@ -4,7 +4,7 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
-import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.config.AiConfigSource;
 import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
 import com.entropybits.worknotes.spring_boot.dto.AttachmentPayload;
 import com.entropybits.worknotes.spring_boot.dto.ChatAttachmentRef;
@@ -57,7 +57,7 @@ public class GlobalChatService {
     private final AgentServiceClient agentServiceClient;
     private final LocalFileExtractionService extractionService;
     private final ObjectMapper objectMapper;
-    private final AiProperties aiProperties;
+    private final AiConfigSource aiConfigSource;
     private final AiTranslationService anthropicService;
     private final AiTranslationService openAiService;
     private final AiTranslationService deepseekService;
@@ -74,7 +74,7 @@ public class GlobalChatService {
                               AgentServiceClient agentServiceClient,
                               LocalFileExtractionService extractionService,
                               ObjectMapper objectMapper,
-                              AiProperties aiProperties,
+                              AiConfigSource aiConfigSource,
                               @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
                               @Qualifier("openAiTranslationService") AiTranslationService openAiService,
                               @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
@@ -90,7 +90,7 @@ public class GlobalChatService {
         this.agentServiceClient = agentServiceClient;
         this.extractionService = extractionService;
         this.objectMapper = objectMapper;
-        this.aiProperties = aiProperties;
+        this.aiConfigSource = aiConfigSource;
         this.anthropicService = anthropicService;
         this.openAiService = openAiService;
         this.deepseekService = deepseekService;
@@ -373,7 +373,7 @@ public class GlobalChatService {
     }
 
     private AiTranslationService resolveService() {
-        return switch (aiProperties.getProvider().toLowerCase()) {
+        return switch (aiConfigSource.current().getProvider().toLowerCase()) {
             case "openai" -> openAiService;
             case "deepseek" -> deepseekService;
             case "doubao" -> doubaoService;

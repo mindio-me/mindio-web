@@ -5,7 +5,7 @@
 
 package com.entropybits.worknotes.spring_boot.ai.service;
 
-import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.config.AiConfigSource;
 import com.entropybits.worknotes.spring_boot.ai.dto.TranslationRequest;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.integration.wechat.EditorJsToHtmlConverter;
@@ -26,7 +26,7 @@ import java.util.List;
 @Service
 public class NoteTranslationOrchestrator {
 
-    private final AiProperties aiProperties;
+    private final AiConfigSource aiConfigSource;
     private final AiTranslationService anthropicService;
     private final AiTranslationService openAiService;
     private final AiTranslationService deepseekService;
@@ -36,7 +36,7 @@ public class NoteTranslationOrchestrator {
     private final EditorJsToHtmlConverter editorJsConverter;
 
     public NoteTranslationOrchestrator(
-            AiProperties aiProperties,
+            AiConfigSource aiConfigSource,
             @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
             @Qualifier("openAiTranslationService") AiTranslationService openAiService,
             @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
@@ -44,7 +44,7 @@ public class NoteTranslationOrchestrator {
             NoteRepository noteRepository,
             ObjectMapper objectMapper,
             EditorJsToHtmlConverter editorJsConverter) {
-        this.aiProperties = aiProperties;
+        this.aiConfigSource = aiConfigSource;
         this.anthropicService = anthropicService;
         this.openAiService = openAiService;
         this.deepseekService = deepseekService;
@@ -391,7 +391,7 @@ public class NoteTranslationOrchestrator {
     // ── helpers ─────────────────────────────────────────────────────────────────
 
     private AiTranslationService resolveService() {
-        return switch (aiProperties.getProvider().toLowerCase()) {
+        return switch (aiConfigSource.current().getProvider().toLowerCase()) {
             case "openai"    -> openAiService;
             case "deepseek"  -> deepseekService;
             case "doubao"    -> doubaoService;

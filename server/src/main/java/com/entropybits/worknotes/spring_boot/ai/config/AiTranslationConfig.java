@@ -15,17 +15,17 @@ import org.springframework.context.annotation.Configuration;
 public class AiTranslationConfig {
 
     @Bean("openAiTranslationService")
-    AiTranslationService openAiTranslationService(AiProperties props, ObjectMapper objectMapper) {
-        return new OpenAiCompatibleTranslationService(props.getOpenai(), "OpenAI", objectMapper);
+    AiTranslationService openAiTranslationService(AiConfigSource source, ObjectMapper objectMapper) {
+        return new OpenAiCompatibleTranslationService(() -> source.current().getOpenai(), "OpenAI", objectMapper);
     }
 
     @Bean("deepseekTranslationService")
-    AiTranslationService deepseekTranslationService(AiProperties props, ObjectMapper objectMapper) {
-        return new OpenAiCompatibleTranslationService(props.getDeepseek(), "DeepSeek", objectMapper);
+    AiTranslationService deepseekTranslationService(AiConfigSource source, ObjectMapper objectMapper) {
+        return new OpenAiCompatibleTranslationService(() -> source.current().getDeepseek(), "DeepSeek", objectMapper);
     }
 
     @Bean("doubaoTranslationService")
-    AiTranslationService doubaoTranslationService(AiProperties props, ObjectMapper objectMapper) {
-        return new OpenAiCompatibleTranslationService(props.getDoubao(), "Doubao", objectMapper);
+    AiTranslationService doubaoTranslationService(AiConfigSource source, ObjectMapper objectMapper) {
+        return new OpenAiCompatibleTranslationService(() -> source.current().getDoubao(), "Doubao", objectMapper);
     }
 }

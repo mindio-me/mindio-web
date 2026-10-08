@@ -62,7 +62,7 @@ class BookmarkAgentServiceTest {
 
     private void setUp() {
         service = new BookmarkAgentService(jobRepository, clipRepository, noteRepository, noteClipRefRepository,
-                userRepository, tagRepository, clipTagLinkRepository, aiProperties,
+                userRepository, tagRepository, clipTagLinkRepository, () -> aiProperties,
                 anthropicService, openAiService, deepseekService, doubaoService, contentIndexingService,
                 noteImageRefRepository, contentChunkRepository, embeddingService, objectMapper);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "self", service);

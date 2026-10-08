@@ -5,7 +5,10 @@
 
 package com.entropybits.worknotes.spring_boot.ai.service;
 
+import com.entropybits.worknotes.spring_boot.ai.config.AiConfigSource;
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingKeys;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +31,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AnthropicTranslationService implements AiTranslationService {
 
-    private final AiProperties aiProperties;
+    private final AiConfigSource aiConfigSource;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(15))
@@ -242,7 +245,10 @@ public class AnthropicTranslationService implements AiTranslationService {
     }
 
     private String callClaude(String prompt) throws Exception {
-        AiProperties.ProviderConfig cfg = aiProperties.getAnthropic();
+        AiProperties.ProviderConfig cfg = aiConfigSource.current().getAnthropic();
+        if (cfg.getApiKey() == null || cfg.getApiKey().isBlank()) {
+            throw new BadRequestException(AiSettingKeys.MISSING_API_KEY_MESSAGE);
+        }
         String url = cfg.getBaseUrl() + "/v1/messages";
 
         Map<String, Object> body = Map.of(

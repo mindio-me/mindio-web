@@ -5,7 +5,7 @@
 
 package com.entropybits.worknotes.spring_boot.service;
 
-import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.config.AiConfigSource;
 import com.entropybits.worknotes.spring_boot.ai.service.AiTranslationService;
 import com.entropybits.worknotes.spring_boot.ai.service.ClipContent;
 import com.entropybits.worknotes.spring_boot.ai.service.EmbeddingService;
@@ -46,7 +46,7 @@ public class BookmarkAgentService {
     private final UserRepository userRepository;
     private final TagRepository tagRepository;
     private final ClipTagLinkRepository clipTagLinkRepository;
-    private final AiProperties aiProperties;
+    private final AiConfigSource aiConfigSource;
     private final AiTranslationService anthropicService;
     private final AiTranslationService openAiService;
     private final AiTranslationService deepseekService;
@@ -71,7 +71,7 @@ public class BookmarkAgentService {
             UserRepository userRepository,
             TagRepository tagRepository,
             ClipTagLinkRepository clipTagLinkRepository,
-            AiProperties aiProperties,
+            AiConfigSource aiConfigSource,
             @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
             @Qualifier("openAiTranslationService") AiTranslationService openAiService,
             @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
@@ -88,7 +88,7 @@ public class BookmarkAgentService {
         this.userRepository = userRepository;
         this.tagRepository = tagRepository;
         this.clipTagLinkRepository = clipTagLinkRepository;
-        this.aiProperties = aiProperties;
+        this.aiConfigSource = aiConfigSource;
         this.anthropicService = anthropicService;
         this.openAiService = openAiService;
         this.deepseekService = deepseekService;
@@ -590,7 +590,7 @@ public class BookmarkAgentService {
     }
 
     private AiTranslationService resolveService() {
-        return switch (aiProperties.getProvider().toLowerCase()) {
+        return switch (aiConfigSource.current().getProvider().toLowerCase()) {
             case "openai" -> openAiService;
             case "deepseek" -> deepseekService;
             case "doubao" -> doubaoService;

@@ -6,6 +6,8 @@
 package com.entropybits.worknotes.spring_boot.ai.service;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingKeys;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -16,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AnthropicTranslationServiceTest {
 
@@ -23,6 +26,7 @@ class AnthropicTranslationServiceTest {
     private AnthropicTranslationService service;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private String lastRequestBody;
+    private AiProperties props;
 
     private void setUp(String modelReplyText) throws Exception {
         httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -37,12 +41,12 @@ class AnthropicTranslationServiceTest {
         });
         httpServer.start();
 
-        AiProperties props = new AiProperties();
+        props = new AiProperties();
         props.getAnthropic().setApiKey("test-key");
         props.getAnthropic().setModel("test-model");
         props.getAnthropic().setBaseUrl("http://127.0.0.1:" + httpServer.getAddress().getPort());
 
-        service = new AnthropicTranslationService(props, objectMapper);
+        service = new AnthropicTranslationService(() -> props, objectMapper);
     }
 
     @AfterEach
@@ -155,5 +159,14 @@ class AnthropicTranslationServiceTest {
         service.generateConversationTitle("用户的问题内容", "助手的回复内容");
 
         assertThat(lastRequestBody).contains("用户的问题内容").contains("助手的回复内容");
+    }
+
+    @Test
+    void translate_withoutApiKeyTellsTheUserWhereToConfigureIt() throws Exception {
+        setUp("[]");
+        props.getAnthropic().setApiKey("");
+        assertThatThrownBy(() -> service.translateTexts(List.of("你好"), "English"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage(AiSettingKeys.MISSING_API_KEY_MESSAGE);
     }
 }

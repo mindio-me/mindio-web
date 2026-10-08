@@ -72,7 +72,7 @@ class GlobalChatServiceTest {
         service = new GlobalChatService(chatMessageRepository, conversationRepository, agentConversationStateRepository,
                 userRepository, noteRepository, projectRepository,
                 sourceClipRepository, chunkingService, agentServiceClient, extractionService, new ObjectMapper(),
-                aiProperties, anthropicService, openAiService, deepseekService, doubaoService);
+                () -> aiProperties, anthropicService, openAiService, deepseekService, doubaoService);
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> {
             AiChatMessage m = inv.getArgument(0);

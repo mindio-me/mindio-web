@@ -25,7 +25,7 @@ class NoteTranslationOrchestratorTest {
     private final AiTranslationService anthropicService = mock(AiTranslationService.class);
     private final NoteRepository noteRepository = mock(NoteRepository.class);
     private final NoteTranslationOrchestrator orchestrator = new NoteTranslationOrchestrator(
-            aiProperties, anthropicService, anthropicService, anthropicService, anthropicService,
+            () -> aiProperties, anthropicService, anthropicService, anthropicService, anthropicService,
             noteRepository, new ObjectMapper(), new EditorJsToHtmlConverter(new ObjectMapper()));
 
     @Test

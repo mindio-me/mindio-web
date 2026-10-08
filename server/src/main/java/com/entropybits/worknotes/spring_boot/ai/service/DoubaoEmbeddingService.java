@@ -4,7 +4,10 @@
  */
 package com.entropybits.worknotes.spring_boot.ai.service;
 
+import com.entropybits.worknotes.spring_boot.ai.config.AiConfigSource;
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
+import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingKeys;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -30,21 +33,25 @@ import java.util.Map;
 @Service
 public class DoubaoEmbeddingService implements EmbeddingService {
 
-    private final AiProperties.ProviderConfig doubaoConfig;
-    private final AiProperties.EmbeddingConfig embeddingConfig;
+    private final AiConfigSource aiConfigSource;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .build();
 
-    public DoubaoEmbeddingService(AiProperties props, ObjectMapper objectMapper) {
-        this.doubaoConfig = props.getDoubao();
-        this.embeddingConfig = props.getEmbedding();
+    public DoubaoEmbeddingService(AiConfigSource aiConfigSource, ObjectMapper objectMapper) {
+        this.aiConfigSource = aiConfigSource;
         this.objectMapper = objectMapper;
     }
 
     @Override
     public float[] embed(String text) throws Exception {
+        AiProperties cfg = aiConfigSource.current();
+        AiProperties.ProviderConfig doubaoConfig = cfg.getDoubao();
+        AiProperties.EmbeddingConfig embeddingConfig = cfg.getEmbedding();
+        if (doubaoConfig.getApiKey() == null || doubaoConfig.getApiKey().isBlank()) {
+            throw new BadRequestException(AiSettingKeys.MISSING_API_KEY_MESSAGE);
+        }
         String url = doubaoConfig.getBaseUrl() + embeddingConfig.getPath();
         Map<String, Object> body = Map.of(
                 "model", embeddingConfig.getModel(),
