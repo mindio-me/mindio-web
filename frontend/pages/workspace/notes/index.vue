@@ -1433,7 +1433,7 @@ export default {
      * 真正的播放器，而不是在末尾追加一个新块。跟 editor.vue 的同名处理是同一套逻辑，
      * 这两个页面各跑各的 EditorJS 实例，没法共用一份方法实现。
      */
-    async onRecordingResolveBlock({ noteId, blockId, url, duration }) {
+    async onRecordingResolveBlock({ noteId, blockId, data }) {
       if (!this.editor || !this.activeNote || String(this.activeNote.id) !== String(noteId)) return
       let idx = -1
       try {
@@ -1447,7 +1447,8 @@ export default {
       }
 
       this.editor.blocks.delete(idx)
-      this.editor.blocks.insert('audioRecord', { url, duration }, {}, idx, true)
+      // data: { url, duration, segments? }——长录音带着分段，转写要用，不能只取 url/duration
+      this.editor.blocks.insert('audioRecord', data, {}, idx, true)
       this.hasUnsavedChanges = true
       this.updateSaveStatus('saving')
 

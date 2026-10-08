@@ -8,7 +8,6 @@ const EDITORJS_VERSION = '2.28.2'
 /**
  * 把录音 Blob 包成 File，扩展名按真实 mime 推导（Firefox 是 ogg、Safari 是 mp4，
  * 不能一律写死 .webm，否则服务端按扩展名推 Content-Type 时会和实际内容对不上）。
- * RecordingCapsule.vue 的"插入到当前笔记"分支也复用这个函数，避免两处实现漂移。
  */
 export function blobToFile(blob) {
   const ext = (blob.type || 'audio/webm').split('/')[1].split(';')[0] || 'webm'
@@ -41,51 +40,22 @@ async function saveNotePreservingFields(noteId, note, content, noteService) {
   })
 }
 
-export async function attachRecording({ target, blob, durationSeconds, noteId, uploadService, noteService, clipService, onProgress }) {
-  const file = blobToFile(blob)
-
-  if (target === 'library') {
-    const uploadResult = await uploadService.uploadLocal(file, 'note', 0, { onProgress })
-    const clip = await clipService.createClip({
-      sourceType: 'AUDIO_RECORDING',
-      sourceUrl: uploadResult.url,
-      title: '录音 · ' + formatTimestamp(new Date()),
-      contentFormat: 'audio',
-      durationSeconds
-    })
-    return { mode: 'library', clip }
-  }
-
-  if (target === 'new') {
-    const uploadResult = await uploadService.uploadLocal(file, 'note', 0, { onProgress })
-    const block = { type: 'audioRecord', data: { url: uploadResult.url, duration: durationSeconds } }
-    const note = await noteService.createNote({
-      title: '未命名笔记',
-      content: JSON.stringify({ time: Date.now(), blocks: [block], version: EDITORJS_VERSION }),
-      contentType: 'editorjs',
-      isPublic: false,
-      tagIds: [],
-      sectionContents: [JSON.stringify(block.data)],
-      sectionTypes: [block.type]
-    })
-    return { mode: 'new', note, url: uploadResult.url, duration: durationSeconds }
-  }
-
-  // target === 'current': 追加一个新块到笔记末尾（没有具体挂在哪个块上的场景，比如从
-  // 顶栏麦克风发起、没有块 id 可循）。
-  const note = await noteService.getNoteById(noteId)
-  if (note.contentType !== 'editorjs') {
-    throw new Error('这篇笔记不是 EditorJS 格式，暂不支持插入录音块，请选择"新建笔记"')
-  }
-
-  const uploadResult = await uploadService.uploadLocal(file, 'note', noteId || 0, { onProgress })
-  const content = JSON.parse(note.content || `{"time":0,"blocks":[],"version":"${EDITORJS_VERSION}"}`)
-  content.blocks = content.blocks || []
-  content.blocks.push({ type: 'audioRecord', data: { url: uploadResult.url, duration: durationSeconds } })
-
-  await saveNotePreservingFields(noteId, note, content, noteService)
-
-  return { mode: 'current', noteId, url: uploadResult.url, duration: durationSeconds }
+/**
+ * 从顶栏发起的录音（没有对应的录音块），或者原来那篇笔记已经被删了：新建一篇笔记放这段录音。
+ * data 是录音块的数据：{ url, duration, segments? }
+ */
+export async function createNoteWithRecording({ data, startedAt, noteService }) {
+  const block = { type: 'audioRecord', data }
+  const note = await noteService.createNote({
+    title: '录音 · ' + formatTimestamp(new Date(startedAt || Date.now())),
+    content: JSON.stringify({ time: Date.now(), blocks: [block], version: EDITORJS_VERSION }),
+    contentType: 'editorjs',
+    isPublic: false,
+    tagIds: [],
+    sectionContents: [JSON.stringify(block.data)],
+    sectionTypes: [block.type]
+  })
+  return note
 }
 
 /**
@@ -94,16 +64,18 @@ export async function attachRecording({ target, blob, durationSeconds, noteId, u
  * 占位块换成真正的播放器数据。找不到（比如录音过程中用户手动把那个块删了）就退化成
  * 追加到末尾，保证录音本身不会因为占位块没了就被静默丢弃。
  */
-export async function resolveBlockInNote({ noteId, blockId, url, duration, noteService }) {
+export async function resolveBlockInNote({ noteId, blockId, data, noteService }) {
   const note = await noteService.getNoteById(noteId)
   if (note.contentType !== 'editorjs') {
-    throw new Error('这篇笔记不是 EditorJS 格式，暂不支持插入录音块')
+    const err = new Error('这篇笔记不是 EditorJS 格式，暂不支持插入录音块')
+    err.notEditorJs = true // 调用方据此改为新建笔记保存
+    throw err
   }
 
   const content = JSON.parse(note.content || `{"time":0,"blocks":[],"version":"${EDITORJS_VERSION}"}`)
   content.blocks = content.blocks || []
   const idx = content.blocks.findIndex((b) => b.id === blockId)
-  const resolvedBlock = { id: blockId, type: 'audioRecord', data: { url, duration } }
+  const resolvedBlock = { id: blockId, type: 'audioRecord', data }
 
   if (idx >= 0) {
     content.blocks[idx] = resolvedBlock
@@ -112,5 +84,5 @@ export async function resolveBlockInNote({ noteId, blockId, url, duration, noteS
   }
 
   await saveNotePreservingFields(noteId, note, content, noteService)
-  return { noteId, url, duration }
+  return { noteId, data }
 }

@@ -4,6 +4,7 @@
  */
 
 import recordingController from './recordingController'
+import recordingStash from './recordingStash'
 
 const STYLE_ID = 'record-tool-injected-styles'
 
@@ -151,6 +152,7 @@ class RecordTool {
     this.config = config || {}
     this._element = null
     this._onControllerChange = this._onControllerChange.bind(this)
+    this._offStashMessage = null
   }
 
   render() {
@@ -168,6 +170,8 @@ class RecordTool {
     recordingController.on('stop', this._onControllerChange)
     recordingController.on('error', this._onControllerChange)
     recordingController.on('pending-change', this._onControllerChange)
+    // 别的页签开始/停止/存好了录音：这个块可能是那段录音的位置，跟着刷新
+    this._offStashMessage = recordingStash.onMessage(this._onControllerChange)
     return wrapper
   }
 
@@ -176,6 +180,7 @@ class RecordTool {
     recordingController.off('stop', this._onControllerChange)
     recordingController.off('error', this._onControllerChange)
     recordingController.off('pending-change', this._onControllerChange)
+    if (this._offStashMessage) this._offStashMessage()
   }
 
   _onControllerChange() {
@@ -262,23 +267,43 @@ class RecordTool {
       el.classList.add('record-tool__placeholder--pending')
       el.innerHTML = `<span>录音还没保存成功，在右下角面板里，可以重试或下载到本地</span>`
     } else {
-      // 全局并没有一段"正对着这个块"的录音在跑——多半是页面刷新过、或者上次录音
-      // 中途出了意外（浏览器崩溃/关闭）没能正常收尾。留着一个转不动的"录音中"
-      // 状态对用户没有意义，允许点掉它（只读模式下不给这个交互）。
-      el.classList.remove('record-tool__placeholder--recording')
-      el.classList.add('record-tool__placeholder--stale')
-      el.innerHTML = `<span>这段录音没能正常完成${this.readOnly ? '' : '，点击移除'}</span>`
-      if (!this.readOnly) {
-        el.addEventListener('click', () => {
-          const idx = this.block && this.block.id
-            ? this.api.blocks.getBlockIndex(this.block.id)
-            : this.api.blocks.getCurrentBlockIndex()
-          this.api.blocks.delete(idx)
-        })
-      }
+      this._renderStale(el)
     }
 
     wrapper.appendChild(el)
+
+    // 本页面没有这段录音，但它可能还在别的页签手上、或者在本地副本里等着恢复：
+    // 查到了就改成"还没保存好"，不能让用户以为录音丢了、顺手点掉这个块
+    if (!isThisBlockRecording && !isPendingSave && this.block) {
+      const blockId = this.block.id
+      recordingStash.findSessionForBlock(blockId).then((session) => {
+        if (!session || !el.isConnected || !el.classList.contains('record-tool__placeholder--stale')) return
+        const fresh = el.cloneNode(false)
+        fresh.className = 'record-tool__placeholder record-tool__placeholder--pending'
+        fresh.innerHTML = session.status === 'recording'
+          ? '<span>这段录音正在另一个页面里录制</span>'
+          : '<span>这段录音还没保存好，正在另一个页面里处理，或稍后会在右下角提示恢复</span>'
+        el.replaceWith(fresh)
+      })
+    }
+  }
+
+  _renderStale(el) {
+    // 全局并没有一段"正对着这个块"的录音在跑——多半是页面刷新过、或者上次录音
+    // 中途出了意外（浏览器崩溃/关闭）没能正常收尾。留着一个转不动的"录音中"
+    // 状态对用户没有意义，允许点掉它（只读模式下不给这个交互）。
+    el.classList.remove('record-tool__placeholder--recording')
+    el.classList.add('record-tool__placeholder--stale')
+    el.innerHTML = `<span>这段录音没能正常完成${this.readOnly ? '' : '，点击移除'}</span>`
+    if (!this.readOnly) {
+      el.addEventListener('click', () => {
+        const idx = this.block && this.block.id
+          ? this.api.blocks.getBlockIndex(this.block.id)
+          : this.api.blocks.getCurrentBlockIndex()
+        this.api.blocks.delete(idx)
+      })
+    }
+
   }
 
   _renderPlayer(wrapper) {
@@ -325,12 +350,15 @@ class RecordTool {
 
   save() {
     if (this.data.url) {
-      return {
+      const saved = {
         url: this.data.url,
         duration: this.data.duration || 0,
         transcript: this.data.transcript || '',
         summary: this.data.summary || ''
       }
+      // 长录音的分段（专供转写），存笔记时不能丢
+      if (Array.isArray(this.data.segments) && this.data.segments.length) saved.segments = this.data.segments
+      return saved
     }
     if (this.data.recording) {
       return { recording: true }

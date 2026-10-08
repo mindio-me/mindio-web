@@ -62,6 +62,98 @@ let systemAudioToken = 0
 let currentStash = null
 let stashOwner = null
 
+// 语音 32kbps 足够清楚（浏览器默认约 128kbps，是给音乐的）：1 小时约 14MB，上传快、存储省
+const AUDIO_BITS_PER_SECOND = 32000
+// 长录音另开一路"分段"录音器，每 30 分钟换一个新文件，专供转写（语音识别单次上限 2 小时/100MB）。
+// 播放用的仍是主录音器从头录到尾的完整文件。换段时新段先开始、旧段多录几秒再停，
+// 免得换段那一瞬间吞掉半个字（逐字稿在交界处可能重复几个字）。
+const SEGMENT_SECONDS = 30 * 60
+const SEGMENT_OVERLAP_SECONDS = 3
+let recordStreamRef = null
+let recorderMimeType = ''
+let activeSegments = [] // 正在录的分段（换段的几秒重叠期里会有两个）
+let finishedSegments = [] // 录完的分段：{ index, start, duration, blob, url }
+let nextSegmentIndex = 0
+
+function segmentSeconds() {
+  // 测试钩子：E2E 里把分段时长改短，不用真等 30 分钟
+  const override = typeof window !== 'undefined' && Number(window.__MINDIO_SEGMENT_SECONDS__)
+  return override > 0 ? override : SEGMENT_SECONDS
+}
+
+function recorderOptions() {
+  const options = { audioBitsPerSecond: AUDIO_BITS_PER_SECOND }
+  if (recorderMimeType) options.mimeType = recorderMimeType
+  return options
+}
+
+/** 开一个新的分段录音器。起不来就算了——分段只服务转写，不能影响主录音 */
+function startSegment(stash, start) {
+  const index = nextSegmentIndex++
+  let recorder
+  try {
+    recorder = new MediaRecorder(recordStreamRef, recorderOptions())
+  } catch (e) {
+    return null
+  }
+  const seg = { index, start, end: null, recorder, chunks: [] }
+  let seq = 0
+  recorder.ondataavailable = (e) => {
+    if (!e.data || !e.data.size) return
+    seg.chunks.push(e.data)
+    const n = seq++
+    stash.then((id) => recordingStash.append(id, e.data, n, index))
+  }
+  seg.done = new Promise((resolve) => {
+    recorder.onstop = () => {
+      activeSegments = activeSegments.filter((x) => x !== seg)
+      const end = seg.end != null ? seg.end : state.elapsedSeconds
+      const finished = {
+        index,
+        start,
+        duration: Math.max(0, end - start),
+        blob: new Blob(seg.chunks, { type: recorder.mimeType || recorderMimeType || 'audio/webm' }),
+        url: null
+      }
+      seg.chunks = []
+      finishedSegments.push(finished)
+      stash.then((id) => recordingStash.setSegment(id, { index, start, duration: finished.duration }))
+      // 录音还在继续时，这一段已经完整了：交给界面先传上去，崩溃了也不怕
+      if (state.status === 'recording' || state.status === 'paused') emit('segment', { stash, segment: finished })
+      resolve()
+    }
+  })
+  recorder.onerror = () => stopSegment(seg)
+  try {
+    recorder.start(1000)
+  } catch (e) {
+    return null
+  }
+  activeSegments.push(seg)
+  stash.then((id) => recordingStash.setSegment(id, { index, start }))
+  return seg
+}
+
+function stopSegment(seg) {
+  if (!seg || !seg.recorder || seg.recorder.state === 'inactive') return
+  if (seg.end == null) seg.end = state.elapsedSeconds
+  try {
+    seg.recorder.stop()
+  } catch (e) {
+    // 已经停了
+  }
+}
+
+/** 主录音停止时收拢所有分段。只有一段的不算分段（和整段文件一样，没必要多传一份） */
+async function collectSegments() {
+  const pending = activeSegments.slice()
+  pending.forEach(stopSegment)
+  // 分段录音器的 onstop 万一不来，最多等 3 秒，不能拖住主录音的收尾
+  await Promise.race([Promise.all(pending.map((x) => x.done)), new Promise((r) => setTimeout(r, 3000))])
+  const list = finishedSegments.slice().sort((a, b) => a.index - b.index)
+  return list.length > 1 ? list : []
+}
+
 const SYSTEM_AUDIO_PREF_KEY = 'mindio.recording.systemAudio'
 
 function desktopRecordingApi() {
@@ -135,7 +227,12 @@ async function start(origin) {
   const recordStream = setupAudioGraph()
   const preferredType = 'audio/webm;codecs=opus'
   const mimeType = window.MediaRecorder && MediaRecorder.isTypeSupported(preferredType) ? preferredType : ''
-  mediaRecorder = mimeType ? new MediaRecorder(recordStream, { mimeType }) : new MediaRecorder(recordStream)
+  recordStreamRef = recordStream
+  recorderMimeType = mimeType
+  mediaRecorder = new MediaRecorder(recordStream, recorderOptions())
+  activeSegments = []
+  finishedSegments = []
+  nextSegmentIndex = 0
 
   chunks = []
   const stash = recordingStash.begin({
@@ -155,20 +252,25 @@ async function start(origin) {
   // 统一的收尾出口：不管是用户主动点停止，还是设备被拔掉/系统睡眠把 track 掐断，
   // 都走这一个 onstop —— 已经录到的内容从这里打包成 Blob 往外发出去，不会被直接丢弃。
   // 用 state.status 在这一刻是不是还是 'stopping' 来分辨这次停止是不是用户主动点的。
-  mediaRecorder.onstop = () => {
+  mediaRecorder.onstop = async () => {
     clearTimeout(forcedStopTimer)
     forcedStopTimer = null
+    // 计时先停：下面要等分段录音器收尾，期间不能再计时、换段
+    clearInterval(timerId)
+    timerId = null
     const interrupted = state.status !== 'stopping'
     const blob = new Blob(chunks, { type: (mediaRecorder && mediaRecorder.mimeType) || 'audio/webm' })
     const durationSeconds = state.elapsedSeconds
     const stopOrigin = state.origin
     const errorPayload = pendingErrorPayload
     pendingErrorPayload = null
+    const segments = await collectSegments()
     cleanup()
     stash.then((id) => recordingStash.markStopped(id, durationSeconds))
     if (interrupted && errorPayload) emit('error', errorPayload)
     // stash: 本地副本的 id（Promise）。保存成功或确认放弃后由调用方删掉它
-    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash }
+    // segments: 30 分钟以上的录音才有，专供转写；已经在录音过程中传上去的带着 url
+    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash, segments }
     emit('stop', result)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
@@ -197,14 +299,19 @@ async function start(origin) {
 
   state.status = 'recording'
   state.elapsedSeconds = 0
+  startSegment(stash, 0)
 
   timerId = setInterval(() => {
     if (state.status !== 'recording') return
     state.elapsedSeconds += 1
     emit('tick', state.elapsedSeconds)
-    if (state.elapsedSeconds % 5 === 0) {
-      const seconds = state.elapsedSeconds
-      stash.then((id) => recordingStash.update(id, { durationSeconds: seconds }))
+    // 每秒记一次时长：崩溃后恢复时，时长和最后一段的长度才准
+    const seconds = state.elapsedSeconds
+    stash.then((id) => recordingStash.update(id, { durationSeconds: seconds }))
+    const current = activeSegments[activeSegments.length - 1]
+    if (current && state.elapsedSeconds - current.start >= segmentSeconds()) {
+      startSegment(stash, state.elapsedSeconds)
+      setTimeout(() => stopSegment(current), SEGMENT_OVERLAP_SECONDS * 1000)
     }
   }, 1000)
 
@@ -457,6 +564,11 @@ function disconnectSystemAudio() {
 function pause() {
   if (state.status !== 'recording') return
   mediaRecorder.pause()
+  activeSegments.forEach((seg) => {
+    try {
+      if (seg.recorder.state === 'recording') seg.recorder.pause()
+    } catch (e) {}
+  })
   state.status = 'paused'
   emit('pause', {})
 }
@@ -464,6 +576,11 @@ function pause() {
 function resume() {
   if (state.status !== 'paused') return
   mediaRecorder.resume()
+  activeSegments.forEach((seg) => {
+    try {
+      if (seg.recorder.state === 'paused') seg.recorder.resume()
+    } catch (e) {}
+  })
   state.status = 'recording'
   emit('resume', {})
 }
@@ -523,6 +640,17 @@ function cleanup() {
   mediaRecorder = null
   chunks = []
   currentStash = null
+  // 走到这里还没停的分段录音器（强制收尾的路径）：摘掉回调直接停，数据已经在本地副本里
+  activeSegments.forEach((seg) => {
+    seg.recorder.ondataavailable = null
+    seg.recorder.onstop = null
+    try {
+      if (seg.recorder.state !== 'inactive') seg.recorder.stop()
+    } catch (e) {}
+  })
+  activeSegments = []
+  finishedSegments = []
+  recordStreamRef = null
   teardownAudioGraph()
   state.status = 'idle'
   state.elapsedSeconds = 0
