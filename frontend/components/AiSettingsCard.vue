@@ -90,7 +90,8 @@ const AiSettingSecret = {
         : this.$t('aiSettings.notConfigured')
     return h('el-form-item', { props: { label: this.label } }, [
       h('el-input', {
-        props: { value: this.value, showPassword: true, placeholder: this.$t('aiSettings.keyPlaceholder') },
+        props: { value: this.value, showPassword: true },
+        attrs: { placeholder: this.$t('aiSettings.keyPlaceholder') },
         on: { input: v => this.$emit('input', v) }
       }),
       h('div', { class: 'hint-text' }, [
@@ -166,6 +167,8 @@ export default {
       return changes
     },
     async save() {
+      // :disabled 要等下一次渲染才生效，同一轮事件里的连点要在这里挡住
+      if (this.saving) return
       const changes = this.changes()
       if (!Object.keys(changes).length) {
         this.$message.info(this.$t('aiSettings.nothingChanged'))
@@ -174,6 +177,7 @@ export default {
       await this.submit(changes)
     },
     async clearKey(key) {
+      if (this.saving) return
       await this.submit({ [key]: '' })
     },
     async submit(changes) {
