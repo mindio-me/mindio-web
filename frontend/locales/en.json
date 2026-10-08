@@ -1070,5 +1070,31 @@
       "weeksAgo": "{n}w ago",
       "monthsAgo": "{n}mo ago"
     }
+  },
+  "aiSettings": {
+    "title": "AI Services",
+    "intro": "Used by the AI assistant, translation, clip organizing, semantic search and audio transcription. Empty fields fall back to the server's environment variables.",
+    "cryptoKeyMissing": "The server has no encryption key (FEISHU_TOKEN_CRYPTO_KEY), so API keys can't be saved yet; models and URLs can still be saved.",
+    "defaultProvider": "Default provider",
+    "apiKey": "API key",
+    "model": "Model",
+    "baseUrl": "Base URL",
+    "chatPath": "Chat path",
+    "embeddingTitle": "Semantic search (embedding)",
+    "embeddingTip": "Reuses the Doubao API key and base URL; only the embedding model is set here.",
+    "asrTitle": "Audio transcription",
+    "asrTip": "Volcengine / Doubao Speech, pick one mode: the new Doubao Speech console only needs the App Key (leave Access Key empty); the legacy console needs both. Don't mix them. Empty fields use the agents service's own environment variables.",
+    "asrAppKey": "App Key",
+    "asrAccessKey": "Access Key",
+    "keyPlaceholder": "Enter a new key to replace it",
+    "notConfigured": "Not configured",
+    "unreadable": "The saved key can't be read (encryption key changed), please enter it again",
+    "clear": "Clear",
+    "source": { "database": "Set here", "environment": "From environment", "none": "Not configured" },
+    "save": "Save AI settings",
+    "saved": "AI settings saved",
+    "saveFailed": "Save failed",
+    "loadFailed": "Failed to load AI settings",
+    "nothingChanged": "Nothing changed"
   }
 }

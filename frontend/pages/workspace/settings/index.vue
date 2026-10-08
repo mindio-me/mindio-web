@@ -10,6 +10,11 @@
         <p class="settings-subtitle">{{ $t('workspace.settings.subtitle') }}</p>
       </div>
 
+      <el-row v-if="isAdmin" :gutter="24">
+        <el-col :span="24">
+          <AiSettingsCard />
+        </el-col>
+      </el-row>
       <el-row :gutter="24">
         <el-col :xs="24" :sm="24" :md="12">
           <!-- 集成配置：飞书 -->
@@ -214,6 +219,11 @@ export default {
       wechatBindCodeCountdown: 0,
       wechatBindCodeTimer: null,
       wechatBindings: []
+    }
+  },
+  computed: {
+    isAdmin() {
+      return this.$auth?.user?.role === 'ADMIN'
     }
   },
   async mounted() {

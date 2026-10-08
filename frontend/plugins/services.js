@@ -18,6 +18,7 @@ import WechatService from '~/services/wechatService'
 import WechatBindingService from '~/services/wechatBindingService'
 import AiService from '~/services/aiService'
 import RedditService from '~/services/redditService'
+import AiSettingsService from '~/services/aiSettingsService'
 import BookmarkImportService from '~/services/bookmarkImportService'
 import BookmarkAgentService from '~/services/bookmarkAgentService'
 import GlobalChatService from '~/services/globalChatService'
@@ -41,4 +42,5 @@ export default ({ $axios }, inject) => {
   inject('bookmarkAgentService', new BookmarkAgentService($axios))
   inject('localDocService', new LocalDocService($axios))
   inject('localMediaService', new LocalMediaService($axios))
+  inject('aiSettingsService', new AiSettingsService($axios))
 }
