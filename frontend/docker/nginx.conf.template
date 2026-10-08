@@ -7,6 +7,11 @@ server {
         try_files $uri $uri/ /index.html;
     }
 
+    # /api/internal/** 只给 mindio-agents 在容器网络内直连调用（会返回明文 API Key 等），不对外开放
+    location /api/internal/ {
+        return 404;
+    }
+
     location /api {
         proxy_pass http://${BACKEND_HOST}:8080;
         proxy_set_header Host $host;
