@@ -32,6 +32,8 @@ public class InternalServiceAuthFilter extends OncePerRequestFilter {
     private static final Logger logger = LoggerFactory.getLogger(InternalServiceAuthFilter.class);
     private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
     private static final String INTERNAL_PATH_PREFIX = "/internal/";
+    // 反向代理（nginx / Zeabur 入口）会加上这些头；agents 总是直连后端，从不经过代理
+    private static final String[] PROXY_HEADERS = {"X-Forwarded-For", "X-Real-IP", "Forwarded"};
 
     @Value("${agent.internal-token}")
     private String internalToken;
@@ -48,6 +50,16 @@ public class InternalServiceAuthFilter extends OncePerRequestFilter {
         if (!pathWithinContext.startsWith(INTERNAL_PATH_PREFIX)) {
             filterChain.doFilter(request, response);
             return;
+        }
+
+        // 共享密钥的默认值写在公开仓库里，自部署时没改就等于没设防；/internal/ai-config 会返回
+        // 明文 API Key，所以经由公网入口转发进来的请求一律拒绝，不管密钥对不对
+        for (String header : PROXY_HEADERS) {
+            if (request.getHeader(header) != null) {
+                logger.warn("rejected proxied internal request to {} (has {})", request.getRequestURI(), header);
+                response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
         }
 
         String presentedToken = request.getHeader(INTERNAL_TOKEN_HEADER);

@@ -93,4 +93,20 @@ class InternalServiceAuthFilterTest {
 
         verify(filterChain).doFilter(request, response);
     }
+
+    @Test
+    void internalPath_reachedThroughAReverseProxy_rejectedEvenWithCorrectToken() throws Exception {
+        // agents 总是直连后端；带转发头说明请求来自公网入口（nginx / Zeabur 等），
+        // 共享密钥的默认值是公开的，不能只靠它挡住 /internal/ai-config 这类返回明文 Key 的接口
+        for (String header : new String[]{"X-Forwarded-For", "X-Real-IP", "Forwarded"}) {
+            MockHttpServletRequest request = request("/internal/ai-config", CORRECT_TOKEN);
+            request.addHeader(header, "203.0.113.7");
+            MockHttpServletResponse res = new MockHttpServletResponse();
+
+            filter.doFilterInternal(request, res, filterChain);
+
+            assertThat(res.getStatus()).as(header).isEqualTo(HttpServletResponse.SC_FORBIDDEN);
+        }
+        verify(filterChain, never()).doFilter(any(), any());
+    }
 }
