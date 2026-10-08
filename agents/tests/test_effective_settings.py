@@ -53,3 +53,11 @@ def test_use_settings_is_visible_through_current_settings(test_settings):
         assert current_settings().default_provider == "deepseek"
     finally:
         token.var.reset(token)
+
+
+def test_default_provider_is_deepseek_when_env_unset(monkeypatch):
+    # 与 Java 端 application.yml 的 ai.provider 默认值（AI_PROVIDER:deepseek）保持一致
+    from app.config import load_settings
+
+    monkeypatch.delenv("DEFAULT_PROVIDER", raising=False)
+    assert load_settings().default_provider == "deepseek"

@@ -44,7 +44,7 @@ def load_settings() -> Settings:
     return Settings(
         java_internal_base_url=os.environ.get("JAVA_INTERNAL_BASE_URL", "http://localhost:8080/api"),
         internal_shared_token=os.environ.get("INTERNAL_SHARED_TOKEN", "dev-only-internal-token-change-in-production"),
-        default_provider=os.environ.get("DEFAULT_PROVIDER", "anthropic"),
+        default_provider=os.environ.get("DEFAULT_PROVIDER", "deepseek"),
         providers={
             "anthropic": _provider_config("ANTHROPIC", "claude-opus-4-6", "https://api.anthropic.com"),
             "openai": _provider_config("OPENAI", "gpt-4o", "https://api.openai.com"),
