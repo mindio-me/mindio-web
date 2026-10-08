@@ -17,6 +17,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -170,6 +171,27 @@ public class GlobalExceptionHandler {
         } else {
             logger.error("IO exception during request: {}", request.getRequestURI(), ex);
         }
+    }
+
+    /**
+     * 上传超过 multipart 上限：返回 413 并写明上限，而不是落到下面的通用 500
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            MaxUploadSizeExceededException ex,
+            HttpServletRequest request
+    ) {
+        long max = ex.getMaxUploadSize();
+        String message = max > 0
+                ? String.format("文件超过服务器上传上限（%d MB）", max / 1024 / 1024)
+                : "文件超过服务器上传上限";
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                "Payload Too Large",
+                message,
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(error);
     }
 
     /**

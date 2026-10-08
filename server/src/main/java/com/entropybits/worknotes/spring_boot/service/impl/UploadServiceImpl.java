@@ -53,8 +53,11 @@ public class UploadServiceImpl implements UploadService {
     );
 
     // 默认最大文件大小（MB）
-    private static final int DEFAULT_MAX_FILE_SIZE_MB = 50;
-    private static final int DEFAULT_MAX_IMAGE_SIZE_MB = 10;
+    // 上限可配置（worknotes.upload.*，环境变量 WORKNOTES_UPLOAD_MAX_*_SIZE_MB）；Spring multipart 上限跟着它走，见 UploadLimitsConfig
+    @Value("${worknotes.upload.max-file-size-mb:500}")
+    private int maxFileSizeMb = 500;
+    @Value("${worknotes.upload.max-image-size-mb:20}")
+    private int maxImageSizeMb = 20;
 
     @Autowired
     private com.entropybits.worknotes.spring_boot.config.UploadPathConfig uploadPathConfig;
@@ -149,7 +152,7 @@ public class UploadServiceImpl implements UploadService {
             }
 
             // 下载文件（限制大小：按图片/文件的默认限制）
-            long maxSizeBytes = (isImage ? DEFAULT_MAX_IMAGE_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB) * 1024L * 1024L;
+            long maxSizeBytes = (isImage ? maxImageSizeMb : maxFileSizeMb) * 1024L * 1024L;
 
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setConnectTimeout(8000);
@@ -220,11 +223,11 @@ public class UploadServiceImpl implements UploadService {
             if ("bin".equals(extName)) {
                 String sniffedExt = sniffImageExtension(file);
                 if (sniffedExt != null) {
-                    long maxImageBytes = DEFAULT_MAX_IMAGE_SIZE_MB * 1024L * 1024L;
+                    long maxImageBytes = maxImageSizeMb * 1024L * 1024L;
                     if (written > maxImageBytes) {
                         //noinspection ResultOfMethodCallIgnored
                         file.delete();
-                        throw new BadRequestException("远程文件过大，最大允许: " + DEFAULT_MAX_IMAGE_SIZE_MB + "MB");
+                        throw new BadRequestException("远程文件过大，最大允许: " + maxImageSizeMb + "MB");
                     }
                     extName = sniffedExt;
                     isImage = true;
@@ -381,11 +384,11 @@ public class UploadServiceImpl implements UploadService {
 
         // 验证文件大小
         long fileSizeBytes = multipartFile.getSize();
-        long maxSizeBytes = (isImage ? DEFAULT_MAX_IMAGE_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB) * 1024L * 1024L;
+        long maxSizeBytes = (isImage ? maxImageSizeMb : maxFileSizeMb) * 1024L * 1024L;
         if (fileSizeBytes > maxSizeBytes) {
             throw new BadRequestException(
                     String.format("文件大小超过限制，最大允许: %d MB，当前文件: %.2f MB",
-                            isImage ? DEFAULT_MAX_IMAGE_SIZE_MB : DEFAULT_MAX_FILE_SIZE_MB,
+                            isImage ? maxImageSizeMb : maxFileSizeMb,
                             fileSizeBytes / 1024.0 / 1024.0)
             );
         }

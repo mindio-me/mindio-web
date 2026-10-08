@@ -101,6 +101,38 @@ class UploadServiceImplTest {
     }
 
     @Test
+    void fileUpload_rejectsFileAboveConfiguredLimit() {
+        ReflectionTestUtils.setField(service, "maxFileSizeMb", 1);
+        MockMultipartFile file = new MockMultipartFile("file", "rec.webm", "audio/webm", new byte[2 * 1024 * 1024]);
+
+        assertThatThrownBy(() -> service.fileUpload(file, "note", 0, 1L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("1 MB");
+    }
+
+    @Test
+    void fileUpload_acceptsFileUnderConfiguredLimitAboveImageLimit() {
+        // 文件和图片是两个独立的上限：录音这类大文件不受图片上限约束
+        ReflectionTestUtils.setField(service, "maxFileSizeMb", 3);
+        ReflectionTestUtils.setField(service, "maxImageSizeMb", 1);
+        MockMultipartFile file = new MockMultipartFile("file", "rec.webm", "audio/webm", new byte[2 * 1024 * 1024]);
+
+        service.fileUpload(file, "note", 0, 1L);
+
+        verify(attachmentRepository).save(any());
+    }
+
+    @Test
+    void imageUpload_rejectsImageAboveConfiguredImageLimit() {
+        ReflectionTestUtils.setField(service, "maxImageSizeMb", 1);
+        MockMultipartFile file = new MockMultipartFile("file", "photo.jpg", "image/jpeg", new byte[2 * 1024 * 1024]);
+
+        assertThatThrownBy(() -> service.imageUpload(file, "note", 0, 1L))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("1 MB");
+    }
+
+    @Test
     void base64Upload_registersContentHashOnAttachment() {
         String base64 = "data:image/jpeg;base64," + Base64.getEncoder().encodeToString("fake bytes".getBytes());
 
