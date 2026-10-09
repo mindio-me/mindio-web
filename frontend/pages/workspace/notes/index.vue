@@ -907,6 +907,8 @@ export default {
     // URL"（见下面 activeNoteId 那个 watch 的注释），citation 点击也应该走这条路，而不是
     // 借 URL 绕一圈。
     this.$nuxt.$on('workspace:open-note-request', this.onOpenNoteRequest)
+    // 别处（录音胶囊）新建了笔记：重拉列表，否则要切走再切回来才看得到
+    this.$nuxt.$on('workspace:note-created', this.onNoteCreatedElsewhere)
   },
   beforeDestroy() {
     if (this.saveTimeout) clearTimeout(this.saveTimeout)
@@ -921,6 +923,7 @@ export default {
     this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
     this.$nuxt.$off('workspace:open-note-request', this.onOpenNoteRequest)
+    this.$nuxt.$off('workspace:note-created', this.onNoteCreatedElsewhere)
     // 离开这个页面后，"当前笔记"广播必须清空，否则全局AI助手在其他页面（比如收藏夹）
     // 会继续误把这里最后打开的笔记当成"当前笔记"
     this.$nuxt.$emit('workspace:current-note-id', null)
@@ -942,6 +945,9 @@ export default {
       const id = Number(noteId)
       if (Number.isNaN(id)) return
       this.selectNote({ id })
+    },
+    onNoteCreatedElsewhere() {
+      this.loadNotes()
     },
     // ========== 笔记方法 ==========
     // append=true 用于无限滚动"加载下一批"，false（默认）是筛选条件变化后的整体刷新

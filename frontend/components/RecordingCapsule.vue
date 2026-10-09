@@ -293,6 +293,7 @@ export default {
           recordingStash.post({ type: 'resolved', noteId: origin.noteId, blockId: origin.blockId, data })
         } else {
           const note = await createNoteWithRecording({ data, startedAt: result.startedAt, noteService: this.$noteService })
+          this.$nuxt.$emit('workspace:note-created', note)
           message = result.recovered ? '已恢复上次没存好的录音，保存为新笔记' : '录音已保存为新笔记'
           action = this.openNoteAction(note.id)
         }
@@ -323,13 +324,22 @@ export default {
         const status = e && e.response && e.response.status
         if (status !== 404 && status !== 403 && !(e && e.notEditorJs)) throw e
         const note = await createNoteWithRecording({ data, startedAt, noteService: this.$noteService })
+        this.$nuxt.$emit('workspace:note-created', note)
         return { newNote: note }
       }
     },
     openNoteAction(noteId) {
       return {
         label: '打开',
-        handler: () => this.$router.push({ path: '/workspace/notes', query: { openNoteId: noteId } })
+        handler: () => {
+          // 已经在笔记页时只改 query 不会重新挂载页面，mounted 里读 openNoteId 那段不会再跑——
+          // 改成和 AI 助手的笔记引用一样，让笔记页原地切过去
+          if (this.$route.path.replace(/\/$/, '') === '/workspace/notes') {
+            this.$nuxt.$emit('workspace:open-note-request', noteId)
+          } else {
+            this.$router.push({ path: '/workspace/notes', query: { openNoteId: noteId } })
+          }
+        }
       }
     },
     /** 别的页签把录音放回了某个块：这个页面要是也开着那篇笔记，让它把那个块换成播放器 */
