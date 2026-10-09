@@ -377,22 +377,34 @@ export default {
       if (reason === 'start-failed') {
         this.showToast('无法开始录音，请检查麦克风权限')
       } else if (reason === 'system-audio-failed') {
-        const api = typeof window !== 'undefined' && window.mindioDesktop && window.mindioDesktop.recording
-        const denied = !!(payload.error && payload.error.name === 'NotAllowedError')
-        if (api && payload.platform === 'darwin' && denied) {
-          // macOS 授予屏幕录制/系统音频权限后，正在运行的进程拿不到新权限，必须重启应用
-          this.showToast('需要在系统设置中允许 MindIO 录制屏幕和系统音频，开启后需重启应用', {
-            label: '打开系统设置',
-            handler: () => api.openSystemAudioSettings()
-          })
-        } else {
-          this.showToast('无法录制电脑声音，已继续仅录制麦克风')
-        }
+        this.showSystemAudioFailedToast(payload)
       } else if (reason === 'system-audio-ended') {
         this.showToast('电脑声音已断开，继续仅录制麦克风')
       } else {
         // 'track-ended'（设备被拔掉/被别的程序抢走）与 'recorder-error'（录制器自身报错）
         this.showToast('录音意外中断')
+      }
+    },
+    async showSystemAudioFailedToast(payload) {
+      const api = typeof window !== 'undefined' && window.mindioDesktop && window.mindioDesktop.recording
+      let needsPermission = !!(payload.error && payload.error.name === 'NotAllowedError')
+      // 授权框被关掉之后，Mac 上的失败不一定报 NotAllowedError（主进程 getSources 失败、回调空结果），
+      // 以系统给的权限状态为准
+      if (api && payload.platform === 'darwin' && !needsPermission && api.getSystemAudioPermission) {
+        try {
+          needsPermission = (await api.getSystemAudioPermission()) !== 'granted'
+        } catch (e) {
+          // 查不到就按错误名判断
+        }
+      }
+      if (api && payload.platform === 'darwin' && needsPermission) {
+        // macOS 授予屏幕录制/系统音频权限后，正在运行的进程拿不到新权限，必须重启应用
+        this.showToast('需要在系统设置中允许 MindIO 录制屏幕和系统音频，开启后需重启应用', {
+          label: '打开系统设置',
+          handler: () => api.openSystemAudioSettings()
+        })
+      } else {
+        this.showToast('无法录制电脑声音，已继续仅录制麦克风')
       }
     },
     formatDuration(totalSeconds) {
