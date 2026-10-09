@@ -154,6 +154,21 @@ async function collectSegments() {
   return list.length > 1 ? list : []
 }
 
+/**
+ * 麦克风流。默认的回声消除只消得掉本页面自己播放的声音，扬声器外放的视频/会议声音照样
+ * 被麦克风收进来（关着"电脑声音"开关也会录到）；echoCancellation: 'all' 消掉所有程序的
+ * 外放，Windows 桌面版实测人声保留、外放消失。不认这个取值的环境退回默认约束；
+ * 权限被拒/没有设备不是约束的问题，直接抛出，不再弹第二次授权。
+ */
+async function getMicStream() {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: 'all' } })
+  } catch (e) {
+    if (e && (e.name === 'NotAllowedError' || e.name === 'NotFoundError' || e.name === 'SecurityError')) throw e
+    return navigator.mediaDevices.getUserMedia({ audio: true })
+  }
+}
+
 const SYSTEM_AUDIO_PREF_KEY = 'mindio.recording.systemAudio'
 
 function desktopRecordingApi() {
@@ -206,7 +221,7 @@ async function start(origin) {
   stopRequested = false
 
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mediaStream = await getMicStream()
   } catch (e) {
     state.status = 'idle'
     // 通知全局 UI（RecordingCapsule）弹提示：麦克风权限被拒 / 没有设备 / 非安全上下文。
