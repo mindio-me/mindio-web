@@ -167,6 +167,46 @@ class AudioTranscriptionJobTest {
     }
 
     @Test
+    void agentUnavailableExhaustedAfterAsr_keepsUtterancesAsSummaryFailedDone() {
+        when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
+        when(agent.audioSummarize(any(), any())).thenThrow(new AgentUnavailableException("down", null));
+        record.setAttempts(2);
+        job.processOne(9L);
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(record.getUtterances()).contains("甲");
+        assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.SUMMARY_FAILED);
+        assertThat(record.getErrorMessage()).isEqualTo("整理失败：AI 服务暂时不可用，可以重新整理");
+        verify(indexing).reindexNote(1L);
+    }
+
+    @Test
+    void runtimeExceptionInSummarize_endsDoneWithSummaryFailed() {
+        when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
+        when(agent.audioSummarize(any(), any())).thenThrow(new IllegalStateException("boom"));
+        job.processOne(9L);
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(record.getUtterances()).contains("甲");
+        assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.SUMMARY_FAILED);
+        verify(indexing).reindexNote(1L);
+    }
+
+    @Test
+    void processPendingBatch_skipsRecordsStillInRetryBackoff() {
+        AudioTranscription fresh = AudioTranscription.builder().id(21L).noteId(1L).blockId("b")
+                .status(AudioTranscription.Status.PENDING).attempts(1).updatedAt(java.time.LocalDateTime.now()).build();
+        AudioTranscription waited = AudioTranscription.builder().id(22L).noteId(1L).blockId("b")
+                .status(AudioTranscription.Status.PENDING).attempts(1)
+                .updatedAt(java.time.LocalDateTime.now().minusSeconds(31)).build();
+        when(repository.findTop10ByStatusOrderByCreatedAtAsc(AudioTranscription.Status.PENDING))
+                .thenReturn(List.of(fresh, waited));
+
+        job.processPendingBatch();
+
+        assertThat(fresh.getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
+        assertThat(waited.getStatus()).isEqualTo(AudioTranscription.Status.PROCESSING);
+    }
+
+    @Test
     void summaryStage_skipsAsr() {
         record.setStage(AudioTranscription.Stage.SUMMARY);
         record.setUtterances("[{\"start\":0,\"end\":1000,\"text\":\"甲\"}]");

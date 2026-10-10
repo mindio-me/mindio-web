@@ -259,7 +259,8 @@ public class AgentServiceClient {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("utterances", utterances);
         body.put("marks", marks);
-        return postInternal("/internal/audio-summarize", body, Duration.ofSeconds(900));
+        // 长录音要分约 14 个优化块、并发 3 路，整体可能超过 15 分钟，所以放宽到 30 分钟
+        return postInternal("/internal/audio-summarize", body, Duration.ofSeconds(1800));
     }
 
     /** 录音整理两个内部接口共用：连不上或 503 → AgentUnavailableException；其余错误 → AgentCallException */

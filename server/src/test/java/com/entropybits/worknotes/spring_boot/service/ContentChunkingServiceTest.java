@@ -58,6 +58,19 @@ class ContentChunkingServiceTest {
     }
 
     @Test
+    void chunkNote_skipsFailedSegmentPlaceholders() {
+        Note note = editorjsNote(7L, "t", "{\"blocks\":[]}");
+        when(audioTranscriptionRepository.findByNoteId(7L)).thenReturn(List.of(
+                AudioTranscription.builder().noteId(7L).blockId("a").status(AudioTranscription.Status.DONE)
+                        .utterances("[{\"start\":0,\"end\":0,\"text\":\"[第 1 段转写失败]\"},"
+                                + "{\"start\":1,\"end\":2,\"text\":\"有效的一句。\"}]").build()));
+
+        String all = String.join("\n", service.chunkNote(note));
+
+        assertThat(all).contains("有效的一句。").doesNotContain("转写失败");
+    }
+
+    @Test
     void chunkNote_markdownSplitsOnBlankLines() {
         Note note = Note.builder()
                 .contentType("markdown")

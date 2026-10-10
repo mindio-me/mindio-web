@@ -6,6 +6,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingsService;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.ErrorKind;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Stage;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Status;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.TriggerType;
@@ -77,6 +78,21 @@ public class AudioTranscriptionService {
             record.setUtterances(null);
         }
         return Optional.of(repository.save(record));
+    }
+
+    /**
+     * agent 的 transcribe_audio 工具入口：已经转写完成的结果不能被静默清掉重来，
+     * 只有"未完整完成"的 DONE（部分失败 / 无语音 / 整理失败）才允许重新触发。
+     */
+    public AudioTranscription triggerFromAgent(Long noteId, String blockId) {
+        Optional<AudioTranscription> existing = repository.findByNoteIdAndBlockId(noteId, blockId);
+        if (existing.isPresent() && existing.get().getStatus() == Status.DONE) {
+            ErrorKind kind = existing.get().getErrorKind();
+            if (kind != ErrorKind.PARTIAL_SEGMENTS && kind != ErrorKind.NO_SPEECH && kind != ErrorKind.SUMMARY_FAILED) {
+                return existing.get();
+            }
+        }
+        return trigger(noteId, blockId, TriggerType.MANUAL, Stage.FULL).orElseThrow();
     }
 
     public List<AudioTranscription> listForNote(Long noteId) {

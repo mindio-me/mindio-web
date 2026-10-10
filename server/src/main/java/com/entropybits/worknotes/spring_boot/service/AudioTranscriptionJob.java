@@ -36,6 +36,8 @@ import java.util.concurrent.Executors;
 public class AudioTranscriptionJob {
 
     static final int MAX_ATTEMPTS = 3;
+    /** 重试退避：第 n 次失败后至少等 n × 30 秒再重新派发 */
+    static final int RETRY_BACKOFF_SECONDS = 30;
 
     private final AudioTranscriptionRepository repository;
     private final MediaBlockService mediaBlockService;
@@ -57,7 +59,12 @@ public class AudioTranscriptionJob {
     }
 
     public void processPendingBatch() {
+        LocalDateTime now = LocalDateTime.now();
         for (AudioTranscription t : repository.findTop10ByStatusOrderByCreatedAtAsc(Status.PENDING)) {
+            if (t.getAttempts() > 0 && t.getUpdatedAt() != null
+                    && t.getUpdatedAt().isAfter(now.minusSeconds((long) t.getAttempts() * RETRY_BACKOFF_SECONDS))) {
+                continue;
+            }
             t.setStatus(Status.PROCESSING);
             repository.save(t);
             executor.submit(() -> processOne(t.getId()));
@@ -101,7 +108,14 @@ public class AudioTranscriptionJob {
             int attempts = t.getAttempts() + 1;
             t.setAttempts(attempts);
             if (attempts >= MAX_ATTEMPTS) {
-                fail(t, ErrorKind.AGENT_UNAVAILABLE, "AI 服务暂时不可用，请稍后重试");
+                if (t.getUtterances() != null) {
+                    // ASR 已经花了钱：保留逐句原文，只把整理标成失败，用户可以点"重新整理"
+                    t.setErrorKind(ErrorKind.SUMMARY_FAILED);
+                    t.setErrorMessage("整理失败：AI 服务暂时不可用，可以重新整理");
+                    finish(t);
+                } else {
+                    fail(t, ErrorKind.AGENT_UNAVAILABLE, "AI 服务暂时不可用，请稍后重试");
+                }
             } else {
                 t.setStatus(Status.PENDING);
                 repository.save(t);
@@ -174,6 +188,13 @@ public class AudioTranscriptionJob {
             t.setPolished(objectMapper.writeValueAsString(result.get("polished")));
             t.setSummary(objectMapper.writeValueAsString(result.get("summary")));
         } catch (AgentCallException e) {
+            t.setErrorKind(ErrorKind.SUMMARY_FAILED);
+            t.setErrorMessage("整理失败：" + e.getMessage());
+        } catch (AgentUnavailableException e) {
+            throw e;
+        } catch (Exception e) {
+            // 逐句原文已经存好：整理阶段的任何意外都不该把整条记录判成失败
+            log.warn("录音整理失败 id={}", t.getId(), e);
             t.setErrorKind(ErrorKind.SUMMARY_FAILED);
             t.setErrorMessage("整理失败：" + e.getMessage());
         }

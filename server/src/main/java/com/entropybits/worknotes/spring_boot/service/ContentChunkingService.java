@@ -75,7 +75,11 @@ public class ContentChunkingService {
                 String source = t.getPolished() != null ? t.getPolished() : t.getUtterances();
                 if (source != null) {
                     StringBuilder sb = new StringBuilder();
-                    objectMapper.readTree(source).forEach(p -> sb.append(p.path("text").asText("")).append('\n'));
+                    objectMapper.readTree(source).forEach(p -> {
+                        String text = p.path("text").asText("");
+                        // 失败分段的占位文字（"[第 N 段转写失败]"）不进检索
+                        if (!text.startsWith("[第 ")) sb.append(text).append('\n');
+                    });
                     if (!sb.isEmpty()) units.addAll(splitParagraphs(sb.toString()));
                 }
             } catch (Exception e) {

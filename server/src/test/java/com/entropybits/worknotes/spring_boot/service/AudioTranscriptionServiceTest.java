@@ -124,6 +124,29 @@ class AudioTranscriptionServiceTest {
     }
 
     @Test
+    void triggerFromAgent_returnsCleanDoneRecordUnchanged() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = existing(AudioTranscription.Status.DONE, "[{\"start\":0}]");
+        t.setErrorKind(null);
+        assertThat(service.triggerFromAgent(1L, "b")).isSameAs(t);
+        assertThat(t.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(t.getUtterances()).isNotNull();
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void triggerFromAgent_retriggersIncompleteDoneAndNewRecords() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = existing(AudioTranscription.Status.DONE, "[{\"start\":0}]");
+        assertThat(service.triggerFromAgent(1L, "b")).isSameAs(t);
+        assertThat(t.getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
+        assertThat(t.getTriggerType()).isEqualTo(AudioTranscription.TriggerType.MANUAL);
+
+        when(repository.findByNoteIdAndBlockId(1L, "b")).thenReturn(Optional.empty());
+        assertThat(service.triggerFromAgent(1L, "b").getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
+    }
+
+    @Test
     void trigger_rejectsNonAudioBlock() throws Exception {
         block("paragraph", 0);
         assertThatThrownBy(() -> service.trigger(1L, "b", AudioTranscription.TriggerType.MANUAL, AudioTranscription.Stage.FULL))

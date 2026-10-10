@@ -79,10 +79,7 @@ public class InternalAgentController {
     /** agent 的 transcribe_audio 工具：手动触发一次完整转写，立即返回，不等结果 */
     @PostMapping("/notes/{noteId}/audio-transcriptions/{blockId}")
     public AudioTranscriptionResponse triggerAudioTranscription(@PathVariable Long noteId, @PathVariable String blockId) {
-        return audioTranscriptionService.trigger(noteId, blockId,
-                        AudioTranscription.TriggerType.MANUAL, AudioTranscription.Stage.FULL)
-                .map(t -> AudioTranscriptionResponse.from(t, objectMapper))
-                .orElseThrow();
+        return AudioTranscriptionResponse.from(audioTranscriptionService.triggerFromAgent(noteId, blockId), objectMapper);
     }
 
     @PostMapping("/notes/{noteId}/topic-blocks/{blockType}/items")
