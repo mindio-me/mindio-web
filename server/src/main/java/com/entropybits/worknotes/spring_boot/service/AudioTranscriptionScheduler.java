@@ -28,18 +28,28 @@ public class AudioTranscriptionScheduler {
     private final AudioTranscriptionRepository repository;
     private final AudioTranscriptionJob job;
 
+    /** 启动恢复完成前不派发，避免恢复用旧实体把刚被派发的行又改回 PENDING 造成重复转写 */
+    private volatile boolean recovered = false;
+
     @Scheduled(fixedDelay = 10_000)
     public void dispatchPending() {
+        if (!recovered) {
+            return;
+        }
         job.processPendingBatch();
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void recoverOnStartup() {
-        List<AudioTranscription> stuck = repository.findByStatus(AudioTranscription.Status.PROCESSING);
-        stuck.forEach(t -> t.setStatus(AudioTranscription.Status.PENDING));
-        repository.saveAll(stuck);
-        if (!stuck.isEmpty()) {
-            log.info("录音转写：启动时恢复 {} 条未完成的任务", stuck.size());
+        try {
+            List<AudioTranscription> stuck = repository.findByStatus(AudioTranscription.Status.PROCESSING);
+            stuck.forEach(t -> t.setStatus(AudioTranscription.Status.PENDING));
+            repository.saveAll(stuck);
+            if (!stuck.isEmpty()) {
+                log.info("录音转写：启动时恢复 {} 条未完成的任务", stuck.size());
+            }
+        } finally {
+            recovered = true;
         }
     }
 }

@@ -49,6 +49,7 @@ class AudioTranscriptionJobTest {
         when(repository.findById(9L)).thenReturn(Optional.of(record));
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(noteRepository.existsById(1L)).thenReturn(true);
+        when(repository.existsById(9L)).thenReturn(true);
         blockData("{\"url\":\"/uploads/a.webm\",\"duration\":3700,\"marks\":[5000]," +
                 "\"segments\":[{\"url\":\"/uploads/s0.webm\",\"start\":0},{\"url\":\"/uploads/s1.webm\",\"start\":1800}]}");
         when(agent.audioSummarize(any(), any())).thenReturn(Map.of(
@@ -184,11 +185,33 @@ class AudioTranscriptionJobTest {
     }
 
     @Test
-    void deletesRecordWhenNoteDeletedDuringProcessing() {
+    void noteDeletedDuringAsr_stopsWithoutSavingOrSummarizing() {
         when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
         when(noteRepository.existsById(1L)).thenReturn(true, false);
         job.processOne(9L);
-        verify(repository).delete(record);
+        verify(repository).deleteByNoteId(1L);
+        assertThat(record.getUtterances()).isNull();
+        verify(agent, never()).audioSummarize(any(), any());
         verify(indexing, never()).reindexNote(any());
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.PROCESSING);
+    }
+
+    @Test
+    void recordDeletedDuringAsr_doesNotSaveAgain() {
+        when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
+        when(repository.existsById(9L)).thenReturn(false);
+        job.processOne(9L);
+        // 只有开头翻 PROCESSING 的那一次 save
+        verify(repository, times(1)).save(any());
+        verify(agent, never()).audioSummarize(any(), any());
+        verify(indexing, never()).reindexNote(any());
+    }
+
+    @Test
+    void reindexFailure_keepsRecordDone() {
+        when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
+        doThrow(new RuntimeException("index down")).when(indexing).reindexNote(1L);
+        job.processOne(9L);
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
     }
 }

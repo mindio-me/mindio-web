@@ -151,6 +151,10 @@ public class AudioTranscriptionJob {
             fail(t, ErrorKind.ASR_FAILED, "语音识别失败：" + lastError);
             return false;
         }
+        // 转写期间笔记可能被删（deleteNote 会清掉这条记录）：此时再 save 会把行"复活"成孤儿
+        if (!stillExists(t)) {
+            return false;
+        }
         boolean hasSpeech = all.stream().anyMatch(u -> !String.valueOf(u.get("text")).startsWith("[第 "));
         t.setUtterances(objectMapper.writeValueAsString(hasSpeech ? all : List.of()));
         if (!failed.isEmpty()) {
@@ -176,17 +180,32 @@ public class AudioTranscriptionJob {
     }
 
     private void finish(AudioTranscription t) {
-        if (!noteRepository.existsById(t.getNoteId())) {
-            repository.delete(t);
+        if (!stillExists(t)) {
             return;
         }
         t.setStatus(Status.DONE);
         t.setCompletedAt(LocalDateTime.now());
         repository.save(t);
-        contentIndexingService.reindexNote(t.getNoteId());
+        try {
+            contentIndexingService.reindexNote(t.getNoteId());
+        } catch (Exception e) {
+            log.warn("录音转写完成但重新索引失败 noteId={}", t.getNoteId(), e);
+        }
+    }
+
+    /** 笔记或记录已被删除则不能再 save（detached 实体 merge 会重新插入行）；笔记已删时顺手清掉残留 */
+    private boolean stillExists(AudioTranscription t) {
+        if (!noteRepository.existsById(t.getNoteId())) {
+            repository.deleteByNoteId(t.getNoteId());
+            return false;
+        }
+        return repository.existsById(t.getId());
     }
 
     private void fail(AudioTranscription t, ErrorKind kind, String message) {
+        if (!stillExists(t)) {
+            return;
+        }
         t.setStatus(Status.FAILED);
         t.setErrorKind(kind);
         t.setErrorMessage(message);

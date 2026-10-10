@@ -45,7 +45,15 @@ class AudioTranscriptionSchedulerTest {
     }
 
     @Test
-    void dispatchPending_delegatesToJob() {
+    void dispatchPending_doesNotCallJobBeforeRecovery() {
+        scheduler.dispatchPending();
+        verify(job, never()).processPendingBatch();
+    }
+
+    @Test
+    void dispatchPending_delegatesToJobAfterRecovery() {
+        when(repository.findByStatus(AudioTranscription.Status.PROCESSING)).thenReturn(List.of());
+        scheduler.recoverOnStartup();
         scheduler.dispatchPending();
         verify(job).processPendingBatch();
     }
