@@ -86,6 +86,16 @@ class JavaClient:
         except httpx.HTTPError as e:
             raise JavaClientError(f"list_media_blocks failed for note_id={note_id!r}: {e}") from e
 
+    async def trigger_audio_transcription(self, note_id: int, block_id: str) -> dict:
+        try:
+            resp = await self._client.post(f"/internal/notes/{note_id}/audio-transcriptions/{block_id}")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(
+                f"trigger_audio_transcription failed for note_id={note_id!r} block_id={block_id!r}: {e}"
+            ) from e
+
     async def get_block_media(self, note_id: int, block_id: str) -> dict:
         try:
             resp = await self._client.get(f"/internal/notes/{note_id}/blocks/{block_id}/content")

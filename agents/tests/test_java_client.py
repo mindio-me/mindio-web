@@ -303,3 +303,17 @@ async def test_get_ai_config_wraps_http_errors(test_settings):
     client = _client_with_transport(test_settings, lambda request: httpx.Response(500))
     with pytest.raises(JavaClientError):
         await client.get_ai_config()
+
+
+async def test_trigger_audio_transcription_posts_to_internal_endpoint(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"], captured["path"] = request.method, request.url.path
+        return httpx.Response(200, json={"blockId": "b1", "status": "PENDING"})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.trigger_audio_transcription(3, "b1")
+
+    assert captured == {"method": "POST", "path": "/internal/notes/3/audio-transcriptions/b1"}
+    assert result["status"] == "PENDING"

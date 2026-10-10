@@ -5,74 +5,29 @@
 Copyright (c) 2026 Fasong Wu
 SPDX-License-Identifier: AGPL-3.0-only
 """
-import base64
-
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.asr_client import AsrClientError
 from app.graph import build_graph_builder
+from app.java_client import JavaClientError
 from tools.transcribe_audio import make_transcribe_audio_tool
 
 
 class FakeJavaClient:
-    def __init__(self, media_blocks=None, audio=b"abc"):
+    def __init__(self, media_blocks=None, trigger_error=None):
         self.media_blocks = media_blocks or []
-        self.audio = audio
-        self.audio_requests: list[tuple] = []
-        self.patched: list[tuple] = []
+        self.trigger_error = trigger_error
+        self.triggered: list[tuple] = []
 
     async def list_media_blocks(self, note_id):
         return self.media_blocks
 
-    async def get_block_audio(self, note_id, block_id, segment=None):
-        self.audio_requests.append((note_id, block_id, segment))
-        if segment is None:
-            return self.audio
-        return f"segment-{segment}".encode()
-
-    async def patch_media_block(self, note_id, block_id, fields):
-        self.patched.append((note_id, block_id, fields))
-        return {"url": "a.mp3", "duration": 30, **fields}
-
-
-class FakeAsrClient:
-    def __init__(self, text="今天开会讨论了三件事", error=None):
-        self._text = text
-        self._error = error
-
-    async def transcribe(self, audio_base64: str) -> str:
-        if self._error:
-            raise self._error
-        return self._text
-
-
-class EchoSegmentAsrClient:
-    """把收到的分段字节原样当成识别结果，方便断言顺序；failing 里的分段抛错"""
-    def __init__(self, failing=()):
-        self.failing = set(failing)
-        self.calls: list[str] = []
-
-    async def transcribe(self, audio_base64: str) -> str:
-        name = base64.b64decode(audio_base64).decode()
-        self.calls.append(name)
-        if name in self.failing:
-            raise AsrClientError("超时")
-        return f"<{name}>"
-
-
-class FakeSummaryModel:
-    def __init__(self, content):
-        self._content = content
-
-    async def ainvoke(self, messages):
-        return AIMessage(content=self._content)
-
-
-class FailingSummaryModel:
-    async def ainvoke(self, messages):
-        raise RuntimeError("summary model exploded")
+    async def trigger_audio_transcription(self, note_id, block_id):
+        if self.trigger_error:
+            raise self.trigger_error
+        self.triggered.append((note_id, block_id))
+        return {"blockId": block_id, "status": "PENDING"}
 
 
 def _agent_input(text: str, current_note_id: int | None = None) -> dict:
@@ -83,193 +38,42 @@ def _agent_input(text: str, current_note_id: int | None = None) -> dict:
     }
 
 
-def _run_config() -> dict:
-    return {"configurable": {"thread_id": "alice"}}
-
-
-async def test_transcribe_audio_single_audio_writes_transcript_and_summary(monkeypatch):
-    import tools.transcribe_audio as transcribe_audio_route
-    monkeypatch.setattr(
-        transcribe_audio_route, "resolve_chat_model",
-        lambda provider: FakeSummaryModel("会议纪要：三件事"),
+async def _run(tool_, current_note_id=None, **args) -> str:
+    """经真实图调用工具（InjectedState只有走图才会注入），返回工具消息内容"""
+    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": args, "id": "c1"}])
+    model = FakeMessagesListChatModel(responses=[tool_call_msg, AIMessage(content="好的")])
+    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
+    result = await graph.ainvoke(
+        _agent_input("转录一下这段录音", current_note_id=current_note_id),
+        config={"configurable": {"thread_id": "alice"}},
     )
-    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "audio", "url": "a.mp3"}])
-    asr = FakeAsrClient()
-    media_updates: list = []
-    tool_ = make_transcribe_audio_tool(java, asr, media_updates)
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="已经转录好了")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    await graph.ainvoke(_agent_input("转录一下这段录音", current_note_id=9), config=_run_config())
-
-    assert java.patched == [(9, "b1", {
-        "transcript": "今天开会讨论了三件事", "summary": "会议纪要：三件事",
-    })]
-    assert media_updates == [{
-        "noteId": 9, "blockId": "b1", "blockType": "audio",
-        "data": {"url": "a.mp3", "duration": 30, "transcript": "今天开会讨论了三件事", "summary": "会议纪要：三件事"},
-    }]
+    return [m for m in result["messages"] if getattr(m, "type", None) == "tool"][0].content
 
 
-async def test_transcribe_audio_summary_model_failure_falls_back_to_truncated_transcript(monkeypatch):
-    import tools.transcribe_audio as transcribe_audio_route
-    monkeypatch.setattr(
-        transcribe_audio_route, "resolve_chat_model", lambda provider: FailingSummaryModel(),
-    )
-    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "audio", "url": "a.mp3"}])
-    transcript = "今天开会讨论了三件事"
-    asr = FakeAsrClient(text=transcript)
-    tool_ = make_transcribe_audio_tool(java, asr)
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="已经转录好了")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    result = await graph.ainvoke(_agent_input("转录一下这段录音", current_note_id=9), config=_run_config())
-
-    # 摘要模型挂了也不能丢掉已经付费做完的转录
-    assert java.patched == [(9, "b1", {"transcript": transcript, "summary": transcript[:200]})]
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "已完成转录" in tool_messages[0].content
-    assert "失败" not in tool_messages[0].content
+async def test_triggers_single_audio_and_reports_queued():
+    java = FakeJavaClient([{"blockId": "r1", "blockType": "audioRecord"}])
+    updates: list = []
+    tool_ = make_transcribe_audio_tool(java, None, updates)
+    result = await _run(tool_, 5)
+    assert java.triggered == [(5, "r1")]
+    assert "已开始转写" in result
+    assert updates == [{"noteId": 5, "blockId": "r1", "blockType": "audioRecord", "data": None, "transcriptionQueued": True}]
 
 
-async def test_transcribe_audio_no_current_note_returns_message_without_writing():
-    java = FakeJavaClient()
-    tool_ = make_transcribe_audio_tool(java, FakeAsrClient())
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="好的")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    result = await graph.ainvoke(_agent_input("转录一下", current_note_id=None), config=_run_config())
-
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "没有打开的笔记" in tool_messages[0].content
-    assert java.patched == []
+async def test_asks_for_index_when_multiple_audios():
+    java = FakeJavaClient([{"blockId": "a", "blockType": "audio"}, {"blockId": "b", "blockType": "audioRecord"}])
+    tool_ = make_transcribe_audio_tool(java, None, [])
+    assert "2段音频" in await _run(tool_, 5)
+    assert java.triggered == []
+    await _run(tool_, 5, index=2)
+    assert java.triggered == [(5, "b")]
 
 
-async def test_transcribe_audio_no_audio_in_note_returns_message():
-    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "image", "url": "a.png"}])
-    tool_ = make_transcribe_audio_tool(java, FakeAsrClient())
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="好的")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    result = await graph.ainvoke(_agent_input("转录一下", current_note_id=9), config=_run_config())
-
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "没有音频" in tool_messages[0].content
-
-
-async def test_transcribe_audio_counts_audio_and_audioRecord_blocks_together():
-    java = FakeJavaClient(media_blocks=[
-        {"blockId": "b1", "blockType": "audio", "url": "a.mp3"},
-        {"blockId": "b2", "blockType": "audioRecord", "url": "b.webm"},
-    ])
-    tool_ = make_transcribe_audio_tool(java, FakeAsrClient())
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="好的")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    result = await graph.ainvoke(_agent_input("转录一下", current_note_id=9), config=_run_config())
-
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "2段音频" in tool_messages[0].content
-    assert java.patched == []
-
-
-async def test_transcribe_audio_asr_failure_returns_error_message_without_writing():
-    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "audio", "url": "a.mp3"}])
-    asr = FakeAsrClient(error=AsrClientError("音频格式错误"))
-    tool_ = make_transcribe_audio_tool(java, asr)
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="抱歉，没能转录")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    result = await graph.ainvoke(_agent_input("转录一下", current_note_id=9), config=_run_config())
-
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "语音识别失败" in tool_messages[0].content
-    assert java.patched == []
-
-
-async def test_transcribe_audio_silent_audio_returns_message_without_writing():
-    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "audio", "url": "a.mp3"}])
-    asr = FakeAsrClient(text="")
-    tool_ = make_transcribe_audio_tool(java, asr)
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    final_msg = AIMessage(content="没听到内容")
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-
-    result = await graph.ainvoke(_agent_input("转录一下", current_note_id=9), config=_run_config())
-
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "静音" in tool_messages[0].content
-    assert java.patched == []
-
-
-def _run_transcribe(java, asr, monkeypatch, summary="摘要"):
-    import tools.transcribe_audio as transcribe_audio_route
-    monkeypatch.setattr(transcribe_audio_route, "resolve_chat_model", lambda provider: FakeSummaryModel(summary))
-    tool_ = make_transcribe_audio_tool(java, asr)
-    tool_call_msg = AIMessage(content="", tool_calls=[{"name": "transcribe_audio", "args": {}, "id": "c1"}])
-    model = FakeMessagesListChatModel(responses=[tool_call_msg, AIMessage(content="好了")])
-    graph = build_graph_builder(model, [tool_]).compile(checkpointer=InMemorySaver())
-    return graph.ainvoke(_agent_input("转录一下", current_note_id=9), config=_run_config())
-
-
-async def test_transcribe_audio_segmented_recording_transcribes_each_segment_in_order(monkeypatch):
-    java = FakeJavaClient(media_blocks=[{"blockId": "r1", "blockType": "audioRecord", "url": "a.webm", "segmentCount": 3}])
-    asr = EchoSegmentAsrClient()
-
-    await _run_transcribe(java, asr, monkeypatch)
-
-    # 有分段就只取分段，不取整段文件
-    assert java.audio_requests == [(9, "r1", 0), (9, "r1", 1), (9, "r1", 2)]
-    assert java.patched[0][2]["transcript"] == "<segment-0>\n\n<segment-1>\n\n<segment-2>"
-
-
-async def test_transcribe_audio_failed_segment_is_marked_and_others_are_kept(monkeypatch):
-    java = FakeJavaClient(media_blocks=[{"blockId": "r1", "blockType": "audioRecord", "url": "a.webm", "segmentCount": 3}])
-    asr = EchoSegmentAsrClient(failing={"segment-1"})
-
-    result = await _run_transcribe(java, asr, monkeypatch)
-
-    transcript = java.patched[0][2]["transcript"]
-    assert transcript.startswith("<segment-0>")
-    assert "[第 2 段转写失败" in transcript
-    assert transcript.endswith("<segment-2>")
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "第 2 段" in tool_messages[0].content
-
-
-async def test_transcribe_audio_all_segments_failing_writes_nothing(monkeypatch):
-    java = FakeJavaClient(media_blocks=[{"blockId": "r1", "blockType": "audioRecord", "url": "a.webm", "segmentCount": 2}])
-    asr = EchoSegmentAsrClient(failing={"segment-0", "segment-1"})
-
-    result = await _run_transcribe(java, asr, monkeypatch)
-
-    assert java.patched == []
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "语音识别失败" in tool_messages[0].content
-
-
-async def test_transcribe_audio_rejects_unsegmented_audio_over_the_asr_limit(monkeypatch):
-    import tools.transcribe_audio as transcribe_audio_route
-    monkeypatch.setattr(transcribe_audio_route, "ASR_MAX_BYTES", 10)
-    java = FakeJavaClient(media_blocks=[{"blockId": "b1", "blockType": "audio", "url": "a.mp3"}], audio=b"x" * 11)
-    asr = EchoSegmentAsrClient()
-
-    result = await _run_transcribe(java, asr, monkeypatch)
-
-    assert asr.calls == []
-    assert java.patched == []
-    tool_messages = [m for m in result["messages"] if getattr(m, "type", None) == "tool"]
-    assert "100MB" in tool_messages[0].content
+async def test_reports_no_note_and_no_audio_and_trigger_error():
+    tool_ = make_transcribe_audio_tool(FakeJavaClient(), None, [])
+    assert "没有打开的笔记" in await _run(tool_)
+    assert "没有音频" in await _run(tool_, 5)
+    failing = FakeJavaClient([{"blockId": "r1", "blockType": "audioRecord"}], trigger_error=JavaClientError("500"))
+    updates: list = []
+    assert "启动转写失败" in await _run(make_transcribe_audio_tool(failing, None, updates), 5)
+    assert updates == []
