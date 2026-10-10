@@ -34,3 +34,5 @@ def _no_backend_ai_config(monkeypatch, test_settings):
 
     monkeypatch.setattr(chat_route, "load_effective_settings", fake_load)
     monkeypatch.setattr(vision_route, "load_effective_settings", fake_load)
+    import app.routes.audio as audio_route
+    monkeypatch.setattr(audio_route, "load_effective_settings", fake_load)

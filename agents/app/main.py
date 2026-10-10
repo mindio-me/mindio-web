@@ -3,11 +3,13 @@
 
 from fastapi import FastAPI
 
+from app.routes.audio import router as audio_router
 from app.routes.chat import router as chat_router
 from app.routes.vision import router as vision_router
 
 app = FastAPI(title="mindio-agents")
 app.include_router(chat_router)
+app.include_router(audio_router)
 app.include_router(vision_router)
 
 
