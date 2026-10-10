@@ -17,10 +17,16 @@ from app.config import Settings, current_settings
 
 VOLCENGINE_ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash"
 SUCCESS_STATUS_CODE = "20000000"
+# 全静音音频：服务端不返回 utterances，按"成功但无内容"处理
+SILENCE_STATUS_CODE = "20000003"
 
 
 class AsrClientError(Exception):
     """语音识别调用失败（网络错误、非2xx响应、或X-Api-Status-Code不是成功码）。"""
+
+
+class AsrNotConfiguredError(AsrClientError):
+    """没有配置语音识别 Key：设置页和 agents 环境变量都是空的。"""
 
 
 class VolcengineAsrClient:
@@ -28,8 +34,10 @@ class VolcengineAsrClient:
         self._cfg = cfg
         self._client = client or httpx.AsyncClient(timeout=180.0)
 
-    async def transcribe(self, audio_base64: str) -> str:
+    async def _recognize(self, audio_base64: str, show_utterances: bool) -> dict:
         cfg = self._cfg or current_settings()
+        if not cfg.volcengine_asr_app_key:
+            raise AsrNotConfiguredError("请到 设置 → AI 服务 填写语音识别 Key")
         # 新版"豆包语音"控制台签发的是单个 API Key，只认 X-Api-Key 这一个头；
         # 老控制台是 App ID + Access Token 两个头。两种鉴权模式互斥，混着发会
         # 导致服务端按老模式去查grant、查不到（“load grant: requested grant not
@@ -46,10 +54,13 @@ class VolcengineAsrClient:
             "X-Api-Request-Id": str(uuid.uuid4()),
             "X-Api-Sequence": "-1",
         })
+        request_opts = {"model_name": "bigmodel", "enable_itn": True, "enable_punc": True}
+        if show_utterances:
+            request_opts["show_utterances"] = True
         body = {
             "user": {"uid": cfg.volcengine_asr_app_key},
             "audio": {"data": audio_base64},
-            "request": {"model_name": "bigmodel", "enable_itn": True, "enable_punc": True},
+            "request": request_opts,
         }
         try:
             resp = await self._client.post(VOLCENGINE_ASR_URL, headers=headers, json=body)
@@ -57,12 +68,28 @@ class VolcengineAsrClient:
             raise AsrClientError(f"语音识别请求失败: {e}") from e
 
         status_code = resp.headers.get("X-Api-Status-Code", "")
+        if status_code == SILENCE_STATUS_CODE:
+            return {}
         if status_code != SUCCESS_STATUS_CODE:
             message = resp.headers.get("X-Api-Message", "未知错误")
             raise AsrClientError(f"语音识别失败: status_code={status_code} message={message}")
 
-        payload = resp.json()
+        return resp.json()
+
+    async def transcribe(self, audio_base64: str) -> str:
+        payload = await self._recognize(audio_base64, show_utterances=False)
         return payload.get("result", {}).get("text", "").strip()
+
+    async def transcribe_utterances(self, audio_base64: str) -> list[dict]:
+        """逐句结果，时间是这段音频内的毫秒（调用方自己加分段偏移）；空文本句丢掉。"""
+        payload = await self._recognize(audio_base64, show_utterances=True)
+        result = []
+        for u in payload.get("result", {}).get("utterances") or []:
+            text = (u.get("text") or "").strip()
+            if not text:
+                continue
+            result.append({"start": int(u.get("start_time", 0)), "end": int(u.get("end_time", 0)), "text": text})
+        return result
 
     async def aclose(self) -> None:
         await self._client.aclose()
