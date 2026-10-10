@@ -177,12 +177,17 @@ class RecordTool {
     return wrapper
   }
 
+  removed() {
+    this.destroy()
+  }
+
   destroy() {
     recordingController.off('start', this._onControllerChange)
     recordingController.off('stop', this._onControllerChange)
     recordingController.off('error', this._onControllerChange)
     recordingController.off('pending-change', this._onControllerChange)
     if (this._offStashMessage) this._offStashMessage()
+    this._offStashMessage = null
     if (this._panel) this._panel.destroy()
     this._panel = null
   }

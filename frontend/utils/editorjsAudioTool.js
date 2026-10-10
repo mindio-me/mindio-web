@@ -415,6 +415,10 @@ class AudioTool {
     this._activeSession = null
   }
 
+  removed() {
+    this.destroy()
+  }
+
   destroy() {
     if (this._panel) this._panel.destroy()
     this._panel = null

@@ -27,20 +27,31 @@ function isBusy(r) {
   return r && (r.status === 'PENDING' || r.status === 'PROCESSING')
 }
 
+// 已有请求在途时只打"脏"标记：在途请求可能早于刚发生的触发，结束后必须再拉一次才拿得到新状态
 async function refresh(noteId) {
   const entry = notes.get(noteId)
   if (!entry) return
-  if (!entry.inflight) {
-    entry.inflight = entry.service.list(noteId)
-      .then((list) => {
-        entry.records = new Map((list || []).map((r) => [r.blockId, r]))
-      })
-      .catch(() => {})
-      .finally(() => { entry.inflight = null })
+  if (entry.inflight) {
+    entry.dirty = true
+    return
   }
+  entry.dirty = false
+  clearTimeout(entry.timer)
+  entry.timer = null
+  entry.inflight = Promise.resolve()
+    .then(() => entry.service.list(noteId))
+    .then((list) => {
+      entry.records = new Map((list || []).map((r) => [r.blockId, r]))
+    })
+    .catch((e) => { console.warn('拉取转写记录失败:', e) })
   await entry.inflight
-  if (!notes.has(noteId)) return
-  entry.subs.forEach((s) => s.cb(entry.records.get(s.blockId) || null))
+  entry.inflight = null
+  if (notes.get(noteId) !== entry) return
+  if (entry.dirty) {
+    refresh(noteId)
+    return
+  }
+  ;[...entry.subs].forEach((s) => s.cb(entry.records.get(s.blockId) || null))
   schedule(noteId)
 }
 
@@ -57,7 +68,7 @@ export function subscribe(noteId, blockId, service, cb) {
   const key = String(noteId)
   let entry = notes.get(key)
   if (!entry) {
-    entry = { subs: new Set(), records: new Map(), timer: null, inflight: null, service }
+    entry = { subs: new Set(), records: new Map(), timer: null, inflight: null, dirty: false, service }
     notes.set(key, entry)
   }
   const sub = { blockId, cb }
@@ -67,7 +78,8 @@ export function subscribe(noteId, blockId, service, cb) {
     entry.subs.delete(sub)
     if (!entry.subs.size) {
       clearTimeout(entry.timer)
-      notes.delete(key)
+      entry.timer = null
+      if (notes.get(key) === entry) notes.delete(key)
     }
   }
 }

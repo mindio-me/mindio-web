@@ -87,18 +87,24 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     a.addEventListener('click', () => seek(ms))
     return a
   }
-  const trigger = async (stage) => {
+  let triggerError = ''
+  const trigger = async (stage, btn) => {
+    if (btn) btn.disabled = true
+    triggerError = ''
     try {
       await service.trigger(noteId, blockId, 'MANUAL', stage)
     } catch (e) {
       console.warn('触发转写失败:', e)
+      triggerError = '触发失败，请稍后重试'
+      render()
     }
+    if (btn) btn.disabled = false
     notifyChanged(noteId, blockId)
   }
-  const button = (label, onClick) => {
+  const button = (label, stage) => {
     const b = el('button', 'atp-btn', label)
     b.type = 'button'
-    b.addEventListener('click', onClick)
+    b.addEventListener('click', () => trigger(stage, b))
     return b
   }
   const section = (key, title, count, fill) => {
@@ -114,31 +120,32 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   function renderStatus() {
     const r = record
     const line = el('div', 'atp-status')
+    if (triggerError) line.appendChild(el('span', null, triggerError))
     if (!r) {
       if (readOnly) return null
-      line.appendChild(button(legacy && legacy.transcript ? '重新转写' : '转写', () => trigger('FULL')))
+      line.appendChild(button(legacy && legacy.transcript ? '重新转写' : '转写', 'FULL'))
       return line
     }
     if (r.status === 'PENDING' || r.status === 'PROCESSING') {
       line.appendChild(el('span', 'atp-spin'))
-      line.appendChild(el('span', null, r.utterances ? '整理中…' : '转写中…'))
+      line.appendChild(el('span', null, (r.utterances || []).length ? '整理中…' : '转写中…'))
       return line
     }
     if (r.status === 'FAILED') {
       line.classList.add('error')
       line.appendChild(el('span', null, r.errorMessage || '转写失败'))
-      if (!readOnly) line.appendChild(button('重试', () => trigger('FULL')))
+      if (!readOnly) line.appendChild(button('重试', 'FULL'))
       return line
     }
     if (r.errorKind === 'SUMMARY_FAILED') {
       line.classList.add('error')
       line.appendChild(el('span', null, r.errorMessage || '整理失败'))
-      if (!readOnly) line.appendChild(button('重新整理', () => trigger('SUMMARY')))
+      if (!readOnly) line.appendChild(button('重新整理', 'SUMMARY'))
       return line
     }
     if (r.errorKind === 'PARTIAL_SEGMENTS' || r.errorKind === 'NO_SPEECH') {
       line.appendChild(el('span', null, r.errorMessage))
-      if (!readOnly) line.appendChild(button('重新转写', () => trigger('FULL')))
+      if (!readOnly) line.appendChild(button('重新转写', 'FULL'))
       return line
     }
     return null
@@ -238,7 +245,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     root.textContent = ''
     const status = renderStatus()
     if (status) root.appendChild(status)
-    if (!record || record.status === 'FAILED' || (record.status !== 'DONE' && !record.utterances)) {
+    if (!record || record.status === 'FAILED' || (record.status !== 'DONE' && !(record.utterances || []).length)) {
       if (!record || record.status === 'FAILED') root.appendChild(renderLegacy())
       return
     }
@@ -248,13 +255,25 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   }
 
   render()
-  const unsubscribe = noteId && service
-    ? subscribe(noteId, blockId, service, (r) => { record = r; render() })
-    : () => {}
+  let seenConnected = false
+  let unsubscribe = null
+  const stop = () => {
+    if (unsubscribe) unsubscribe()
+    unsubscribe = null
+  }
+  if (noteId && service) {
+    unsubscribe = subscribe(noteId, blockId, service, (r) => {
+      // Editor.js 重渲染 / 替换块时不一定调用 destroy()：根节点曾挂载、现已脱离文档就自行退订
+      if (root.isConnected) seenConnected = true
+      else if (seenConnected) { stop(); return }
+      record = r
+      render()
+    })
+  }
 
   return {
     destroy() {
-      unsubscribe()
+      stop()
       root.remove()
     }
   }
