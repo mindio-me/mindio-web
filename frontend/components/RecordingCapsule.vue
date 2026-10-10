@@ -135,13 +135,14 @@ export default {
       return this.dragPos ? { left: this.dragPos.left + 'px', top: this.dragPos.top + 'px', right: 'auto', bottom: 'auto' } : {}
     },
     systemAudioTitle() {
+      const isDesktop = typeof window !== 'undefined' && !!window.mindioDesktop
       if (!this.recording.systemAudioSupported) {
-        const isDesktop = typeof window !== 'undefined' && !!window.mindioDesktop
-        return isDesktop ? '当前无法录制电脑声音' : '桌面版可录制电脑声音'
+        return isDesktop ? '当前无法录制电脑声音' : '当前浏览器不支持录制电脑声音，请用 Chrome / Edge 或桌面版'
       }
       if (this.recording.systemAudio === 'connecting') return '正在连接电脑声音…'
       if (this.recording.systemAudio === 'on') return '正在录制电脑声音，点击关闭'
-      return '同时录制电脑声音'
+      // 网页版走浏览器的共享选择框，要提前说清楚会弹什么、要勾什么
+      return isDesktop ? '同时录制电脑声音' : '同时录制电脑声音（会让你选择要共享的标签页或屏幕，请勾选共享音频）'
     }
   },
   watch: {
@@ -436,7 +437,16 @@ export default {
           // 查不到就按错误名判断
         }
       }
-      if (api && payload.platform === 'darwin' && needsPermission) {
+      if (!api) {
+        // 网页版：失败多半是共享框被取消，或共享时没勾选音频
+        if (payload.error && payload.error.message === 'no-audio-track') {
+          this.showToast('没有拿到声音：请重新打开，并在共享窗口里勾选「共享标签页音频」或「共享系统音频」')
+        } else if (needsPermission) {
+          this.showToast('已取消录制电脑声音，继续仅录制麦克风')
+        } else {
+          this.showToast('无法录制电脑声音，已继续仅录制麦克风')
+        }
+      } else if (payload.platform === 'darwin' && needsPermission) {
         // macOS 授予屏幕录制/系统音频权限后，正在运行的进程拿不到新权限，必须重启应用
         this.showToast('需要在系统设置中允许 MindIO 录制屏幕和系统音频，开启后需重启应用', {
           label: '打开系统设置',

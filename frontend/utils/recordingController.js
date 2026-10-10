@@ -176,6 +176,18 @@ function desktopRecordingApi() {
   return (typeof window !== 'undefined' && window.mindioDesktop && window.mindioDesktop.recording) || null
 }
 
+/**
+ * 网页版能不能录电脑声音：走浏览器标准的 getDisplayMedia（弹"选择要共享的内容"框，勾选共享音频）。
+ * 只有 Chromium 内核（Chrome / Edge）的共享能带声音，Safari / Firefox 只给画面，不启用。
+ */
+function webSystemAudioCapable() {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) return false
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands) || []
+  if (brands.some((b) => /Chromium/i.test(b.brand))) return true
+  // 没有 userAgentData 的老版本：UA 里带 Chrome/ 或 Edg/ 的就是 Chromium 内核
+  return /(Chrome|Edg)\//.test(navigator.userAgent)
+}
+
 function readSystemAudioPref() {
   try {
     return window.localStorage.getItem(SYSTEM_AUDIO_PREF_KEY) === '1'
@@ -337,8 +349,9 @@ async function start(origin) {
   requestWakeLock()
   emit('start', {})
 
-  // 上次录音开着电脑声音就自动接上；不 await，不拖慢 start() 返回，失败只会弹提示、录音照常
-  if (state.systemAudioSupported && readSystemAudioPref()) {
+  // 上次录音开着电脑声音就自动接上；不 await，不拖慢 start() 返回，失败只会弹提示、录音照常。
+  // 只限桌面版：网页版每次都要弹共享选择框，且浏览器要求必须由用户亲手点击触发
+  if (desktopRecordingApi() && state.systemAudioSupported && readSystemAudioPref()) {
     setSystemAudio(true).catch(() => {})
   }
 }
@@ -396,13 +409,14 @@ function forceStop() {
 
 /**
  * 建音频图，返回 MediaRecorder 该录的流。
- * 桌面版：mic → mixBus → mixDest，录 mixDest.stream，电脑声音之后也接进 mixBus；
- * 网页版：和以前一样直接录麦克风流，AudioContext 只给波形条用。
+ * 桌面版 / Chromium 网页版：mic → mixBus → mixDest，录 mixDest.stream，电脑声音之后也接进 mixBus；
+ * 其他浏览器的网页版：和以前一样直接录麦克风流，AudioContext 只给波形条用。
  * 建不起来（AudioContext 不可用等）就退回直接录麦克风，电脑声音开关显示为不可用。
  */
 function setupAudioGraph() {
   const api = desktopRecordingApi()
-  const wantsMixer = !!(api && api.systemAudioSupported)
+  // 桌面版的判断保持原样；网页版只在能带声音共享的浏览器里启用混音台
+  const wantsMixer = api ? !!api.systemAudioSupported : webSystemAudioCapable()
   try {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext
     audioCtx = new AudioContextClass()
