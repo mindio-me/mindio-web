@@ -64,6 +64,13 @@
               :label="$t('aiSettings.asrAccessKey')"
               @clear="clearKey('asr.volcengine.access_key')"
             />
+            <el-form-item :label="$t('aiSettings.autoTranscribe')">
+              <el-switch
+                :value="form['asr.auto_transcribe'] !== 'false'"
+                @change="v => $set(form, 'asr.auto_transcribe', v ? 'true' : 'false')"
+              />
+              <div class="hint-text">{{ $t('aiSettings.autoTranscribeTip') }}</div>
+            </el-form-item>
           </el-collapse-item>
         </el-collapse>
 

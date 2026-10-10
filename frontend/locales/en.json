@@ -1086,6 +1086,8 @@
     "asrTip": "Volcengine / Doubao Speech, pick one mode: the new Doubao Speech console only needs the App Key (leave Access Key empty); the legacy console needs both. Don't mix them. Empty fields use the agents service's own environment variables.",
     "asrAppKey": "App Key",
     "asrAccessKey": "Access Key",
+    "autoTranscribe": "Auto-transcribe recordings",
+    "autoTranscribeTip": "Transcribe and summarize recordings automatically after saving. Recordings shorter than 10 seconds are skipped; you can still transcribe them from the recording block. Speech recognition is billed by duration.",
     "keyPlaceholder": "Enter a new key to replace it",
     "notConfigured": "Not configured",
     "unreadable": "The saved key can't be read (encryption key changed), please enter it again",

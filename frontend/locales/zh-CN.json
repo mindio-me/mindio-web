@@ -1080,6 +1080,8 @@
     "asrTip": "火山引擎 / 豆包语音二选一：新版\"豆包语音\"控制台只填 App Key，Access Key 留空；旧版控制台两项都填。不要混填。留空时使用 agents 服务自己的环境变量。",
     "asrAppKey": "App Key",
     "asrAccessKey": "Access Key",
+    "autoTranscribe": "录完自动转写",
+    "autoTranscribeTip": "录音保存后自动转写并整理成摘要、章节和待办。短于 10 秒的录音不会自动处理，可以在录音块上手动转写。语音识别按时长计费。",
     "keyPlaceholder": "输入新的 Key 以替换",
     "notConfigured": "未配置",
     "unreadable": "已保存的 Key 无法读取（加密密钥已变更），请重新填写",
