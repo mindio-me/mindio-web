@@ -18,6 +18,7 @@ import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionReposi
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -99,6 +100,8 @@ public class AudioTranscriptionService {
         return repository.findByNoteId(noteId);
     }
 
+    /** Note.owner 是 LAZY 且 open-in-view=false：读 owner 的用户名必须在事务里，否则 LazyInitializationException */
+    @Transactional(readOnly = true)
     public void requireOwner(Long noteId, String username) {
         Note note = noteRepository.findById(noteId)
                 .orElseThrow(() -> new ResourceNotFoundException("笔记不存在或已被删除"));
