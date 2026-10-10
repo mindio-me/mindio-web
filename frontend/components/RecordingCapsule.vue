@@ -36,6 +36,15 @@
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M9.5 8.5v3M12 7v6M14.5 8.5v3"/></svg>
         </button>
+        <button
+          class="rc-btn rc-mark"
+          :class="{ flash: markFlash }"
+          :title="recording.status === 'recording' ? '标记重点（会在整理时单独列出）' : '暂停中不能标记'"
+          :aria-disabled="recording.status !== 'recording' ? 'true' : 'false'"
+          @click="onMark"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4z"/></svg>
+        </button>
         <button class="rc-btn" :title="recording.status === 'paused' ? '继续' : '暂停'" @click="togglePause">
           <svg v-if="recording.status === 'paused'" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           <svg v-else viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
@@ -84,6 +93,7 @@
 import recordingController from '~/utils/recordingController'
 import recordingStash from '~/utils/recordingStash'
 import { resolveBlockInNote, createNoteWithRecording, blobToFile } from '~/services/noteAttachService'
+import { notifyChanged } from '~/utils/audioTranscriptionStore'
 
 // 等 notes 页回执的超时时间：替换块 + 一次直存的往返，8s 足够；超时按"当前没有活的
 // 编辑器实例接得住"处理，转去后端改写笔记的兜底路径
@@ -98,6 +108,7 @@ export default {
       showAttachPopover: false,
       stopResult: null,
       saving: false,
+      markFlash: false,
       toast: '',
       toastAction: null, // { label, handler } —— 有值时 toast 带一个操作按钮
       toastTimer: null,
@@ -184,11 +195,11 @@ export default {
      * 录音没能正常收尾（onstop 没触发，内存里的数据拿不到了），但本地副本里有已经录到的部分：
      * 从本地副本拼回来，走和正常停止一样的保存流程
      */
-    async onOrphaned({ stashId, durationSeconds, origin }) {
+    async onOrphaned({ stashId, durationSeconds, origin, marks }) {
       const blob = await recordingStash.loadBlob(stashId)
       if (!blob) return
       const segments = await recordingStash.loadSegments(stashId)
-      this.adoptStopResult({ blob, durationSeconds, origin, interrupted: true, segments, stash: Promise.resolve(stashId) })
+      this.adoptStopResult({ blob, durationSeconds, origin, interrupted: true, segments, marks: marks || [], stash: Promise.resolve(stashId) })
     },
     /** 找本地副本里"没人管"的录音，一次恢复一段；手上已经有一段待保存、或正在录音时先不管 */
     async recoverOrphans() {
@@ -215,6 +226,7 @@ export default {
             startedAt: session.startedAt,
             url: session.url || null, // 上次已经传上去了就不用再传
             segments,
+            marks: session.marks || [],
             stash: Promise.resolve(session.id)
           })
           return
@@ -262,6 +274,7 @@ export default {
         if (id) recordingStash.update(id, { url: res.url })
       }
       const data = { url: result.url, duration: result.durationSeconds }
+      if (Array.isArray(result.marks) && result.marks.length) data.marks = result.marks
       // 分段只有齐全才有用，缺了哪段就整段转写（2 小时/100MB 以内都没问题）
       if (segments.length > 1 && segments.every((s) => s.url)) {
         data.segments = segments.map((s) => ({ url: s.url, start: s.start, duration: s.duration }))
@@ -283,11 +296,15 @@ export default {
         const origin = result.origin
         let message = result.recovered ? '已恢复并保存上次没存好的录音' : '录音已保存'
         let action = null
+        let target = null // { noteId, blockId }：录音最终落在哪个块，用来触发自动转写
         if (origin && origin.type === 'block' && origin.noteId && origin.blockId) {
           const placed = await this.placeIntoBlock(origin, data, result.startedAt)
           if (placed.newNote) {
             message = '原来那篇笔记已经不在了，录音已保存为新笔记'
             action = this.openNoteAction(placed.newNote.id)
+            target = { noteId: placed.newNote.id, blockId: placed.newNote.recordBlockId }
+          } else {
+            target = { noteId: origin.noteId, blockId: origin.blockId }
           }
           // 别的页签可能也开着这篇笔记：让它们把那个块也换成播放器，免得它们之后自动保存时把这里的结果盖掉
           recordingStash.post({ type: 'resolved', noteId: origin.noteId, blockId: origin.blockId, data })
@@ -296,15 +313,27 @@ export default {
           this.$nuxt.$emit('workspace:note-created', note)
           message = result.recovered ? '已恢复上次没存好的录音，保存为新笔记' : '录音已保存为新笔记'
           action = this.openNoteAction(note.id)
+          target = { noteId: note.id, blockId: note.recordBlockId }
         }
         this.settleStopResult()
         this.showToast(message, action)
+        this.autoTranscribe(target)
       } catch (e) {
         this.showToast((e && e.message) || '保存失败，请重试')
         // 失败时绝不能丢掉录音——那可能是唯一的副本。面板里可以重试或下载到本地
         this.showAttachPopover = true
       } finally {
         this.saving = false
+      }
+    },
+    /** 录音存好后自动转写；被后端过滤（设置关了 / 太短）或请求失败都不打扰用户 */
+    async autoTranscribe(target) {
+      if (!target || !target.noteId || !target.blockId) return
+      try {
+        await this.$audioTranscriptionService.trigger(target.noteId, target.blockId, 'AUTO')
+        notifyChanged(target.noteId, target.blockId)
+      } catch (e) {
+        console.warn('自动转写登记失败，可在录音块上手动转写:', e)
       }
     },
     /**
@@ -430,6 +459,13 @@ export default {
       const base = 4 + boosted * 22
       const jitter = ((i * 37) % 11) - 5 // 固定的伪随机抖动，避免所有条一样高
       return Math.max(4, Math.min(20, base + jitter))
+    },
+    onMark() {
+      const ms = recordingController.mark()
+      if (ms == null) return
+      this.markFlash = true
+      setTimeout(() => { this.markFlash = false }, 300)
+      this.showToast('已标记 · ' + this.formatDuration(ms / 1000))
     },
     togglePause() {
       if (this.recording.status === 'paused') {
@@ -633,6 +669,10 @@ export default {
 }
 @media (prefers-reduced-motion: reduce) {
   .rc-sys.connecting svg { animation: none; }
+}
+.rc-mark {
+  &.flash { background: #fff; color: var(--text-color, #1a202c); transform: scale(1.15); transition: transform 0.15s; }
+  &[aria-disabled='true'] { opacity: 0.4; cursor: not-allowed; }
 }
 .rc-collapse {
   background: none;

@@ -42,10 +42,18 @@ async function saveNotePreservingFields(noteId, note, content, noteService) {
 
 /**
  * 从顶栏发起的录音（没有对应的录音块），或者原来那篇笔记已经被删了：新建一篇笔记放这段录音。
- * data 是录音块的数据：{ url, duration, segments? }
+ * data 是录音块的数据：{ url, duration, segments?, marks? }；返回值带 recordBlockId（录音块的 id）
  */
+function newBlockId() {
+  // 与 Editor.js 自动生成的 id 同形（10 位字母数字）；提前生成，后端触发转写时要用它定位块
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let id = ''
+  for (let i = 0; i < 10; i++) id += chars[Math.floor(Math.random() * chars.length)]
+  return id
+}
+
 export async function createNoteWithRecording({ data, startedAt, noteService }) {
-  const block = { type: 'audioRecord', data }
+  const block = { id: newBlockId(), type: 'audioRecord', data }
   const note = await noteService.createNote({
     title: '录音 · ' + formatTimestamp(new Date(startedAt || Date.now())),
     content: JSON.stringify({ time: Date.now(), blocks: [block], version: EDITORJS_VERSION }),
@@ -55,7 +63,7 @@ export async function createNoteWithRecording({ data, startedAt, noteService }) 
     sectionContents: [JSON.stringify(block.data)],
     sectionTypes: [block.type]
   })
-  return note
+  return { ...note, recordBlockId: block.id }
 }
 
 /**

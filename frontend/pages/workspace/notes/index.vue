@@ -1453,8 +1453,9 @@ export default {
       }
 
       this.editor.blocks.delete(idx)
-      // data: { url, duration, segments? }——长录音带着分段，转写要用，不能只取 url/duration
-      this.editor.blocks.insert('audioRecord', data, {}, idx, true)
+      // data: { url, duration, segments?, marks? }。必须沿用原块 id 插入：录音胶囊随后要按这个
+      // id 触发自动转写，Editor.js 默认会给新块生成新 id，后端就找不到这个块了
+      this.editor.blocks.insert('audioRecord', data, {}, idx, true, false, blockId)
       this.hasUnsavedChanges = true
       this.updateSaveStatus('saving')
 

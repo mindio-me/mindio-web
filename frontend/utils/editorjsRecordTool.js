@@ -358,6 +358,8 @@ class RecordTool {
       }
       // 长录音的分段（专供转写），存笔记时不能丢
       if (Array.isArray(this.data.segments) && this.data.segments.length) saved.segments = this.data.segments
+      // 录音时打的标记（毫秒），整理时单独列出
+      if (Array.isArray(this.data.marks) && this.data.marks.length) saved.marks = this.data.marks
       return saved
     }
     if (this.data.recording) {

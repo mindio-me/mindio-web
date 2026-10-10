@@ -15,7 +15,8 @@ const state = Vue.observable({
   systemAudioSupported: false, // 桌面版且混音台建起来了才为 true，start() 时更新
   // 录完了但还没存成功、正等着用户在右下角面板里选保存位置的那段录音，是从哪个录音块发起的。
   // 录音块靠它显示"保存失败，录音还在右下角"，而不是一直停在"录音中"或误报"没能正常完成"
-  pendingBlockId: null
+  pendingBlockId: null,
+  marks: [] // 本次录音打过的标记，毫秒，按实际录到的时长计，不含暂停
 })
 
 const listeners = {}
@@ -204,12 +205,12 @@ function setPendingBlock(blockId) {
 }
 
 /** 录音没能通过 onstop 正常收尾（内存里的数据拿不到了），把本地副本交出去让界面恢复 */
-function emitOrphaned(stash, durationSeconds, origin) {
+function emitOrphaned(stash, durationSeconds, origin, marks) {
   if (!stash) return
   stash.then((id) => {
     if (!id) return
     recordingStash.markStopped(id, durationSeconds).then(() => {
-      emit('orphaned', { stashId: id, durationSeconds, origin })
+      emit('orphaned', { stashId: id, durationSeconds, origin, marks: marks || [] })
     })
   })
 }
@@ -280,12 +281,13 @@ async function start(origin) {
     const errorPayload = pendingErrorPayload
     pendingErrorPayload = null
     const segments = await collectSegments()
+    const marks = state.marks.slice()
     cleanup()
     stash.then((id) => recordingStash.markStopped(id, durationSeconds))
     if (interrupted && errorPayload) emit('error', errorPayload)
     // stash: 本地副本的 id（Promise）。保存成功或确认放弃后由调用方删掉它
     // segments: 30 分钟以上的录音才有，专供转写；已经在录音过程中传上去的带着 url
-    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash, segments }
+    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash, segments, marks }
     emit('stop', result)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
@@ -314,6 +316,7 @@ async function start(origin) {
 
   state.status = 'recording'
   state.elapsedSeconds = 0
+  state.marks = []
   startSegment(stash, 0)
 
   timerId = setInterval(() => {
@@ -352,9 +355,10 @@ function forceStop() {
     const stash = currentStash
     const durationSeconds = state.elapsedSeconds
     const origin = state.origin
+    const marks = state.marks.slice()
     cleanup()
     if (errorPayload) emit('error', errorPayload)
-    emitOrphaned(stash, durationSeconds, origin)
+    emitOrphaned(stash, durationSeconds, origin, marks)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
       pendingStopResolve = null
@@ -377,10 +381,11 @@ function forceStop() {
     const stash = currentStash
     const durationSeconds = state.elapsedSeconds
     const origin = state.origin
+    const marks = state.marks.slice()
     cleanup()
     emit('error', errorPayload)
     // 内存里的数据拿不到了，但本地副本里有已经录到的部分
-    emitOrphaned(stash, durationSeconds, origin)
+    emitOrphaned(stash, durationSeconds, origin, marks)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
       pendingStopResolve = null
@@ -600,6 +605,18 @@ function resume() {
   emit('resume', {})
 }
 
+/** 打一个标记：记下当前已录到的时长（不含暂停），写进本地副本，崩溃恢复后标记还在 */
+function mark() {
+  if (state.status !== 'recording') return null
+  const ms = state.elapsedSeconds * 1000
+  if (state.marks[state.marks.length - 1] === ms) return ms // 同一秒连点只记一次
+  state.marks.push(ms)
+  const marks = state.marks.slice()
+  if (currentStash) currentStash.then((id) => recordingStash.update(id, { marks }))
+  emit('mark', { ms })
+  return ms
+}
+
 function stop() {
   return new Promise((resolve) => {
     if (state.status === 'starting') {
@@ -669,8 +686,9 @@ function cleanup() {
   teardownAudioGraph()
   state.status = 'idle'
   state.elapsedSeconds = 0
+  state.marks = []
   state.level = 0
   state.origin = null
 }
 
-export default { state, on, off, start, pause, resume, stop, cancel, setSystemAudio, setOwner, setPendingBlock }
+export default { state, on, off, start, pause, resume, mark, stop, cancel, setSystemAudio, setOwner, setPendingBlock }
