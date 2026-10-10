@@ -2,6 +2,7 @@
 Copyright (c) 2026 Fasong Wu
 SPDX-License-Identifier: AGPL-3.0-only
 """
+import dataclasses
 import json
 
 import pytest
@@ -63,6 +64,19 @@ async def test_asr_transcribe_maps_asr_errors(monkeypatch, asr_error, code, stat
     with pytest.raises(HTTPException) as e:
         await asr_transcribe(AsrTranscribeRequest(noteId=1, blockId="b", segment=None, offsetMs=0))
     assert e.value.status_code == status and e.value.detail["code"] == code
+
+
+async def test_asr_transcribe_without_key_fails_before_fetching_audio(monkeypatch, test_settings):
+    async def no_key(java_client, base=None):
+        return dataclasses.replace(test_settings, volcengine_asr_app_key="", volcengine_asr_access_key="")
+
+    monkeypatch.setattr(audio_route, "load_effective_settings", no_key)
+    java = FakeJava()
+    _patch(monkeypatch, java, FakeAsr())
+    with pytest.raises(HTTPException) as e:
+        await asr_transcribe(AsrTranscribeRequest(noteId=1, blockId="b", segment=None, offsetMs=0))
+    assert e.value.status_code == 422 and e.value.detail["code"] == "ASR_NOT_CONFIGURED"
+    assert java.calls == []
 
 
 async def test_asr_transcribe_maps_fetch_error_and_size(monkeypatch):

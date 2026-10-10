@@ -96,7 +96,10 @@ async def _load_settings():
 
 @router.post("/internal/asr-transcribe")
 async def asr_transcribe(request: AsrTranscribeRequest) -> AsrTranscribeResponse:
-    await _load_settings()
+    cfg = await _load_settings()
+    if not cfg.volcengine_asr_app_key:
+        # 没配 Key 就别白白去取音频（可能几十 MB）
+        raise _error(422, "ASR_NOT_CONFIGURED", "请到 设置 → AI 服务 填写语音识别 Key")
     java_client = JavaClient()
     try:
         audio = await java_client.get_block_audio(request.noteId, request.blockId, segment=request.segment)

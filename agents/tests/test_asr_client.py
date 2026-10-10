@@ -135,6 +135,18 @@ async def test_transcribe_utterances_requests_utterances_and_maps_fields(test_se
     ]
 
 
+async def test_transcribe_utterances_tolerates_null_timestamps(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"X-Api-Status-Code": "20000000"},
+            json={"result": {"utterances": [{"start_time": None, "end_time": None, "text": "你好。"}]}},
+        )
+
+    client = _client_with_transport(test_settings, handler)
+    assert await client.transcribe_utterances("x") == [{"start": 0, "end": 0, "text": "你好。"}]
+
+
 async def test_transcribe_utterances_returns_empty_list_when_no_utterances(test_settings):
     def handler(request):
         return httpx.Response(200, headers={"X-Api-Status-Code": "20000000"}, json={"result": {"text": ""}})

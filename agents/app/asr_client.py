@@ -88,7 +88,7 @@ class VolcengineAsrClient:
             text = (u.get("text") or "").strip()
             if not text:
                 continue
-            result.append({"start": int(u.get("start_time", 0)), "end": int(u.get("end_time", 0)), "text": text})
+            result.append({"start": int(u.get("start_time") or 0), "end": int(u.get("end_time") or 0), "text": text})
         return result
 
     async def aclose(self) -> None:

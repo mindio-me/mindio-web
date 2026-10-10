@@ -50,9 +50,13 @@ def make_transcribe_audio_tool(java_client: JavaClient, asr_client=None, media_b
             return f"这篇笔记里有{len(audios)}段音频，请告诉我具体是第几段（从上到下数，从1开始）。"
 
         try:
-            await java_client.trigger_audio_transcription(note_id, target["blockId"])
+            record = await java_client.trigger_audio_transcription(note_id, target["blockId"])
         except JavaClientError as e:
             return f"启动转写失败：{e}"
+
+        if isinstance(record, dict) and record.get("status") == "DONE":
+            # 后端对已完成的结果不会重置；这里也不推 transcriptionQueued，免得面板误以为在排队
+            return "这段录音已经转写过了，结果就在录音下方。如需重新转写，可以点录音下方的「重新转写」。"
 
         if media_block_updates is not None:
             media_block_updates.append({

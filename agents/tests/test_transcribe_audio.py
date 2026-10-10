@@ -15,9 +15,10 @@ from tools.transcribe_audio import make_transcribe_audio_tool
 
 
 class FakeJavaClient:
-    def __init__(self, media_blocks=None, trigger_error=None):
+    def __init__(self, media_blocks=None, trigger_error=None, trigger_status="PENDING"):
         self.media_blocks = media_blocks or []
         self.trigger_error = trigger_error
+        self.trigger_status = trigger_status
         self.triggered: list[tuple] = []
 
     async def list_media_blocks(self, note_id):
@@ -27,7 +28,7 @@ class FakeJavaClient:
         if self.trigger_error:
             raise self.trigger_error
         self.triggered.append((note_id, block_id))
-        return {"blockId": block_id, "status": "PENDING"}
+        return {"blockId": block_id, "status": self.trigger_status}
 
 
 def _agent_input(text: str, current_note_id: int | None = None) -> dict:
@@ -58,6 +59,14 @@ async def test_triggers_single_audio_and_reports_queued():
     assert java.triggered == [(5, "r1")]
     assert "已开始转写" in result
     assert updates == [{"noteId": 5, "blockId": "r1", "blockType": "audioRecord", "data": None, "transcriptionQueued": True}]
+
+
+async def test_already_done_recording_is_not_retranscribed_or_queued():
+    java = FakeJavaClient([{"blockId": "r1", "blockType": "audioRecord"}], trigger_status="DONE")
+    updates: list = []
+    result = await _run(make_transcribe_audio_tool(java, None, updates), 5)
+    assert "已经转写过了" in result and "重新转写" in result
+    assert updates == []
 
 
 async def test_asks_for_index_when_multiple_audios():
