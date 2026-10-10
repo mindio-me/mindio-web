@@ -1,0 +1,208 @@
+/*
+ * Copyright (c) 2026 Fasong Wu
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+package com.entropybits.worknotes.spring_boot.service;
+
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.ErrorKind;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Stage;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Status;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
+import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * 录音转写执行引擎：捞 PENDING → 逐段 ASR（Python 自取音频）→ 先存逐句原文 → 整理 → 写回 + 重新索引。
+ * 照 ImageOcrJob 的模式：提交线程池前同步把状态翻成 PROCESSING，避免下一次调度重复提交。
+ * 详见 docs/superpowers/specs/2026-10-10-recording-auto-notes-design.md。
+ */
+@Slf4j
+@Service
+public class AudioTranscriptionJob {
+
+    static final int MAX_ATTEMPTS = 3;
+
+    private final AudioTranscriptionRepository repository;
+    private final MediaBlockService mediaBlockService;
+    private final AgentServiceClient agentServiceClient;
+    private final ContentIndexingService contentIndexingService;
+    private final NoteRepository noteRepository;
+    private final ObjectMapper objectMapper;
+    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    public AudioTranscriptionJob(AudioTranscriptionRepository repository, MediaBlockService mediaBlockService,
+                                 AgentServiceClient agentServiceClient, ContentIndexingService contentIndexingService,
+                                 NoteRepository noteRepository, ObjectMapper objectMapper) {
+        this.repository = repository;
+        this.mediaBlockService = mediaBlockService;
+        this.agentServiceClient = agentServiceClient;
+        this.contentIndexingService = contentIndexingService;
+        this.noteRepository = noteRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    public void processPendingBatch() {
+        for (AudioTranscription t : repository.findTop10ByStatusOrderByCreatedAtAsc(Status.PENDING)) {
+            t.setStatus(Status.PROCESSING);
+            repository.save(t);
+            executor.submit(() -> processOne(t.getId()));
+        }
+    }
+
+    void processOne(Long id) {
+        AudioTranscription t = repository.findById(id).orElse(null);
+        if (t == null || (t.getStatus() != Status.PENDING && t.getStatus() != Status.PROCESSING)) {
+            return;
+        }
+        t.setStatus(Status.PROCESSING);
+        repository.save(t);
+        try {
+            if (!noteRepository.existsById(t.getNoteId())) {
+                repository.delete(t);
+                return;
+            }
+            MediaBlockService.BlockData block;
+            try {
+                block = mediaBlockService.getBlockData(t.getNoteId(), t.getBlockId());
+            } catch (ResourceNotFoundException | BadRequestException e) {
+                fail(t, ErrorKind.FILE_MISSING, "找不到录音文件");
+                return;
+            }
+
+            if (t.getStage() == Stage.FULL && !transcribe(t, block.data())) {
+                return;
+            }
+
+            List<Map<String, Object>> utterances = readList(t.getUtterances());
+            if (utterances.isEmpty()) {
+                t.setErrorKind(ErrorKind.NO_SPEECH);
+                t.setErrorMessage("没有识别出内容（可能是静音）");
+                finish(t);
+                return;
+            }
+            summarize(t, utterances, readMarks(block.data()));
+            finish(t);
+        } catch (AgentUnavailableException e) {
+            int attempts = t.getAttempts() + 1;
+            t.setAttempts(attempts);
+            if (attempts >= MAX_ATTEMPTS) {
+                fail(t, ErrorKind.AGENT_UNAVAILABLE, "AI 服务暂时不可用，请稍后重试");
+            } else {
+                t.setStatus(Status.PENDING);
+                repository.save(t);
+            }
+        } catch (Exception e) {
+            log.warn("录音转写失败 id={}", id, e);
+            fail(t, ErrorKind.UNKNOWN, "处理失败：" + e.getMessage());
+        }
+    }
+
+    /** 逐段 ASR 并先存逐句原文；返回 false 表示已经判失败、不用继续 */
+    private boolean transcribe(AudioTranscription t, JsonNode data) throws Exception {
+        List<Integer> segmentIndexes = new ArrayList<>();
+        List<Long> offsets = new ArrayList<>();
+        JsonNode segments = data.path("segments");
+        if (segments.isArray() && !segments.isEmpty()) {
+            for (int i = 0; i < segments.size(); i++) {
+                segmentIndexes.add(i);
+                offsets.add(Math.round(segments.get(i).path("start").asDouble(0) * 1000));
+            }
+        } else {
+            segmentIndexes.add(null);
+            offsets.add(0L);
+        }
+
+        List<Map<String, Object>> all = new ArrayList<>();
+        List<Integer> failed = new ArrayList<>();
+        String lastError = null;
+        for (int i = 0; i < segmentIndexes.size(); i++) {
+            try {
+                all.addAll(agentServiceClient.asrTranscribe(t.getNoteId(), t.getBlockId(), segmentIndexes.get(i), offsets.get(i)));
+            } catch (AgentCallException e) {
+                if ("ASR_NOT_CONFIGURED".equals(e.getCode())) {
+                    fail(t, ErrorKind.ASR_NOT_CONFIGURED, e.getMessage());
+                    return false;
+                }
+                failed.add(i + 1);
+                lastError = e.getMessage();
+                Map<String, Object> placeholder = new LinkedHashMap<>();
+                placeholder.put("start", offsets.get(i));
+                placeholder.put("end", offsets.get(i));
+                placeholder.put("text", "[第 " + (i + 1) + " 段转写失败]");
+                all.add(placeholder);
+            }
+        }
+        if (failed.size() == segmentIndexes.size()) {
+            fail(t, ErrorKind.ASR_FAILED, "语音识别失败：" + lastError);
+            return false;
+        }
+        boolean hasSpeech = all.stream().anyMatch(u -> !String.valueOf(u.get("text")).startsWith("[第 "));
+        t.setUtterances(objectMapper.writeValueAsString(hasSpeech ? all : List.of()));
+        if (!failed.isEmpty()) {
+            t.setErrorKind(ErrorKind.PARTIAL_SEGMENTS);
+            t.setErrorMessage(failed.stream().map(n -> "第 " + n + " 段").reduce((a, b) -> a + "、" + b).orElse("")
+                    + "转写失败，可以重新转写");
+        }
+        // ASR 已经花了钱：后面整理阶段如果因为服务不可达要重试，只重做整理
+        t.setStage(Stage.SUMMARY);
+        repository.save(t);
+        return true;
+    }
+
+    private void summarize(AudioTranscription t, List<Map<String, Object>> utterances, List<Long> marks) throws Exception {
+        try {
+            Map<String, Object> result = agentServiceClient.audioSummarize(utterances, marks);
+            t.setPolished(objectMapper.writeValueAsString(result.get("polished")));
+            t.setSummary(objectMapper.writeValueAsString(result.get("summary")));
+        } catch (AgentCallException e) {
+            t.setErrorKind(ErrorKind.SUMMARY_FAILED);
+            t.setErrorMessage("整理失败：" + e.getMessage());
+        }
+    }
+
+    private void finish(AudioTranscription t) {
+        if (!noteRepository.existsById(t.getNoteId())) {
+            repository.delete(t);
+            return;
+        }
+        t.setStatus(Status.DONE);
+        t.setCompletedAt(LocalDateTime.now());
+        repository.save(t);
+        contentIndexingService.reindexNote(t.getNoteId());
+    }
+
+    private void fail(AudioTranscription t, ErrorKind kind, String message) {
+        t.setStatus(Status.FAILED);
+        t.setErrorKind(kind);
+        t.setErrorMessage(message);
+        t.setCompletedAt(LocalDateTime.now());
+        repository.save(t);
+    }
+
+    private List<Map<String, Object>> readList(String json) throws Exception {
+        if (json == null || json.isBlank()) return List.of();
+        return objectMapper.readValue(json, new TypeReference<>() {});
+    }
+
+    private static List<Long> readMarks(JsonNode data) {
+        List<Long> marks = new ArrayList<>();
+        JsonNode node = data.path("marks");
+        if (node.isArray()) node.forEach(m -> { if (m.canConvertToLong()) marks.add(m.asLong()); });
+        return marks;
+    }
+}
