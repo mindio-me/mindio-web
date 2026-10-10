@@ -4,6 +4,7 @@
  */
 
 import QRCode from 'qrcode'
+import { mountTranscriptionPanel } from './audioTranscriptionPanel'
 
 const STYLE_ID = 'audio-tool-injected-styles'
 
@@ -397,11 +398,13 @@ class AudioTool {
     return true
   }
 
-  constructor({ data, config, api, readOnly }) {
+  constructor({ data, config, api, readOnly, block }) {
     this.data = data || {}
     this.config = config || {}
     this.api = api
     this.readOnly = readOnly
+    this.block = block
+    this._panel = null
     this._element = null
     this._overlay = null
     this._pollTimer = null
@@ -413,6 +416,8 @@ class AudioTool {
   }
 
   destroy() {
+    if (this._panel) this._panel.destroy()
+    this._panel = null
     this._stopPolling()
     if (this._overlay && this._overlay.parentNode) {
       this._overlay.parentNode.removeChild(this._overlay)
@@ -460,7 +465,24 @@ class AudioTool {
       cap.textContent = this.data.caption
       wrapper.appendChild(cap)
     }
-    this._renderTranscriptAndSummary(wrapper)
+    this._mountPanel(wrapper, audio)
+  }
+
+  _mountPanel(wrapper, audio) {
+    if (this._panel) this._panel.destroy()
+    this._panel = null
+    const noteId = this.config.getNoteId ? this.config.getNoteId() : null
+    const blockId = this.block && this.block.id
+    const service = this.config.transcriptionService
+    // 没有笔记 id / 块 id / service（只读预览、站点导出等）：退回老的文本展示
+    if (!noteId || !blockId || !service || this.readOnly) {
+      this._renderTranscriptAndSummary(wrapper)
+      return
+    }
+    this._panel = mountTranscriptionPanel({
+      container: wrapper, audio, noteId, blockId, readOnly: this.readOnly, service,
+      legacy: { transcript: this.data.transcript, summary: this.data.summary }
+    })
   }
 
   _renderTranscriptAndSummary(wrapper) {

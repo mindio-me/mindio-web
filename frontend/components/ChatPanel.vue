@@ -210,6 +210,7 @@
 <script>
 import { renderMarkdown } from '~/utils/markdown'
 import chatPanelState from '~/utils/chatPanelState'
+import { notifyChanged } from '~/utils/audioTranscriptionStore'
 
 export default {
   name: 'ChatPanel',
@@ -466,11 +467,15 @@ export default {
           items: event.items
         })
       } else if (event.type === 'media_block_updated') {
-        this.$nuxt.$emit('media-block-updated', {
-          noteId: event.noteId,
-          blockId: event.blockId,
-          data: event.data
-        })
+        if (event.transcriptionQueued) {
+          notifyChanged(event.noteId, event.blockId)
+        } else {
+          this.$nuxt.$emit('media-block-updated', {
+            noteId: event.noteId,
+            blockId: event.blockId,
+            data: event.data
+          })
+        }
       } else if (event.type === 'project_field_updated') {
         this.$nuxt.$emit('project-field-updated', {
           projectId: event.projectId,

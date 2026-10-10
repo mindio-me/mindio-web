@@ -5,6 +5,7 @@
 
 import recordingController from './recordingController'
 import recordingStash from './recordingStash'
+import { mountTranscriptionPanel } from './audioTranscriptionPanel'
 
 const STYLE_ID = 'record-tool-injected-styles'
 
@@ -153,6 +154,7 @@ class RecordTool {
     this._element = null
     this._onControllerChange = this._onControllerChange.bind(this)
     this._offStashMessage = null
+    this._panel = null
   }
 
   render() {
@@ -181,6 +183,8 @@ class RecordTool {
     recordingController.off('error', this._onControllerChange)
     recordingController.off('pending-change', this._onControllerChange)
     if (this._offStashMessage) this._offStashMessage()
+    if (this._panel) this._panel.destroy()
+    this._panel = null
   }
 
   _onControllerChange() {
@@ -320,7 +324,24 @@ class RecordTool {
     cap.textContent = formatDuration(this.data.duration)
     wrapper.appendChild(cap)
 
-    this._renderTranscriptAndSummary(wrapper)
+    this._mountPanel(wrapper, audio)
+  }
+
+  _mountPanel(wrapper, audio) {
+    if (this._panel) this._panel.destroy()
+    this._panel = null
+    const noteId = this.config.getNoteId ? this.config.getNoteId() : null
+    const blockId = this.block && this.block.id
+    const service = this.config.transcriptionService
+    // 没有笔记 id / 块 id / service（只读预览、站点导出等）：退回老的文本展示
+    if (!noteId || !blockId || !service || this.readOnly) {
+      this._renderTranscriptAndSummary(wrapper)
+      return
+    }
+    this._panel = mountTranscriptionPanel({
+      container: wrapper, audio, noteId, blockId, readOnly: this.readOnly, service,
+      legacy: { transcript: this.data.transcript, summary: this.data.summary }
+    })
   }
 
   _renderTranscriptAndSummary(wrapper) {

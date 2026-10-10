@@ -237,6 +237,8 @@ export default {
         audio: {
           class: AudioTool,
           config: {
+            getNoteId: options.getRecordEntityId || null,
+            transcriptionService: this.$audioTranscriptionService,
             uploader: {
               async uploadByFile(file) {
                 try {
@@ -263,7 +265,7 @@ export default {
       if (options.includeRecordTool) {
         tools.audioRecord = {
           class: RecordTool,
-          config: { getNoteId: options.getRecordEntityId }
+          config: { getNoteId: options.getRecordEntityId, transcriptionService: this.$audioTranscriptionService }
         }
       }
 
