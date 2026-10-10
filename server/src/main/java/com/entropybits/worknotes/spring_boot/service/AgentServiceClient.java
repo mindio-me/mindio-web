@@ -12,11 +12,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.net.ConnectException;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -272,7 +274,14 @@ public class AgentServiceClient {
                     .timeout(timeout)
                     .build();
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        } catch (ConnectException e) {
+        } catch (HttpTimeoutException e) {
+            if (e instanceof HttpConnectTimeoutException) {
+                throw new AgentUnavailableException("AI 服务暂时不可用（连接超时）", e);
+            }
+            // 读超时：Python 端可能仍在处理，重试会重复提交，按业务错误处理
+            throw new AgentCallException("UNKNOWN", "调用 AI 服务超时: " + e.getMessage());
+        } catch (IOException e) {
+            // 连不上 / 连接被重置 / 对端未返回任何字节（Python 重启中）：可重试
             throw new AgentUnavailableException("AI 服务暂时不可用", e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -287,9 +296,12 @@ public class AgentServiceClient {
         try {
             parsed = objectMapper.readValue(response.body(), new TypeReference<>() {});
         } catch (Exception e) {
-            parsed = Map.of();
+            parsed = null;
         }
         if (response.statusCode() >= 400) {
+            if (parsed == null) {
+                throw new AgentCallException("UNKNOWN", "HTTP " + response.statusCode() + " " + response.body());
+            }
             Object detail = parsed.get("detail");
             if (detail instanceof Map<?, ?> d) {
                 Object code = d.get("code");
@@ -298,6 +310,9 @@ public class AgentServiceClient {
                         message == null ? "HTTP " + response.statusCode() : message.toString());
             }
             throw new AgentCallException("UNKNOWN", "HTTP " + response.statusCode() + " " + response.body());
+        }
+        if (parsed == null) {
+            throw new AgentCallException("UNKNOWN", "AI 服务返回了无法解析的响应: " + response.body());
         }
         return parsed;
     }

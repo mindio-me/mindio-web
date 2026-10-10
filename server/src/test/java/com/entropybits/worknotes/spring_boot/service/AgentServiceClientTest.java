@@ -390,4 +390,37 @@ class AgentServiceClientTest {
         assertThatThrownBy(() -> down.audioSummarize(List.of(), List.of()))
                 .isInstanceOf(AgentUnavailableException.class);
     }
+
+    @Test
+    void audioSummarize_throwsUnavailableWhenServerClosesConnectionWithoutResponse() throws Exception {
+        httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        httpServer.createContext("/internal/audio-summarize", ex -> {
+            ex.getRequestBody().readAllBytes();
+            ex.close();
+        });
+        httpServer.start();
+        AgentServiceClient c = new AgentServiceClient(
+                "http://127.0.0.1:" + httpServer.getAddress().getPort(), "t", objectMapper);
+
+        assertThatThrownBy(() -> c.audioSummarize(List.of(), List.of()))
+                .isInstanceOf(AgentUnavailableException.class);
+    }
+
+    @Test
+    void audioSummarize_throwsUnknownWhenSuccessBodyIsNotJsonObject() throws Exception {
+        AgentServiceClient c = serveInternal("/internal/audio-summarize", 200, "null", null);
+
+        assertThatThrownBy(() -> c.audioSummarize(List.of(), List.of()))
+                .isInstanceOf(AgentCallException.class)
+                .extracting(e -> ((AgentCallException) e).getCode()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void audioSummarize_throwsUnknownWhenErrorBodyIsNotJson() throws Exception {
+        AgentServiceClient c = serveInternal("/internal/audio-summarize", 500, "oops", null);
+
+        assertThatThrownBy(() -> c.audioSummarize(List.of(), List.of()))
+                .isInstanceOf(AgentCallException.class)
+                .extracting(e -> ((AgentCallException) e).getCode()).isEqualTo("UNKNOWN");
+    }
 }
