@@ -176,6 +176,14 @@ public class MediaBlockService {
         }
     }
 
+    /** 一个块的类型和原始 data（录音转写任务读 url / segments / marks / duration 用） */
+    public record BlockData(String type, JsonNode data) {}
+
+    public BlockData getBlockData(Long noteId, String blockId) {
+        JsonNode block = findBlockOrThrow(loadBlocks(noteId), blockId);
+        return new BlockData(block.path("type").asText(), block.path("data"));
+    }
+
     private ArrayNode loadBlocks(Long noteId) {
         Note note = noteRepository.findById(noteId)
                 .orElseThrow(() -> new ResourceNotFoundException("笔记不存在或已被删除"));

@@ -213,4 +213,19 @@ class AiSettingsServiceTest {
         assertThat(cfg.asr().appKey()).isEqualTo("asr-new-key");
         assertThat(cfg.asr().accessKey()).isNull();
     }
+
+    @Test
+    void autoTranscribeEnabled_defaultsTrueAndHonorsFalse() {
+        when(repository.save(any(SystemSetting.class))).thenAnswer(inv -> {
+            SystemSetting row = inv.getArgument(0);
+            rows.removeIf(r -> r.getSettingKey().equals(row.getSettingKey()));
+            rows.add(row);
+            return row;
+        });
+        assertThat(service.autoTranscribeEnabled()).isTrue();
+        service.update(Map.of("asr.auto_transcribe", "false"));
+        assertThat(service.autoTranscribeEnabled()).isFalse();
+        service.update(Map.of("asr.auto_transcribe", "true"));
+        assertThat(service.autoTranscribeEnabled()).isTrue();
+    }
 }

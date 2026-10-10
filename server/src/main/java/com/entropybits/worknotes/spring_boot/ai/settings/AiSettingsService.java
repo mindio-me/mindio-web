@@ -121,6 +121,11 @@ public class AiSettingsService implements AiConfigSource {
         return new InternalAiConfigResponse(s.get(DEFAULT_PROVIDER), providers, asr.isEmpty() ? null : asr);
     }
 
+    /** 录音保存后是否自动转写：没有记录 = 默认开启，只有显式存了 "false" 才关闭 */
+    public boolean autoTranscribeEnabled() {
+        return !"false".equalsIgnoreCase(stored().values().get(AUTO_TRANSCRIBE));
+    }
+
     private Stored stored() {
         Map<String, String> values = new HashMap<>();
         Set<String> unreadable = new HashSet<>();

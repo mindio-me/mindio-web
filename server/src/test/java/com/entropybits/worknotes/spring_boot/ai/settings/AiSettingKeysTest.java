@@ -12,7 +12,7 @@ class AiSettingKeysTest {
 
     @Test
     void allKeysAreOrderedAndSecretsAreTheKeyFields() {
-        assertThat(AiSettingKeys.ORDERED).hasSize(17).doesNotHaveDuplicates();
+        assertThat(AiSettingKeys.ORDERED).hasSize(18).doesNotHaveDuplicates();
         assertThat(AiSettingKeys.ALL).containsExactlyInAnyOrderElementsOf(AiSettingKeys.ORDERED);
         assertThat(AiSettingKeys.SECRETS).containsExactlyInAnyOrder(
                 "ai.anthropic.api_key", "ai.openai.api_key", "ai.deepseek.api_key", "ai.doubao.api_key",

@@ -15,6 +15,7 @@ import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
+import com.entropybits.worknotes.spring_boot.service.AudioTranscriptionService;
 import com.entropybits.worknotes.spring_boot.service.ProjectNoteContextService;
 import com.entropybits.worknotes.spring_boot.service.ProjectService;
 import com.entropybits.worknotes.spring_boot.service.RetrievalService;
@@ -49,10 +50,12 @@ class InternalAgentControllerTest {
     @Mock MediaBlockService mediaBlockService;
     @Mock ProjectNoteContextService projectNoteContextService;
     @Mock ProjectService projectService;
+    @Mock AudioTranscriptionService audioTranscriptionService;
 
     InternalAgentController controller() {
         return new InternalAgentController(retrievalService, userRepository, stateRepository, topicBlockService,
-                mediaBlockService, projectNoteContextService, projectService);
+                mediaBlockService, projectNoteContextService, projectService,
+                audioTranscriptionService, new com.fasterxml.jackson.databind.ObjectMapper());
     }
 
     @Test

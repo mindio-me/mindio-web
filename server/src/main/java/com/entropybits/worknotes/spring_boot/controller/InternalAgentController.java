@@ -5,21 +5,25 @@
 package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.AgentStateResponse;
+import com.entropybits.worknotes.spring_boot.dto.AudioTranscriptionResponse;
 import com.entropybits.worknotes.spring_boot.dto.InternalRetrieveRequest;
 import com.entropybits.worknotes.spring_boot.dto.ProjectNoteSummaryResponse;
 import com.entropybits.worknotes.spring_boot.dto.ProjectResponse;
 import com.entropybits.worknotes.spring_boot.dto.PutAgentStateRequest;
 import com.entropybits.worknotes.spring_boot.entity.AgentConversationState;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.AgentConversationStateRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
+import com.entropybits.worknotes.spring_boot.service.AudioTranscriptionService;
 import com.entropybits.worknotes.spring_boot.service.ProjectNoteContextService;
 import com.entropybits.worknotes.spring_boot.service.ProjectService;
 import com.entropybits.worknotes.spring_boot.service.RetrievalService;
 import com.entropybits.worknotes.spring_boot.service.RetrievedChunk;
 import com.entropybits.worknotes.spring_boot.service.TopicBlockService;
 import com.entropybits.worknotes.spring_boot.service.MediaBlockService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -47,6 +51,8 @@ public class InternalAgentController {
     private final MediaBlockService mediaBlockService;
     private final ProjectNoteContextService projectNoteContextService;
     private final ProjectService projectService;
+    private final AudioTranscriptionService audioTranscriptionService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/retrieve")
     public List<RetrievedChunk> retrieve(@RequestBody InternalRetrieveRequest request) throws Exception {
@@ -68,6 +74,15 @@ public class InternalAgentController {
                 .orElseGet(() -> AgentConversationState.builder().conversationId(conversationId).build());
         state.setStateBlob(request.stateBlob());
         stateRepository.save(state);
+    }
+
+    /** agent 的 transcribe_audio 工具：手动触发一次完整转写，立即返回，不等结果 */
+    @PostMapping("/notes/{noteId}/audio-transcriptions/{blockId}")
+    public AudioTranscriptionResponse triggerAudioTranscription(@PathVariable Long noteId, @PathVariable String blockId) {
+        return audioTranscriptionService.trigger(noteId, blockId,
+                        AudioTranscription.TriggerType.MANUAL, AudioTranscription.Stage.FULL)
+                .map(t -> AudioTranscriptionResponse.from(t, objectMapper))
+                .orElseThrow();
     }
 
     @PostMapping("/notes/{noteId}/topic-blocks/{blockType}/items")

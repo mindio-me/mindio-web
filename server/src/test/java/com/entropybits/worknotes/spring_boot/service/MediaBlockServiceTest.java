@@ -297,4 +297,17 @@ class MediaBlockServiceTest {
         assertThatThrownBy(() -> service.patchBlock(1L, "missing", Map.of("caption", "x")))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    @Test
+    void getBlockData_returnsTypeAndData() {
+        Note note = noteWithBlocks("[{\"id\":\"r1\",\"type\":\"audioRecord\","
+                + "\"data\":{\"url\":\"/uploads/a.webm\",\"duration\":42,\"marks\":[5000]}}]");
+        when(noteRepository.findById(1L)).thenReturn(Optional.of(note));
+
+        MediaBlockService.BlockData block = service.getBlockData(1L, "r1");
+
+        assertThat(block.type()).isEqualTo("audioRecord");
+        assertThat(block.data().path("duration").asInt()).isEqualTo(42);
+        assertThat(block.data().path("marks").get(0).asLong()).isEqualTo(5000L);
+    }
 }
