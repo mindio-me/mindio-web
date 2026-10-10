@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -238,5 +239,66 @@ public class AgentServiceClient {
             }
         }
         return citations;
+    }
+
+    public List<Map<String, Object>> asrTranscribe(Long noteId, String blockId, Integer segment, long offsetMs) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("noteId", noteId);
+        body.put("blockId", blockId);
+        body.put("segment", segment);
+        body.put("offsetMs", offsetMs);
+        Map<String, Object> result = postInternal("/internal/asr-transcribe", body, Duration.ofSeconds(420));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> utterances = (List<Map<String, Object>>) result.get("utterances");
+        return utterances == null ? List.of() : utterances;
+    }
+
+    public Map<String, Object> audioSummarize(List<Map<String, Object>> utterances, List<Long> marks) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("utterances", utterances);
+        body.put("marks", marks);
+        return postInternal("/internal/audio-summarize", body, Duration.ofSeconds(900));
+    }
+
+    /** 录音整理两个内部接口共用：连不上或 503 → AgentUnavailableException；其余错误 → AgentCallException */
+    private Map<String, Object> postInternal(String path, Map<String, Object> body, Duration timeout) {
+        HttpResponse<String> response;
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + path))
+                    .header("X-Internal-Token", internalToken)
+                    .header("content-type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .timeout(timeout)
+                    .build();
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (ConnectException e) {
+            throw new AgentUnavailableException("AI 服务暂时不可用", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AgentUnavailableException("请求被中断", e);
+        } catch (Exception e) {
+            throw new AgentCallException("UNKNOWN", "调用 AI 服务失败: " + e.getMessage());
+        }
+        if (response.statusCode() == 503) {
+            throw new AgentUnavailableException("AI 服务暂时不可用 (503)", null);
+        }
+        Map<String, Object> parsed;
+        try {
+            parsed = objectMapper.readValue(response.body(), new TypeReference<>() {});
+        } catch (Exception e) {
+            parsed = Map.of();
+        }
+        if (response.statusCode() >= 400) {
+            Object detail = parsed.get("detail");
+            if (detail instanceof Map<?, ?> d) {
+                Object code = d.get("code");
+                Object message = d.get("message");
+                throw new AgentCallException(code == null ? "UNKNOWN" : code.toString(),
+                        message == null ? "HTTP " + response.statusCode() : message.toString());
+            }
+            throw new AgentCallException("UNKNOWN", "HTTP " + response.statusCode() + " " + response.body());
+        }
+        return parsed;
     }
 }

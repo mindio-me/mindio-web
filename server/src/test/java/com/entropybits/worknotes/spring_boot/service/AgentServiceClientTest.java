@@ -310,4 +310,84 @@ class AgentServiceClientTest {
             resumeServer.stop(0);
         }
     }
+
+    private AgentServiceClient serveInternal(String path, int status, String responseBody,
+                                              java.util.concurrent.atomic.AtomicReference<String> captured) throws Exception {
+        httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        httpServer.createContext(path, ex -> {
+            if (captured != null) {
+                captured.set(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            }
+            byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(status, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        httpServer.start();
+        return new AgentServiceClient(
+                "http://127.0.0.1:" + httpServer.getAddress().getPort(), "test-internal-token", objectMapper);
+    }
+
+    @Test
+    void asrTranscribe_postsRequestAndReturnsUtterances() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> capturedBody = new java.util.concurrent.atomic.AtomicReference<>();
+        AgentServiceClient c = serveInternal("/internal/asr-transcribe", 200,
+                "{\"utterances\":[{\"start\":1000,\"end\":2000,\"text\":\"你好\"}]}", capturedBody);
+
+        List<Map<String, Object>> result = c.asrTranscribe(7L, "blk", 1, 1_800_000L);
+
+        assertThat(result).hasSize(1);
+        assertThat(((Number) result.get(0).get("start")).longValue()).isEqualTo(1000L);
+        assertThat(capturedBody.get()).contains("\"noteId\":7").contains("\"blockId\":\"blk\"")
+                .contains("\"segment\":1").contains("\"offsetMs\":1800000");
+    }
+
+    @Test
+    void asrTranscribe_mapsDetailCodeToAgentCallException() throws Exception {
+        AgentServiceClient c = serveInternal("/internal/asr-transcribe", 422,
+                "{\"detail\":{\"code\":\"ASR_NOT_CONFIGURED\",\"message\":\"请到 设置 → AI 服务 填写语音识别 Key\"}}", null);
+
+        assertThatThrownBy(() -> c.asrTranscribe(7L, "blk", null, 0L))
+                .isInstanceOf(AgentCallException.class)
+                .hasMessageContaining("语音识别 Key")
+                .extracting(e -> ((AgentCallException) e).getCode()).isEqualTo("ASR_NOT_CONFIGURED");
+    }
+
+    @Test
+    void asrTranscribe_mapsStringDetailToUnknownCode() throws Exception {
+        AgentServiceClient c = serveInternal("/internal/asr-transcribe", 500,
+                "{\"detail\":\"Internal Server Error\"}", null);
+
+        assertThatThrownBy(() -> c.asrTranscribe(7L, "blk", null, 0L))
+                .isInstanceOf(AgentCallException.class)
+                .extracting(e -> ((AgentCallException) e).getCode()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void asrTranscribe_throwsUnavailableOn503() throws Exception {
+        AgentServiceClient c = serveInternal("/internal/asr-transcribe", 503, "{\"detail\":\"starting\"}", null);
+
+        assertThatThrownBy(() -> c.asrTranscribe(7L, "blk", null, 0L))
+                .isInstanceOf(AgentUnavailableException.class);
+    }
+
+    @Test
+    void audioSummarize_postsRequestAndReturnsResultMap() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> capturedBody = new java.util.concurrent.atomic.AtomicReference<>();
+        AgentServiceClient c = serveInternal("/internal/audio-summarize", 200,
+                "{\"polished\":[{\"start\":0,\"text\":\"你好\"}],\"summary\":{\"title\":\"t\"}}", capturedBody);
+
+        Map<String, Object> result = c.audioSummarize(List.of(Map.of("start", 0, "text", "你好")), List.of(5000L));
+
+        assertThat(result).containsKeys("polished", "summary");
+        assertThat(capturedBody.get()).contains("\"utterances\":[").contains("\"marks\":[5000]");
+    }
+
+    @Test
+    void audioSummarize_throwsUnavailableWhenServerDown() {
+        AgentServiceClient down = new AgentServiceClient("http://127.0.0.1:1", "t", new ObjectMapper());
+
+        assertThatThrownBy(() -> down.audioSummarize(List.of(), List.of()))
+                .isInstanceOf(AgentUnavailableException.class);
+    }
 }
