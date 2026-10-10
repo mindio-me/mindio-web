@@ -134,7 +134,11 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     if (r.status === 'FAILED') {
       line.classList.add('error')
       line.appendChild(el('span', null, r.errorMessage || '转写失败'))
-      if (!readOnly) line.appendChild(button('重试', 'FULL'))
+      if (!readOnly) {
+        // 逐句原文已经存下来了（ASR 已付费）：只需重做整理，不必整段重新转写
+        const hasUtterances = (r.utterances || []).length > 0
+        line.appendChild(hasUtterances ? button('重新整理', 'SUMMARY') : button('重试', 'FULL'))
+      }
       return line
     }
     if (r.errorKind === 'SUMMARY_FAILED') {
@@ -245,7 +249,8 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     root.textContent = ''
     const status = renderStatus()
     if (status) root.appendChild(status)
-    if (!record || record.status === 'FAILED' || (record.status !== 'DONE' && !(record.utterances || []).length)) {
+    const hasUtterances = !!record && (record.utterances || []).length > 0
+    if (!record || (record.status === 'FAILED' && !hasUtterances) || (record.status !== 'DONE' && record.status !== 'FAILED' && !hasUtterances)) {
       if (!record || record.status === 'FAILED') root.appendChild(renderLegacy())
       return
     }
