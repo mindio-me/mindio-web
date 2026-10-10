@@ -4,8 +4,10 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
+import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -30,10 +32,13 @@ public class ContentChunkingService {
 
     private final ObjectMapper objectMapper;
     private final LocalFileExtractionService extractionService;
+    private final AudioTranscriptionRepository audioTranscriptionRepository;
 
-    public ContentChunkingService(ObjectMapper objectMapper, LocalFileExtractionService extractionService) {
+    public ContentChunkingService(ObjectMapper objectMapper, LocalFileExtractionService extractionService,
+                                  AudioTranscriptionRepository audioTranscriptionRepository) {
         this.objectMapper = objectMapper;
         this.extractionService = extractionService;
+        this.audioTranscriptionRepository = audioTranscriptionRepository;
     }
 
     public List<String> chunkNote(Note note) {
@@ -52,7 +57,36 @@ public class ContentChunkingService {
                 .toList();
         List<String> combined = new ArrayList<>(units);
         combined.addAll(imageOcrUnits);
+        combined.addAll(transcriptionUnits(note));
         return prependTitleChunk(note.getTitle(), mergeAndSplit(combined));
+    }
+
+    /** 录音转写结果（不在笔记正文里）也进检索：概述 + 优化版，没有优化版就用逐句原文 */
+    private List<String> transcriptionUnits(Note note) {
+        if (note.getId() == null) return List.of();
+        List<String> units = new ArrayList<>();
+        for (AudioTranscription t : audioTranscriptionRepository.findByNoteId(note.getId())) {
+            if (t.getStatus() != AudioTranscription.Status.DONE) continue;
+            try {
+                if (t.getSummary() != null) {
+                    String overview = objectMapper.readTree(t.getSummary()).path("overview").asText("");
+                    if (!overview.isBlank()) units.add(overview);
+                }
+                String source = t.getPolished() != null ? t.getPolished() : t.getUtterances();
+                if (source != null) {
+                    StringBuilder sb = new StringBuilder();
+                    objectMapper.readTree(source).forEach(p -> sb.append(p.path("text").asText("")).append('\n'));
+                    if (!sb.isEmpty()) units.addAll(splitParagraphs(sb.toString()));
+                }
+            } catch (Exception e) {
+                // 某条记录的 JSON 坏了不影响笔记本身的索引
+            }
+        }
+        return units;
+    }
+
+    private static List<String> splitParagraphs(String text) {
+        return Arrays.stream(text.split("\n")).map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     public List<String> chunkClip(SourceClip clip) {

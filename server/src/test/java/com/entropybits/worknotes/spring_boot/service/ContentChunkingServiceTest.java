@@ -4,8 +4,10 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
+import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +20,42 @@ import static org.mockito.Mockito.when;
 class ContentChunkingServiceTest {
 
     private final LocalFileExtractionService extractionService = mock(LocalFileExtractionService.class);
-    private final ContentChunkingService service = new ContentChunkingService(new ObjectMapper(), extractionService);
+    private final AudioTranscriptionRepository audioTranscriptionRepository = mock(AudioTranscriptionRepository.class);
+    private final ContentChunkingService service =
+            new ContentChunkingService(new ObjectMapper(), extractionService, audioTranscriptionRepository);
+
+    private static Note editorjsNote(Long id, String title, String content) {
+        return Note.builder().id(id).title(title).contentType("editorjs").content(content).build();
+    }
+
+    @Test
+    void chunkNote_includesTranscriptionOverviewAndPolishedText() {
+        Note note = editorjsNote(5L, "录音 · 10/10 09:00",
+                "{\"blocks\":[{\"id\":\"r1\",\"type\":\"audioRecord\",\"data\":{\"url\":\"/uploads/a.webm\"}}]}");
+        when(audioTranscriptionRepository.findByNoteId(5L)).thenReturn(List.of(AudioTranscription.builder()
+                .noteId(5L).blockId("r1").status(AudioTranscription.Status.DONE)
+                .summary("{\"overview\":\"讨论了招聘计划\"}")
+                .polished("[{\"start\":0,\"text\":\"第一件事是招聘，预计招三人。\"}]")
+                .build()));
+
+        String all = String.join("\n", service.chunkNote(note));
+
+        assertThat(all).contains("讨论了招聘计划").contains("第一件事是招聘，预计招三人。");
+    }
+
+    @Test
+    void chunkNote_fallsBackToUtterancesAndSkipsUnfinished() {
+        Note note = editorjsNote(6L, "t", "{\"blocks\":[]}");
+        when(audioTranscriptionRepository.findByNoteId(6L)).thenReturn(List.of(
+                AudioTranscription.builder().noteId(6L).blockId("a").status(AudioTranscription.Status.DONE)
+                        .utterances("[{\"start\":0,\"end\":1,\"text\":\"原文一句。\"}]").build(),
+                AudioTranscription.builder().noteId(6L).blockId("b").status(AudioTranscription.Status.PROCESSING)
+                        .utterances("[{\"start\":0,\"end\":1,\"text\":\"不该出现\"}]").build()));
+
+        String all = String.join("\n", service.chunkNote(note));
+
+        assertThat(all).contains("原文一句。").doesNotContain("不该出现");
+    }
 
     @Test
     void chunkNote_markdownSplitsOnBlankLines() {
