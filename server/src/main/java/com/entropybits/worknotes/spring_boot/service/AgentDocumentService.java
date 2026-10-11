@@ -15,7 +15,6 @@ import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -27,12 +26,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * agent 的 read_note/read_clip/view_image 工具专用：按 ID 或标题读取用户任意一篇笔记/收藏的
@@ -47,12 +43,6 @@ public class AgentDocumentService {
     private static final int TITLE_MATCH_LIMIT = 10;
     // 视觉模型单图上限普遍在 10~20MB，base64 后还要再胀 1/3，这里取保守值
     private static final long MAX_IMAGE_BYTES = 10L * 1024 * 1024;
-
-    private static final Pattern IMG_TAG = Pattern.compile("<img\\b[^>]*>", Pattern.CASE_INSENSITIVE);
-    private static final Pattern IMG_ATTR = Pattern.compile(
-            "\\b(data-src|src|alt)\\s*=\\s*[\"']([^\"']*)[\"']", Pattern.CASE_INSENSITIVE);
-    private static final Pattern MD_IMG = Pattern.compile("!\\[([^\\]]*)\\]\\(\\s*([^)\\s]+)[^)]*\\)");
-    private static final Pattern HTML_TAG = Pattern.compile("<[^>]+>");
 
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
@@ -125,97 +115,19 @@ public class AgentDocumentService {
 
     private List<AgentImageRef> noteImages(Note note) {
         String contentType = note.getContentType() == null ? "richtext" : note.getContentType();
-        List<String[]> found = new ArrayList<>();
-        if ("editorjs".equals(contentType)) {
-            collectEditorjsImages(note.getContent(), found);
-        } else {
-            collectInlineImages(note.getContent(), found);
-        }
-        return toRefs(found);
+        return toRefs(AgentImageLocator.locateInNote(contentType, note.getContent(), objectMapper));
     }
 
     private List<AgentImageRef> clipImages(SourceClip clip) {
-        List<String[]> found = new ArrayList<>();
-        collectInlineImages(clip.getContent(), found);
-        return toRefs(found);
+        return toRefs(AgentImageLocator.locateInline(clip.getContent()));
     }
 
-    /**
-     * 图片块（@editorjs/image，URL 在 data.file.url，或平铺在 data.url）之外，markdown 块、
-     * 段落里也可能内嵌图片（导入的内容常见），所以其余块的所有文本字段也扫一遍。
-     */
-    private void collectEditorjsImages(String content, List<String[]> found) {
-        if (content == null || content.isBlank()) return;
-        JsonNode blocks;
-        try {
-            blocks = objectMapper.readTree(content).path("blocks");
-        } catch (IOException e) {
-            return;
-        }
-        for (JsonNode block : blocks) {
-            JsonNode data = block.path("data");
-            if ("image".equals(block.path("type").asText())) {
-                String url = data.path("file").path("url").asText("");
-                if (url.isBlank()) url = data.path("url").asText("");
-                found.add(new String[]{url, stripHtml(data.path("caption").asText(""))});
-            } else {
-                collectTextValues(data, text -> collectInlineImages(text, found));
-            }
-        }
-    }
-
-    private static void collectTextValues(JsonNode node, java.util.function.Consumer<String> sink) {
-        if (node.isTextual()) {
-            sink.accept(node.asText());
-        } else if (node.isContainerNode()) {
-            node.forEach(child -> collectTextValues(child, sink));
-        }
-    }
-
-    /** HTML 的 &lt;img&gt; 和 markdown 的 ![]() 可能混在同一段内容里，按出现位置排序 */
-    private static void collectInlineImages(String text, List<String[]> found) {
-        if (text == null || text.isBlank()) return;
-        List<Map.Entry<Integer, String[]>> hits = new ArrayList<>();
-
-        Matcher tag = IMG_TAG.matcher(text);
-        while (tag.find()) {
-            String src = null, dataSrc = null, alt = "";
-            Matcher attr = IMG_ATTR.matcher(tag.group());
-            while (attr.find()) {
-                switch (attr.group(1).toLowerCase()) {
-                    case "data-src" -> dataSrc = attr.group(2);
-                    case "src" -> src = attr.group(2);
-                    default -> alt = attr.group(2);
-                }
-            }
-            // 公众号文章的真实地址在 data-src，src 往往是懒加载占位图
-            String url = dataSrc != null && !dataSrc.isBlank() ? dataSrc : src;
-            if (url != null) hits.add(Map.entry(tag.start(), new String[]{url, alt}));
-        }
-
-        Matcher md = MD_IMG.matcher(text);
-        while (md.find()) {
-            hits.add(Map.entry(md.start(), new String[]{md.group(2), md.group(1)}));
-        }
-
-        hits.sort(Comparator.comparing(Map.Entry::getKey));
-        hits.forEach(h -> found.add(h.getValue()));
-    }
-
-    private static List<AgentImageRef> toRefs(List<String[]> found) {
+    private static List<AgentImageRef> toRefs(List<AgentImageLocator.LocatedImage> images) {
         List<AgentImageRef> refs = new ArrayList<>();
-        for (String[] f : found) {
-            String url = f[0] == null ? "" : f[0].trim();
-            if (!isUsableImageUrl(url)) continue;
-            refs.add(new AgentImageRef(refs.size() + 1, url, f[1] == null ? "" : f[1].trim()));
+        for (AgentImageLocator.LocatedImage img : images) {
+            refs.add(new AgentImageRef(refs.size() + 1, img.url(), img.caption()));
         }
         return refs;
-    }
-
-    /** 过滤掉 about:blank、飞书导入时没解析成功的 feishu-image: 占位符等拿不到图的地址 */
-    private static boolean isUsableImageUrl(String url) {
-        return url.startsWith("http://") || url.startsWith("https://")
-                || url.startsWith("/") || url.startsWith("data:image/");
     }
 
     private static AgentImageRef pick(List<AgentImageRef> images, int index) {
@@ -269,10 +181,6 @@ public class AgentDocumentService {
         } catch (BadRequestException e) {
             return null;
         }
-    }
-
-    private static String stripHtml(String html) {
-        return HTML_TAG.matcher(html).replaceAll("").trim();
     }
 
     private Note loadOwnedNote(String username, Long noteId) {
