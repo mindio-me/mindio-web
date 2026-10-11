@@ -9,6 +9,7 @@ import com.entropybits.worknotes.spring_boot.dto.NoteRequest;
 import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NoteRevision;
 import com.entropybits.worknotes.spring_boot.entity.Project;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
 import com.entropybits.worknotes.spring_boot.entity.User;
@@ -199,7 +200,12 @@ public class NoteService {
         // 在 Session 关闭前初始化懒加载集合
         initializeLazyCollections(note);
 
-        return enrichWithFeishu(NoteResponse.fromEntity(note), note);
+        NoteResponse response = enrichWithFeishu(NoteResponse.fromEntity(note), note);
+        User viewer = getUserByUsername(username);
+        noteRevisionRepository.findFirstByNoteIdAndOwnerIdAndSourceOrderByIdDesc(
+                        note.getId(), viewer.getId(), NoteRevision.Source.CONVERT)
+                .ifPresent(r -> response.setConvertRevisionTurnId(r.getTurnId()));
+        return response;
     }
 
     /**

@@ -8,6 +8,7 @@ package com.entropybits.worknotes.spring_boot.controller;
 import com.entropybits.worknotes.spring_boot.dto.NoteRequest;
 import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
 import com.entropybits.worknotes.spring_boot.dto.SearchRequest;
+import com.entropybits.worknotes.spring_boot.service.NoteConversionService;
 import com.entropybits.worknotes.spring_boot.service.NoteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,6 +35,7 @@ import java.util.Set;
 public class NoteController {
 
     private final NoteService noteService;
+    private final NoteConversionService noteConversionService;
 
     /**
      * 创建新笔记
@@ -81,6 +84,18 @@ public class NoteController {
     ) {
         NoteResponse response = noteService.getNoteById(id, userDetails.getUsername());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Markdown 笔记原地转为 Editor.js 块文档；返回的 turnId 用于撤销（/v1/chat/turns/{turnId}/undo）
+     */
+    @PostMapping("/{id}/convert-to-editorjs")
+    public ResponseEntity<Map<String, String>> convertToEditorjs(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        NoteConversionService.Result result = noteConversionService.convertMarkdownToEditorjs(userDetails.getUsername(), id);
+        return ResponseEntity.ok(Map.of("turnId", result.turnId()));
     }
 
     /**

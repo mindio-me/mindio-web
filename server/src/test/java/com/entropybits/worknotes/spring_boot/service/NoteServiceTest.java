@@ -8,6 +8,7 @@ package com.entropybits.worknotes.spring_boot.service;
 import com.entropybits.worknotes.spring_boot.dto.NoteRequest;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NoteRevision;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuDocumentSnapshotRepository;
@@ -253,5 +254,35 @@ class NoteServiceTest {
         inOrder.verify(audioTranscriptionRepository).deleteByNoteId(9L);
         inOrder.verify(noteRevisionRepository).deleteByNoteId(9L);
         inOrder.verify(noteRepository).delete(existingNote);
+    }
+
+    @Test
+    void getNoteById_exposesLatestConvertRevisionTurnIdToOwner() {
+        NoteRepository noteRepository = mock(NoteRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        TagRepository tagRepository = mock(TagRepository.class);
+        ProjectRepository projectRepository = mock(ProjectRepository.class);
+        FeishuWikiImportMappingRepository feishuWikiImportMappingRepository = mock(FeishuWikiImportMappingRepository.class);
+        FeishuDocumentSnapshotRepository feishuDocumentSnapshotRepository = mock(FeishuDocumentSnapshotRepository.class);
+        FeishuImageMappingRepository feishuImageMappingRepository = mock(FeishuImageMappingRepository.class);
+        ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
+        NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
+        AudioTranscriptionRepository audioTranscriptionRepository = mock(AudioTranscriptionRepository.class);
+        NoteRevisionRepository noteRevisionRepository = mock(NoteRevisionRepository.class);
+        NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
+                feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
+                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository, noteRevisionRepository);
+
+        User user = User.builder().id(1L).username("alice").build();
+        Note note = Note.builder().id(9L).owner(user).isPublic(false).contentType("editorjs")
+                .content("{\"blocks\":[]}").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(noteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(feishuWikiImportMappingRepository.findByNote(any())).thenReturn(Optional.empty());
+        when(noteRevisionRepository.findFirstByNoteIdAndOwnerIdAndSourceOrderByIdDesc(9L, 1L, NoteRevision.Source.CONVERT))
+                .thenReturn(Optional.of(NoteRevision.builder().turnId("convert-abc").build()));
+
+        assertThat(service.getNoteById(9L, "alice").getConvertRevisionTurnId()).isEqualTo("convert-abc");
     }
 }

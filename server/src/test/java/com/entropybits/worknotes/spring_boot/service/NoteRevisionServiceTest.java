@@ -196,4 +196,21 @@ class NoteRevisionServiceTest {
 
         assertThat(service.undo("alice", "77", false).conflicts()).hasSize(1);
     }
+
+    @Test
+    void undo_convertRevisionRestoresMarkdownTypeAndContent() {
+        String converted = "{\"blocks\":[{\"id\":\"a\",\"type\":\"paragraph\",\"data\":{\"text\":\"正文\"}}]}";
+        Note note = Note.builder().id(9L).owner(alice).contentType("editorjs").content(converted).build();
+        NoteRevision r = NoteRevision.builder().noteId(9L).ownerId(1L).turnId("convert-1")
+                .source(NoteRevision.Source.CONVERT).contentType("markdown").content("正文")
+                .contentAfter(converted).build();
+        when(revisionRepository.findByTurnIdAndOwnerIdOrderByIdAsc("convert-1", 1L)).thenReturn(List.of(r));
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        NoteRevisionService.UndoResult result = service.undo("alice", "convert-1", false);
+
+        assertThat(result.restoredNoteIds()).containsExactly(9L);
+        assertThat(note.getContentType()).isEqualTo("markdown");
+        assertThat(note.getContent()).isEqualTo("正文");
+    }
 }

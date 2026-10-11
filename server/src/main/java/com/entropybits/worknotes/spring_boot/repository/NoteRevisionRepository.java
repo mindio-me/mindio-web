@@ -19,6 +19,9 @@ public interface NoteRevisionRepository extends JpaRepository<NoteRevision, Long
 
     List<NoteRevision> findByTurnIdAndOwnerIdOrderByIdAsc(String turnId, Long ownerId);
 
+    Optional<NoteRevision> findFirstByNoteIdAndOwnerIdAndSourceOrderByIdDesc(Long noteId, Long ownerId,
+                                                                            NoteRevision.Source source);
+
     @Transactional
     void deleteByNoteId(Long noteId);
 }

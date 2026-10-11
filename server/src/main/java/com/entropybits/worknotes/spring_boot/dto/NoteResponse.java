@@ -49,6 +49,9 @@ public class NoteResponse {
     private String feishuNodeToken;
     private String feishuSourceUrl;
 
+    /** 该笔记最近一次"转为 editor.js 文档"的快照 turnId（仅所有者可见）；有值时前端显示"恢复为 Markdown 原文" */
+    private String convertRevisionTurnId;
+
     public static NoteResponse fromEntity(Note note) {
         return NoteResponse.builder()
                 .id(note.getId())
