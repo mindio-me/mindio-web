@@ -59,7 +59,7 @@ def fake_java_client(monkeypatch):
 
 def _patch_graph(monkeypatch, model, tools):
     def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
-                  project_field_update_sink=None):
+                  project_field_update_sink=None, note_content_update_sink=None):
         return build_graph_builder(model, tools), tools
 
     monkeypatch.setattr(chat_route, "build_default_graph_builder", fake_builder)
@@ -90,7 +90,7 @@ async def test_search_workspace_tool_call_emits_tool_call_event(monkeypatch, fak
     # citations_sink 的简化版），只替换掉真正会打网络请求的模型解析这一步，这样
     # citations_sink 能像生产代码里一样被正确接到 search_workspace 工具上。
     def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
-                  project_field_update_sink=None):
+                  project_field_update_sink=None, note_content_update_sink=None):
         search_tool = make_search_workspace_tool(java_client, ContentCache(), citations_sink=citations_sink)
         return build_graph_builder(model, [search_tool]), [search_tool]
 
@@ -116,7 +116,7 @@ async def test_search_web_tool_call_emits_tool_call_event_and_web_citation(monke
     model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
 
     def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
-                  project_field_update_sink=None):
+                  project_field_update_sink=None, note_content_update_sink=None):
         search_tool = make_search_web_tool(java_client, citations_sink=citations_sink)
         return build_graph_builder(model, [search_tool]), [search_tool]
 
@@ -134,7 +134,7 @@ async def test_search_web_tool_call_emits_tool_call_event_and_web_citation(monke
 
 async def test_graph_failure_yields_error_event_instead_of_raising(monkeypatch, fake_java_client):
     def broken_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
-                        project_field_update_sink=None):
+                        project_field_update_sink=None, note_content_update_sink=None):
         raise RuntimeError("boom")
 
     monkeypatch.setattr(chat_route, "build_default_graph_builder", broken_builder)
@@ -246,7 +246,7 @@ async def test_resume_accept_emits_block_updated_before_done(monkeypatch, fake_j
     model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
 
     def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
-                  project_field_update_sink=None):
+                  project_field_update_sink=None, note_content_update_sink=None):
         write_tool = make_add_timeline_item_tool(java_client, block_update_sink)
         return build_graph_builder(model, [write_tool]), [write_tool]
 
@@ -412,7 +412,7 @@ async def test_analyze_image_emits_media_block_updated_before_done(monkeypatch, 
     model = FakeMessagesListChatModel(responses=[tool_call_msg, final_msg])
 
     def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
-                  project_field_update_sink=None):
+                  project_field_update_sink=None, note_content_update_sink=None):
         analyze_tool = make_analyze_image_tool(java_client, media_block_update_sink)
         return build_graph_builder(model, [analyze_tool]), [analyze_tool]
 
@@ -486,3 +486,65 @@ async def test_missing_api_key_yields_a_settings_hint_instead_of_calling_the_mod
     events = await _collect_events(ChatStreamRequest(username="alice", content="hi", conversationId="alice"))
 
     assert events == [{"type": "error", "content": "请到 设置 → AI 服务 填写 API Key"}]
+
+
+async def test_edit_image_emits_note_content_updated_before_done(monkeypatch, fake_java_client):
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from tools.edit_image import make_edit_image_tools
+
+    fake_java_client.insert_note_image = lambda username, note_id, source, caption, anchor_text: _async_return(
+        {"op": "insert", "noteId": note_id, "contentType": "editorjs", "blockId": "nb1", "afterBlockId": "p1"}
+    )
+    tool_call_msg = AIMessage(content="", tool_calls=[{
+        "name": "insert_image", "args": {"image_url": "https://x/a.png", "caption": "图1"}, "id": "c1",
+    }])
+    model = FakeMessagesListChatModel(responses=[tool_call_msg, AIMessage(content="插好了")])
+
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                     project_field_update_sink=None, note_content_update_sink=None):
+        tools = make_edit_image_tools(java_client, note_content_update_sink)
+        return build_graph_builder(model, tools), tools
+
+    monkeypatch.setattr(chat_route, "build_default_graph_builder", fake_builder)
+
+    events = await _collect_events(ChatStreamRequest(
+        username="alice", content="插图", conversationId="alice", currentNoteId=9
+    ))
+
+    types = [e["type"] for e in events]
+    assert types.index("note_content_updated") < types.index("done")
+    event = next(e for e in events if e["type"] == "note_content_updated")
+    assert event["noteId"] == 9
+    assert event["data"]["blockId"] == "nb1"
+
+
+async def test_attachment_urls_reach_state_for_insert_image(monkeypatch, fake_java_client):
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from tools.edit_image import make_edit_image_tools
+
+    captured = {}
+
+    async def fake_insert(username, note_id, source, caption, anchor_text):
+        captured["source"] = source
+        return {"op": "insert", "noteId": note_id, "contentType": "markdown"}
+
+    fake_java_client.insert_note_image = fake_insert
+    tool_call_msg = AIMessage(content="", tool_calls=[{
+        "name": "insert_image", "args": {"attachment_index": 1}, "id": "c1",
+    }])
+    model = FakeMessagesListChatModel(responses=[tool_call_msg, AIMessage(content="好了")])
+
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                     project_field_update_sink=None, note_content_update_sink=None):
+        tools = make_edit_image_tools(java_client, note_content_update_sink)
+        return build_graph_builder(model, tools), tools
+
+    monkeypatch.setattr(chat_route, "build_default_graph_builder", fake_builder)
+
+    await _collect_events(ChatStreamRequest(
+        username="alice", content="把这张图插进去", conversationId="alice", currentNoteId=9,
+        attachments=[{"type": "image", "mimeType": "image/png", "base64Data": "AAAA",
+                      "url": "/api/uploads/chat/a.png", "fileName": "a.png"}],
+    ))
+
+    assert captured["source"] == {"type": "attachment", "url": "/api/uploads/chat/a.png"}

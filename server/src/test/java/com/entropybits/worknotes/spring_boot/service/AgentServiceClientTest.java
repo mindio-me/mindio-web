@@ -67,6 +67,8 @@ class AgentServiceClientTest {
         String mediaBlockUpdatedBlockId;
         String mediaBlockUpdatedBlockType;
         Map<String, Object> mediaBlockUpdatedData;
+        Long noteContentUpdatedNoteId;
+        Map<String, Object> noteContentUpdatedData;
 
         @Override
         public void onTextDelta(String text) { textDeltas.add(text); }
@@ -105,6 +107,12 @@ class AgentServiceClientTest {
             mediaBlockUpdatedBlockId = blockId;
             mediaBlockUpdatedBlockType = blockType;
             mediaBlockUpdatedData = data;
+        }
+
+        @Override
+        public void onNoteContentUpdated(Long noteId, Map<String, Object> data) {
+            noteContentUpdatedNoteId = noteId;
+            noteContentUpdatedData = data;
         }
     }
 
@@ -422,5 +430,17 @@ class AgentServiceClientTest {
         assertThatThrownBy(() -> c.audioSummarize(List.of(), List.of()))
                 .isInstanceOf(AgentCallException.class)
                 .extracting(e -> ((AgentCallException) e).getCode()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void streamChat_parsesNoteContentUpdatedEvent() throws Exception {
+        setUp(200, "{\"type\":\"note_content_updated\",\"noteId\":9,"
+                + "\"data\":{\"op\":\"insert\",\"blockId\":\"nb1\",\"contentType\":\"editorjs\"}}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "插图", "alice", null, null, List.of(), 9L, null, listener);
+
+        assertThat(listener.noteContentUpdatedNoteId).isEqualTo(9L);
+        assertThat(listener.noteContentUpdatedData).containsEntry("op", "insert").containsEntry("blockId", "nb1");
     }
 }

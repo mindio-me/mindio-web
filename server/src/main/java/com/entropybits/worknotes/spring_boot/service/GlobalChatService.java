@@ -189,6 +189,11 @@ public class GlobalChatService {
                             public void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data) {
                                 sendEvent(emitter, ChatStreamEvent.mediaBlockUpdated(noteId, blockId, blockType, data), disconnected);
                             }
+
+                            @Override
+                            public void onNoteContentUpdated(Long noteId, Map<String, Object> data) {
+                                sendEvent(emitter, ChatStreamEvent.noteContentUpdated(noteId, data), disconnected);
+                            }
                         });
             } catch (Exception e) {
                 log.error("agent service call failed for user {}", username, e);
@@ -293,6 +298,11 @@ public class GlobalChatService {
                             @Override
                             public void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data) {
                                 sendEvent(emitter, ChatStreamEvent.mediaBlockUpdated(noteId, blockId, blockType, data), disconnected);
+                            }
+
+                            @Override
+                            public void onNoteContentUpdated(Long noteId, Map<String, Object> data) {
+                                sendEvent(emitter, ChatStreamEvent.noteContentUpdated(noteId, data), disconnected);
                             }
                         });
             } catch (Exception e) {

@@ -35,6 +35,8 @@ class AttachmentPayload(BaseModel):
     type: str
     mimeType: str
     base64Data: str
+    url: str | None = None
+    fileName: str | None = None
 
 
 class ChatStreamRequest(BaseModel):
@@ -81,6 +83,7 @@ def _dedupe_citations(citations: list[dict]) -> list[dict]:
 async def _drive_graph(
     graph, graph_input, config: dict, citations: list[dict], block_updates: list[dict],
     media_block_updates: list[dict], project_field_updates: list[dict],
+    note_content_updates: list[dict] | None = None,
 ) -> AsyncIterator[str]:
     """驱动一次图执行，把astream_events的细粒度事件转成text_delta/tool_call SSE事件。
     循环结束后检查是否有待确认的interrupt——interrupt()触发时GraphInterrupt不会从
@@ -124,6 +127,9 @@ async def _drive_graph(
     for update in project_field_updates:
         yield _event("project_field_updated", **update)
 
+    for update in note_content_updates or []:
+        yield _event("note_content_updated", noteId=update["noteId"], data=update["data"])
+
     yield _event("done", content=final_text, citations=_dedupe_citations(citations))
 
 
@@ -134,6 +140,7 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
     block_updates: list[dict] = []
     media_block_updates: list[dict] = []
     project_field_updates: list[dict] = []
+    note_content_updates: list[dict] = []
     settings_token = None
     try:
         await checkpointer.hydrate()
@@ -148,6 +155,7 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
             citations_sink=citations, block_update_sink=block_updates,
             media_block_update_sink=media_block_updates,
             project_field_update_sink=project_field_updates,
+            note_content_update_sink=note_content_updates,
         )
         graph = graph_builder.compile(checkpointer=checkpointer)
         config = {
@@ -206,10 +214,13 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
             "current_note_id": request.currentNoteId,
             "current_project_context": request.currentProjectContext,
             "current_project_id": request.currentProjectId,
+            "current_attachments": [
+                {"type": a.type, "url": a.url, "fileName": a.fileName} for a in request.attachments
+            ] if request.attachments else [],
         }
 
         async for chunk in _drive_graph(graph, input_state, config, citations, block_updates, media_block_updates,
-                                         project_field_updates):
+                                         project_field_updates, note_content_updates):
             yield chunk
     except Exception as e:  # noqa: BLE001 - 任何失败都要转成error事件让流正常结束，不是HTTP层500
         yield _event("error", content=f"抱歉，这次没能回复，换个说法试试？（{e}）")
@@ -237,6 +248,7 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
     block_updates: list[dict] = []
     media_block_updates: list[dict] = []
     project_field_updates: list[dict] = []
+    note_content_updates: list[dict] = []
     settings_token = None
     try:
         await checkpointer.hydrate()
@@ -251,6 +263,7 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
             citations_sink=citations, block_update_sink=block_updates,
             media_block_update_sink=media_block_updates,
             project_field_update_sink=project_field_updates,
+            note_content_update_sink=note_content_updates,
         )
         graph = graph_builder.compile(checkpointer=checkpointer)
         config = {
@@ -266,7 +279,7 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
 
         async for chunk in _drive_graph(
             graph, Command(resume=request.decision), config, citations, block_updates, media_block_updates,
-            project_field_updates,
+            project_field_updates, note_content_updates,
         ):
             yield chunk
     except Exception as e:  # noqa: BLE001

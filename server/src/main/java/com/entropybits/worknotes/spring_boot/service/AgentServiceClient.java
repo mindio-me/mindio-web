@@ -50,6 +50,8 @@ public class AgentServiceClient {
         void onConfirmRequest(String proposalId, String blockType, Long noteId, Map<String, Object> preview);
         void onBlockUpdated(Long noteId, String blockId, String blockType, List<Map<String, Object>> items);
         void onMediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data);
+        /** agent 插入/删除图片、改图注后推给前端同步已打开的编辑器（op/blockId 等见 AgentImageEditService） */
+        default void onNoteContentUpdated(Long noteId, Map<String, Object> data) {}
     }
 
     private final String baseUrl;
@@ -149,6 +151,9 @@ public class AgentServiceClient {
                     toLong(event.get("noteId")),
                     (String) event.get("blockId"),
                     (String) event.get("blockType"),
+                    castItem(event.get("data")));
+            case "note_content_updated" -> listener.onNoteContentUpdated(
+                    toLong(event.get("noteId")),
                     castItem(event.get("data")));
             default -> log.warn("unknown agent service event type: {}", type);
         }

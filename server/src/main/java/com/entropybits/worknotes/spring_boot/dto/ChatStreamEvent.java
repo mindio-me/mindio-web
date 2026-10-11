@@ -22,6 +22,7 @@ import java.util.Map;
  * - confirm_request: proposalId, blockType, noteId, preview
  * - block_updated: noteId, blockId, blockType, items（专题块的items数组型更新）
  * - media_block_updated: noteId, blockId, blockType, data（图片/音频block的标量字段更新）
+ * - note_content_updated: noteId, data（agent 改了笔记正文里的图片：op/blockId/afterBlockId/replacedBlockId/data/contentType）
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ChatStreamEvent(
@@ -72,5 +73,9 @@ public record ChatStreamEvent(
 
     public static ChatStreamEvent mediaBlockUpdated(Long noteId, String blockId, String blockType, Map<String, Object> data) {
         return new ChatStreamEvent("media_block_updated", null, null, null, null, null, null, null, null, blockType, noteId, null, blockId, null, data, null);
+    }
+
+    public static ChatStreamEvent noteContentUpdated(Long noteId, Map<String, Object> data) {
+        return new ChatStreamEvent("note_content_updated", null, null, null, null, null, null, null, null, null, noteId, null, null, null, data, null);
     }
 }
