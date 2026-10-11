@@ -899,6 +899,8 @@ export default {
     this.$nuxt.$on('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$on('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$on('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$on('media-block-updated', this.onMediaBlockUpdated)
+    this.$nuxt.$on('note-content-updated', this.onNoteContentUpdated)
     // 停靠在本页的 ChatPanel 点笔记引用时用：原地切换 activeNoteId，不走路由。
     // 之前改成 router.push('/workspace/notes?openNoteId=...') 试过，
     // 结果哪怕是同路由只改query，也会把这个页面整个重新挂载（实测 mounted() 复跑了一遍：
@@ -922,6 +924,8 @@ export default {
     this.$nuxt.$off('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$off('media-block-updated', this.onMediaBlockUpdated)
+    this.$nuxt.$off('note-content-updated', this.onNoteContentUpdated)
     this.$nuxt.$off('workspace:open-note-request', this.onOpenNoteRequest)
     this.$nuxt.$off('workspace:note-created', this.onNoteCreatedElsewhere)
     // 离开这个页面后，"当前笔记"广播必须清空，否则全局AI助手在其他页面（比如收藏夹）
@@ -1488,6 +1492,75 @@ export default {
           })
           return
         }
+      }
+    },
+    /**
+     * analyze_image / transcribe_audio 改了某个图片/音频块的字段（图注、逐字稿）。ChatPanel
+     * 早就在发这个事件，但之前没有任何地方监听——编辑器不刷新，下次自动保存还会把库里的
+     * 新图注盖回旧值。按 blockId 原地更新编辑器里的块。
+     */
+    onMediaBlockUpdated({ noteId, blockId, data }) {
+      if (!this.editor || !this.activeNote || String(this.activeNote.id) !== String(noteId)) return
+      this.editor.blocks.update(blockId, data).catch((e) => {
+        console.warn('同步 agent 写入的块字段失败，下次打开笔记会显示最新内容:', e)
+      })
+    },
+    /**
+     * agent 插入/删除了图片或改了图注（insert_image/delete_image/set_image_caption）。
+     * EditorJS 笔记：按事件里的 block id 在编辑器里做同样的操作，随后的自动保存写回的就是
+     * "用户还没保存的输入 + agent 的改动"；锚点块在编辑器里已经不存在时退化为插到末尾。
+     * Markdown/富文本在工作区是只读展示，重新拉一次正文即可。
+     */
+    async onNoteContentUpdated(payload) {
+      const { noteId, contentType, op } = payload
+      if (!this.activeNote || String(this.activeNote.id) !== String(noteId)) return
+      if (contentType !== 'editorjs') {
+        await this.reloadActiveNoteContent()
+        return
+      }
+      if (!this.editor) return
+      const blocks = this.editor.blocks
+      const indexOf = (id) => {
+        if (!id) return -1
+        try {
+          const i = blocks.getBlockIndex(id)
+          return i === undefined || i === null ? -1 : i
+        } catch (e) {
+          return -1
+        }
+      }
+      try {
+        if (op === 'insert') {
+          let index = blocks.getBlocksCount()
+          const replaced = indexOf(payload.replacedBlockId)
+          const after = indexOf(payload.afterBlockId)
+          if (replaced >= 0) {
+            blocks.delete(replaced)
+            index = replaced
+          } else if (after >= 0) {
+            index = after + 1
+          }
+          blocks.insert('image', payload.data, {}, index, false, false, payload.blockId)
+        } else if (op === 'delete') {
+          const i = indexOf(payload.blockId)
+          if (i >= 0) blocks.delete(i)
+        } else if (op === 'caption') {
+          await blocks.update(payload.blockId, payload.data)
+        }
+        this.hasUnsavedChanges = true
+        this.debouncedSave()
+      } catch (e) {
+        console.warn('同步 agent 对图片的改动失败，下次打开笔记会显示最新内容:', e)
+      }
+    },
+    /** 只刷新正文，不重建编辑器/不重置标签等其他状态（Markdown/富文本只读展示用） */
+    async reloadActiveNoteContent() {
+      try {
+        const note = await this.$noteService.getNoteById(this.activeNote.id)
+        this.activeNote = { ...this.activeNote, content: note.content, modifiedAt: note.modifiedAt }
+        this.buildOutline()
+      } catch (e) {
+        console.warn('刷新笔记内容失败:', e)
       }
     },
     /** 等当前正在进行的保存结束（最多 ~3s），避免 saveToBackend() 的 isSaving 早退把这次写入静默丢掉 */

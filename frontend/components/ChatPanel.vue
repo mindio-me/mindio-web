@@ -476,6 +476,8 @@ export default {
             data: event.data
           })
         }
+      } else if (event.type === 'note_content_updated') {
+        this.$nuxt.$emit('note-content-updated', { ...(event.data || {}), noteId: event.noteId })
       } else if (event.type === 'project_field_updated') {
         this.$nuxt.$emit('project-field-updated', {
           projectId: event.projectId,
