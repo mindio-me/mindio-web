@@ -70,21 +70,25 @@ public class InternalDocumentController {
 
     @PostMapping("/notes/{noteId}/images")
     public Map<String, Object> insertNoteImage(@RequestParam String username, @PathVariable Long noteId,
+                                               @RequestParam(required = false) String conversationId,
                                                @RequestBody AgentInsertImageRequest request) {
         return agentImageEditService.insertImage(username, noteId, request.source(), request.caption(),
-                request.anchorText());
+                request.anchorText(), conversationId);
     }
 
     @DeleteMapping("/notes/{noteId}/images/{index}")
     public Map<String, Object> deleteNoteImage(@RequestParam String username, @PathVariable Long noteId,
-                                               @PathVariable int index) {
-        return agentImageEditService.deleteImage(username, noteId, index);
+                                               @PathVariable int index,
+                                               @RequestParam(required = false) String conversationId) {
+        return agentImageEditService.deleteImage(username, noteId, index, conversationId);
     }
 
     @PatchMapping("/notes/{noteId}/images/{index}")
     public Map<String, Object> setNoteImageCaption(@RequestParam String username, @PathVariable Long noteId,
-                                                   @PathVariable int index, @RequestBody Map<String, String> body) {
-        return agentImageEditService.setImageCaption(username, noteId, index, body.get("caption"));
+                                                   @PathVariable int index,
+                                                   @RequestParam(required = false) String conversationId,
+                                                   @RequestBody Map<String, String> body) {
+        return agentImageEditService.setImageCaption(username, noteId, index, body.get("caption"), conversationId);
     }
 
     @GetMapping("/notes/{noteId}/blocks")

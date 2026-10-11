@@ -8,6 +8,7 @@ import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageSource;
 import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NoteRevision;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
@@ -42,12 +43,14 @@ public class AgentImageEditService {
     private final UploadService uploadService;
     private final ContentIndexingService contentIndexingService;
     private final ObjectMapper objectMapper;
+    private final NoteRevisionService revisionService;
     private final AgentEditorjsImageEditor editorjsEditor;
 
     public AgentImageEditService(UserRepository userRepository, NoteRepository noteRepository,
                                  AgentDocumentService agentDocumentService, MediaBlockService mediaBlockService,
                                  SafeImageDownloader downloader, UploadService uploadService,
-                                 ContentIndexingService contentIndexingService, ObjectMapper objectMapper) {
+                                 ContentIndexingService contentIndexingService, ObjectMapper objectMapper,
+                                 NoteRevisionService revisionService) {
         this.userRepository = userRepository;
         this.noteRepository = noteRepository;
         this.agentDocumentService = agentDocumentService;
@@ -56,11 +59,17 @@ public class AgentImageEditService {
         this.uploadService = uploadService;
         this.contentIndexingService = contentIndexingService;
         this.objectMapper = objectMapper;
+        this.revisionService = revisionService;
         this.editorjsEditor = new AgentEditorjsImageEditor(objectMapper);
     }
 
     public Map<String, Object> insertImage(String username, Long noteId, AgentImageSource source,
                                            String caption, String anchorText) {
+        return insertImage(username, noteId, source, caption, anchorText, null);
+    }
+
+    public Map<String, Object> insertImage(String username, Long noteId, AgentImageSource source,
+                                           String caption, String anchorText, String conversationId) {
         User user = getUser(username);
         Note note = loadOwnedNote(user, noteId);
         String url = resolveSourceUrl(username, user, source);
@@ -69,29 +78,40 @@ public class AgentImageEditService {
             case "markdown" -> AgentMarkdownImageEditor.insert(note.getContent(), url, caption, anchorText);
             default -> AgentHtmlImageEditor.insert(note.getContent(), url, caption, anchorText);
         };
-        return save(note, result);
+        return save(user, note, result, conversationId);
     }
 
     public Map<String, Object> deleteImage(String username, Long noteId, int index) {
-        Note note = loadOwnedNote(getUser(username), noteId);
+        return deleteImage(username, noteId, index, null);
+    }
+
+    public Map<String, Object> deleteImage(String username, Long noteId, int index, String conversationId) {
+        User user = getUser(username);
+        Note note = loadOwnedNote(user, noteId);
         AgentImageLocator.LocatedImage image = locate(note, index);
         AgentImageEditResult result = switch (contentType(note)) {
             case "editorjs" -> editorjsEditor.delete(note.getContent(), image);
             case "markdown" -> AgentMarkdownImageEditor.delete(note.getContent(), image);
             default -> AgentHtmlImageEditor.delete(note.getContent(), image);
         };
-        return save(note, result);
+        return save(user, note, result, conversationId);
     }
 
     public Map<String, Object> setImageCaption(String username, Long noteId, int index, String caption) {
-        Note note = loadOwnedNote(getUser(username), noteId);
+        return setImageCaption(username, noteId, index, caption, null);
+    }
+
+    public Map<String, Object> setImageCaption(String username, Long noteId, int index, String caption,
+                                               String conversationId) {
+        User user = getUser(username);
+        Note note = loadOwnedNote(user, noteId);
         AgentImageLocator.LocatedImage image = locate(note, index);
         AgentImageEditResult result = switch (contentType(note)) {
             case "editorjs" -> editorjsEditor.setCaption(note.getContent(), image, caption);
             case "markdown" -> AgentMarkdownImageEditor.setCaption(note.getContent(), image, caption);
             default -> AgentHtmlImageEditor.setCaption(note.getContent(), image, caption);
         };
-        return save(note, result);
+        return save(user, note, result, conversationId);
     }
 
     private AgentImageLocator.LocatedImage locate(Note note, int index) {
@@ -103,13 +123,17 @@ public class AgentImageEditService {
         return images.get(index - 1);
     }
 
-    private Map<String, Object> save(Note note, AgentImageEditResult result) {
+    private Map<String, Object> save(User user, Note note, AgentImageEditResult result, String conversationId) {
+        String turnId = revisionService.resolveAgentTurn(user, conversationId);
+        revisionService.snapshotBeforeEdit(note, turnId, NoteRevision.Source.AGENT);
         note.setContent(result.content());
         noteRepository.save(note);
         contentIndexingService.reindexNote(note.getId());
+        revisionService.recordAfter(turnId, note.getId(), result.content());
         Map<String, Object> event = new LinkedHashMap<>(result.event());
         event.put("noteId", note.getId());
         event.put("contentType", contentType(note));
+        event.put("turnId", turnId);
         return event;
     }
 

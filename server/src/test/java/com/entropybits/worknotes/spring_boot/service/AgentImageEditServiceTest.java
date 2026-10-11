@@ -8,6 +8,7 @@ import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageSource;
 import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.entropybits.worknotes.spring_boot.entity.NoteRevision;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
@@ -47,6 +48,7 @@ class AgentImageEditServiceTest {
     @Mock SafeImageDownloader downloader;
     @Mock UploadService uploadService;
     @Mock ContentIndexingService contentIndexingService;
+    @Mock NoteRevisionService revisionService;
 
     AgentImageEditService service;
     User alice = User.builder().id(1L).username("alice").build();
@@ -55,7 +57,7 @@ class AgentImageEditServiceTest {
     @BeforeEach
     void setUp() {
         service = new AgentImageEditService(userRepository, noteRepository, agentDocumentService, mediaBlockService,
-                downloader, uploadService, contentIndexingService, new ObjectMapper());
+                downloader, uploadService, contentIndexingService, new ObjectMapper(), revisionService);
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
     }
 
@@ -200,5 +202,18 @@ class AgentImageEditServiceTest {
 
         assertThatThrownBy(() -> service.deleteImage("alice", 10L, 2))
                 .isInstanceOf(BadRequestException.class).hasMessageContaining("共 1 张");
+    }
+
+    @Test
+    void edits_areSnapshottedUnderAgentTurn() {
+        Note note = markdownNote(alice, "a\n![x](/api/uploads/1.png)\nb");
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(note));
+        when(revisionService.resolveAgentTurn(alice, "5")).thenReturn("77");
+
+        Map<String, Object> event = service.deleteImage("alice", 10L, 1, "5");
+
+        verify(revisionService).snapshotBeforeEdit(any(), eq("77"), eq(NoteRevision.Source.AGENT));
+        verify(revisionService).recordAfter("77", 10L, note.getContent());
+        assertThat(event).containsEntry("turnId", "77");
     }
 }
