@@ -527,4 +527,11 @@ class ContentChunkingServiceTest {
         assertThat(chunks.get(0)).isEqualTo("行业竞品分析报告");
         assertThat(chunks).hasSize(2);
     }
+
+    @Test
+    void chunkNote_indexesMathTex() {
+        Note note = editorjsNote(8L, "t", "{\"blocks\":[{\"id\":\"m\",\"type\":\"math\",\"data\":{\"tex\":\"E=mc^2\"}}]}");
+
+        assertThat(String.join("\n", service.chunkNote(note))).contains("E=mc^2");
+    }
 }

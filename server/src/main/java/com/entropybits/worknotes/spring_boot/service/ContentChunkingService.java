@@ -205,6 +205,7 @@ public class ContentChunkingService {
         return switch (type) {
             case "paragraph", "header", "quote" -> stripHtml((String) data.get("text"));
             case "code" -> (String) data.get("code");
+            case "math" -> (String) data.get("tex");
             case "markdown" -> (String) data.get("markdown");
             case "list" -> joinListItems((List<Object>) data.get("items"));
             case "table" -> joinTableRows((List<Object>) data.get("content"));

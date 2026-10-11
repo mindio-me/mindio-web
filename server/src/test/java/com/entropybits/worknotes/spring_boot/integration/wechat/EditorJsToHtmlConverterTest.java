@@ -266,4 +266,18 @@ class EditorJsToHtmlConverterTest {
         // href attribute value is left untouched (out of scope for this fix)
         assertThat(html).contains("href=\"https://example.com/article\"");
     }
+
+    @Test
+    void convertsMathChecklistAndWarningBlocks() throws Exception {
+        String json = "{\"blocks\":["
+            + "{\"type\":\"math\",\"data\":{\"tex\":\"a<b\"}},"
+            + "{\"type\":\"checklist\",\"data\":{\"items\":[{\"text\":\"已办\",\"checked\":true},"
+            + "{\"text\":\"待办\",\"checked\":false}]}},"
+            + "{\"type\":\"warning\",\"data\":{\"title\":\"注意\",\"message\":\"先备份\"}}]}";
+
+        String html = converter.convert(json, Map.of());
+
+        assertThat(html).contains("a&lt;b").contains("☑ 已办").contains("☐ 待办")
+            .contains("注意").contains("先备份");
+    }
 }

@@ -47,4 +47,21 @@ class EditorJsToMarkdownConverterTest {
 
         assertThat(md).isEqualTo("- **2024-01** 事件一");
     }
+
+    @Test
+    void convert_mathTableChecklistMarkdownAndWarningBlocks() {
+        String json = "{\"blocks\":["
+                + "{\"type\":\"math\",\"data\":{\"tex\":\"E=mc^2\"}},"
+                + "{\"type\":\"table\",\"data\":{\"withHeadings\":true,\"content\":[[\"方案\",\"延迟\"],[\"<b>轮询</b>\",\"5s\"]]}},"
+                + "{\"type\":\"checklist\",\"data\":{\"items\":[{\"text\":\"已办\",\"checked\":true},{\"text\":\"待办\",\"checked\":false}]}},"
+                + "{\"type\":\"markdown\",\"data\":{\"markdown\":\"```mermaid\\ngraph TD\\n```\"}},"
+                + "{\"type\":\"warning\",\"data\":{\"title\":\"注意\",\"message\":\"先<s>删</s>再<code class=\\\"inline-code\\\">bak</code>\"}}]}";
+
+        assertThat(converter.convert(json, 0)).isEqualTo(
+                "$$\nE=mc^2\n$$\n\n"
+                + "| 方案 | 延迟 |\n| --- | --- |\n| **轮询** | 5s |\n\n"
+                + "- [x] 已办\n- [ ] 待办\n\n"
+                + "```mermaid\ngraph TD\n```\n\n"
+                + "> **注意**\n> 先~~删~~再`bak`");
+    }
 }

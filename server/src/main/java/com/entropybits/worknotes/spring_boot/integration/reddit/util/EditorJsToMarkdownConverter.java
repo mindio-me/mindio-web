@@ -10,6 +10,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Converts EditorJS JSON content to Reddit-flavored Markdown.
  */
@@ -63,6 +66,11 @@ public class EditorJsToMarkdownConverter {
             case "references"  -> convertReferences(data);
             case "mediaGallery" -> convertMediaGallery(data);
             case "timeline"    -> convertTimeline(data);
+            case "math"        -> convertMath(data);
+            case "table"       -> convertTable(data);
+            case "checklist"   -> convertChecklist(data);
+            case "markdown"    -> data.path("markdown").asText("").strip();
+            case "warning"     -> convertWarning(data);
             default            -> "";
         };
     }
@@ -123,6 +131,51 @@ public class EditorJsToMarkdownConverter {
         return "[" + label + "](" + url + ")";
     }
 
+    private String convertMath(JsonNode data) {
+        String tex = data.path("tex").asText("");
+        return tex.isBlank() ? "" : "$$\n" + tex + "\n$$";
+    }
+
+    private String convertTable(JsonNode data) {
+        JsonNode rows = data.path("content");
+        if (!rows.isArray() || rows.isEmpty()) return "";
+        int cols = rows.get(0).size();
+        String separator = "|" + " --- |".repeat(cols);
+        List<String> lines = new ArrayList<>();
+        boolean withHeadings = data.path("withHeadings").asBoolean(false);
+        if (!withHeadings) {
+            lines.add("|" + "  |".repeat(cols));
+            lines.add(separator);
+        }
+        for (int i = 0; i < rows.size(); i++) {
+            StringBuilder row = new StringBuilder("|");
+            for (JsonNode cell : rows.get(i)) {
+                row.append(' ').append(inlineMarkdown(cell.asText("")).replace("|", "\\|").replace("\n", " ")).append(" |");
+            }
+            lines.add(row.toString());
+            if (i == 0 && withHeadings) lines.add(separator);
+        }
+        return String.join("\n", lines);
+    }
+
+    private String convertChecklist(JsonNode data) {
+        StringBuilder sb = new StringBuilder();
+        for (JsonNode item : data.path("items")) {
+            String text = inlineMarkdown(item.path("text").asText(""));
+            if (text.isBlank()) continue;
+            sb.append(item.path("checked").asBoolean(false) ? "- [x] " : "- [ ] ").append(text).append("\n");
+        }
+        return sb.toString().stripTrailing();
+    }
+
+    private String convertWarning(JsonNode data) {
+        String title = stripHtml(data.path("title").asText(""));
+        String message = inlineMarkdown(data.path("message").asText(""));
+        if (title.isBlank() && message.isBlank()) return "";
+        if (title.isBlank()) return "> " + message.replace("\n", "\n> ");
+        return "> **" + title + "**" + (message.isBlank() ? "" : "\n> " + message.replace("\n", "\n> "));
+    }
+
     private String convertReferences(JsonNode data) {
         StringBuilder sb = new StringBuilder();
         for (JsonNode item : data.path("items")) {
@@ -176,7 +229,8 @@ public class EditorJsToMarkdownConverter {
                 .replaceAll("<strong>(.*?)</strong>", "**$1**")
                 .replaceAll("<i>(.*?)</i>",      "*$1*")
                 .replaceAll("<em>(.*?)</em>",    "*$1*")
-                .replaceAll("<code>(.*?)</code>", "`$1`")
+                .replaceAll("<code[^>]*>(.*?)</code>", "`$1`")
+                .replaceAll("<s>(.*?)</s>",      "~~$1~~")
                 .replaceAll("<a[^>]*href=\"([^\"]+)\"[^>]*>(.*?)</a>", "[$2]($1)")
                 .replaceAll("<br\\s*/?>",        "\n")
                 .replaceAll("<[^>]*>",           "")

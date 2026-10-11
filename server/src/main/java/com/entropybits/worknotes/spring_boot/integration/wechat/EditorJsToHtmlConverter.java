@@ -141,6 +141,9 @@ public class EditorJsToHtmlConverter {
             case "references"  -> convertReferences(data);
             case "mediaGallery" -> convertMediaGallery(data);
             case "timeline"    -> convertTimeline(data);
+            case "math"        -> convertMath(data);
+            case "checklist"   -> convertChecklist(data);
+            case "warning"     -> convertWarning(data);
             default -> "";
         };
     }
@@ -241,6 +244,45 @@ public class EditorJsToHtmlConverter {
     private String convertDelimiter() {
         return "<p style=\"text-align:center;color:#888;font-size:18px;margin:20px 0;"
             + "letter-spacing:8px;\">* * *</p>";
+    }
+
+    /** 公众号里跑不了 JS，公式以等宽源码展示 */
+    private String convertMath(JsonNode data) {
+        String tex = escapeHtml(data.path("tex").asText(""));
+        if (tex.isBlank()) return "";
+        return String.format(
+            "<section style=\"margin:16px 0;text-align:center;\"><code style=\"font-family:Consolas,Monaco,"
+            + "monospace;font-size:15px;color:#333;background:#f6f8fa;padding:8px 12px;border-radius:4px;"
+            + "display:inline-block;white-space:pre-wrap;\">%s</code></section>", tex);
+    }
+
+    private String convertChecklist(JsonNode data) {
+        StringBuilder sb = new StringBuilder(
+            "<section style=\"margin:12px 0;font-size:16px;color:#333;line-height:1.8;\">");
+        for (JsonNode item : data.path("items")) {
+            String text = item.path("text").asText("");
+            if (text.isBlank()) continue;
+            sb.append(String.format("<p style=\"margin:4px 0;\">%s %s</p>",
+                item.path("checked").asBoolean(false) ? "☑" : "☐", text));
+        }
+        return sb.append("</section>").toString();
+    }
+
+    private String convertWarning(JsonNode data) {
+        String title = data.path("title").asText("");
+        String message = data.path("message").asText("");
+        if (title.isBlank() && message.isBlank()) return "";
+        StringBuilder sb = new StringBuilder("<section style=\"margin:16px 0;padding:12px 16px;"
+            + "background:#fff8e6;border-left:4px solid #f0a020;border-radius:4px;\">");
+        if (!title.isBlank()) {
+            sb.append(String.format("<p style=\"font-size:16px;font-weight:bold;color:#8a5a00;"
+                + "margin:0 0 4px;\">%s</p>", title));
+        }
+        if (!message.isBlank()) {
+            sb.append(String.format("<p style=\"font-size:15px;color:#555;margin:0;line-height:1.8;\">%s</p>",
+                message));
+        }
+        return sb.append("</section>").toString();
     }
 
     private String convertMarkdown(JsonNode data) {
