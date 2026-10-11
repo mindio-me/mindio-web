@@ -26,6 +26,17 @@ TOP_K = 5
 OFFLOAD_THRESHOLD_CHARS = 4000
 SUMMARY_CHARS = 300
 
+_SOURCE_LABELS = {"NOTE": "笔记", "CLIP": "收藏"}
+
+
+def _source_label(chunk: dict) -> str:
+    """片段前标出来源（笔记/收藏 + id），模型才能接着用 read_note/read_clip 读整篇——
+    之前只给 chunkText，模型拿到片段（尤其只命中标题块时）也没法定位是哪篇。"""
+    name = _SOURCE_LABELS.get(chunk.get("sourceType"))
+    if name is None or chunk.get("sourceId") is None:
+        return ""
+    return f"[{name} id={chunk['sourceId']}] "
+
 
 def make_search_workspace_tool(java_client: JavaClient, cache: ContentCache, citations_sink: list | None = None):
     @tool
@@ -47,7 +58,7 @@ def make_search_workspace_tool(java_client: JavaClient, cache: ContentCache, cit
         if citations_sink is not None:
             citations_sink.extend(chunks)
 
-        text = "\n".join(f"- {c['chunkText']}" for c in chunks)
+        text = "\n".join(f"- {_source_label(c)}{c['chunkText']}" for c in chunks)
         if len(text) <= OFFLOAD_THRESHOLD_CHARS:
             return text
 

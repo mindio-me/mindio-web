@@ -317,3 +317,91 @@ async def test_trigger_audio_transcription_posts_to_internal_endpoint(test_setti
 
     assert captured == {"method": "POST", "path": "/internal/notes/3/audio-transcriptions/b1"}
     assert result["status"] == "PENDING"
+
+
+async def test_find_notes_by_title_sends_expected_request(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = request.url
+        return httpx.Response(200, json=[{"type": "note", "id": 1, "title": "设计"}])
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.find_notes_by_title("alice", "设计")
+
+    assert captured["url"].path == "/internal/documents/notes"
+    assert dict(captured["url"].params) == {"username": "alice", "title": "设计"}
+    assert result == [{"type": "note", "id": 1, "title": "设计"}]
+
+
+async def test_read_note_sends_expected_request(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = request.url
+        return httpx.Response(200, json={"type": "note", "id": 5, "title": "t", "bodyText": "b"})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.read_note("alice", 5)
+
+    assert captured["url"].path == "/internal/documents/notes/5"
+    assert dict(captured["url"].params) == {"username": "alice"}
+    assert result["bodyText"] == "b"
+
+
+async def test_read_clip_returns_none_on_404(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/internal/documents/clips/5"
+        return httpx.Response(404, json={"error": "收藏不存在"})
+
+    client = _client_with_transport(test_settings, handler)
+    assert await client.read_clip("alice", 5) is None
+
+
+async def test_read_note_wraps_other_http_errors(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "boom"})
+
+    client = _client_with_transport(test_settings, handler)
+    with pytest.raises(JavaClientError):
+        await client.read_note("alice", 5)
+
+
+async def test_list_document_images_sends_expected_request(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = request.url
+        return httpx.Response(200, json=[{"index": 1, "url": "/uploads/a.png", "caption": ""}])
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.list_document_images("alice", "clips", 7)
+
+    assert captured["url"].path == "/internal/documents/clips/7/images"
+    assert dict(captured["url"].params) == {"username": "alice"}
+    assert result[0]["index"] == 1
+
+
+async def test_list_document_images_returns_none_on_404(test_settings):
+    client = _client_with_transport(test_settings, lambda request: httpx.Response(404, json={}))
+    assert await client.list_document_images("alice", "notes", 7) is None
+
+
+async def test_get_document_image_sends_expected_request(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = request.url
+        return httpx.Response(200, json={"url": "https://example.com/a.png"})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.get_document_image("alice", "notes", 7, 2)
+
+    assert captured["url"].path == "/internal/documents/notes/7/images/2"
+    assert result == {"url": "https://example.com/a.png"}
+
+
+async def test_get_document_image_wraps_http_errors(test_settings):
+    client = _client_with_transport(test_settings, lambda request: httpx.Response(400, json={}))
+    with pytest.raises(JavaClientError):
+        await client.get_document_image("alice", "notes", 7, 9)

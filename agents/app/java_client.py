@@ -168,6 +168,55 @@ class JavaClient:
         except httpx.HTTPError as e:
             raise JavaClientError(f"get_project_notes failed for project_id={project_id!r}: {e}") from e
 
+    async def find_notes_by_title(self, username: str, title: str) -> list[dict]:
+        try:
+            resp = await self._client.get(
+                "/internal/documents/notes", params={"username": username, "title": title},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"find_notes_by_title failed for title={title!r}: {e}") from e
+
+    async def read_note(self, username: str, note_id: int) -> dict | None:
+        """不存在或不属于该用户时返回 None（Java 侧两种情况统一回 404，不区分）。"""
+        return await self._read_document(username, "notes", note_id)
+
+    async def read_clip(self, username: str, clip_id: int) -> dict | None:
+        return await self._read_document(username, "clips", clip_id)
+
+    async def list_document_images(self, username: str, kind: str, doc_id: int) -> list[dict] | None:
+        """kind 是 "notes" 或 "clips"；文档不存在或不属于该用户时返回 None。"""
+        try:
+            resp = await self._client.get(f"/internal/documents/{kind}/{doc_id}/images", params={"username": username})
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"list images failed for {kind} id={doc_id!r}: {e}") from e
+
+    async def get_document_image(self, username: str, kind: str, doc_id: int, index: int) -> dict:
+        """本地图片返回 {mimeType, base64Data}，外链图片返回 {url}。"""
+        try:
+            resp = await self._client.get(
+                f"/internal/documents/{kind}/{doc_id}/images/{index}", params={"username": username},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"get image failed for {kind} id={doc_id!r} index={index!r}: {e}") from e
+
+    async def _read_document(self, username: str, kind: str, doc_id: int) -> dict | None:
+        try:
+            resp = await self._client.get(f"/internal/documents/{kind}/{doc_id}", params={"username": username})
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"read {kind} failed for id={doc_id!r}: {e}") from e
+
     async def patch_project_field(self, project_id: int, field: str, value: str) -> dict:
         try:
             resp = await self._client.patch(

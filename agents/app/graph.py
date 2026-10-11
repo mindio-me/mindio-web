@@ -31,18 +31,27 @@ from tools.analyze_image import make_analyze_image_tool
 from tools.content_cache import ContentCache
 from tools.get_project_notes import make_get_project_notes_tool
 from tools.read_cached_content import make_read_cached_content_tool
+from tools.read_document import make_read_clip_tool, make_read_note_tool
 from tools.read_note_references import make_read_note_references_tool
 from tools.search_web import make_search_web_tool
 from tools.search_workspace import make_search_workspace_tool
 from tools.transcribe_audio import make_transcribe_audio_tool
 from tools.update_project_field import make_update_project_field_tool
 from tools.update_todo_list import update_todo_list
+from tools.view_image import make_view_image_tool
 
 SYSTEM_PROMPT = (
     "你是这款笔记应用内置的AI助手，可以自由对话、协助写作和总结。"
     "如果下面提供了笔记/收藏的相关内容，可以参考它们来回答，但不要虚构未提供的内容。"
-    "写深度研究类笔记时，你可以综合使用三种信息来源：search_workspace（用户自己的笔记和"
-    "收藏）、search_web（联网搜索）、read_note_references（这篇笔记已经关联的素材全文）。"
+    "写深度研究类笔记时，你可以综合使用这些信息来源：search_workspace（在用户自己的笔记和"
+    "收藏里做语义搜索，返回片段）、read_note/read_clip（读取任意一篇笔记/收藏的全文）、"
+    "search_web（联网搜索）、read_note_references（这篇笔记已经关联的素材全文）。"
+    "你可以读取用户的任何一篇笔记，不需要先把它关联进当前笔记：用户在对话里点名某篇笔记"
+    "（比如《xxx》）时，直接用 read_note(title=...) 读全文再回答；search_workspace 搜到的"
+    "片段不够时，按片段前标注的 id 调 read_note/read_clip 读整篇。不要只凭片段或标题作答，"
+    "也不要让用户把内容贴进来或关联进笔记。"
+    "当前笔记的正文如果在系统提示里被截断（以“内容过长，已截断”结尾），需要后半部分时"
+    "也可以用 read_note 按当前笔记的标题读全文。"
     "用户要求总结/整理关联资料时，给出结构清晰、可以直接放进笔记正文的文本。"
     "如果用户明确要求把某条资料/视频/时间点/任务添加进当前笔记，可以调用"
     "add_reference_item/add_gallery_item/add_timeline_item/add_checklist_item——这些工具"
@@ -50,6 +59,9 @@ SYSTEM_PROMPT = (
     "每次只调用一个写入工具，等这条确认完再决定要不要添加下一条。"
     '如果用户想让你看看笔记里的图片内容（比如"这张图是什么"、"帮我描述一下这张照片"），'
     "调用 analyze_image；这个工具会直接把描述写进图片下方，不需要用户额外确认。"
+    "如果只是需要了解某张图的内容来回答问题或写作（比如用户说参考某篇笔记/收藏里的截图、"
+    "架构图，或者 read_note/read_clip 提示文档里有图片），调用 view_image 带着具体问题去看，"
+    "它可以看任意一篇笔记或收藏里的图片，只读、不改动笔记。不要因为看不到图就让用户自己描述图片。"
     '如果用户想把笔记里的一段音频/录音转成文字（比如"帮我转录一下这段录音"、"这段语音'
     '说了什么"），调用 transcribe_audio；这个工具会把音频交给后台转写，几十秒到几分钟后'
     "逐字稿和总结会显示在音频下方，不需要用户额外确认。不要在回复里编造转写内容。"
@@ -98,6 +110,8 @@ def build_default_graph_builder(
         make_search_workspace_tool(java_client, cache, citations_sink=citations_sink),
         make_search_web_tool(java_client, citations_sink=citations_sink),
         make_read_note_references_tool(java_client, cache),
+        make_read_note_tool(java_client, cache),
+        make_read_clip_tool(java_client, cache),
         make_read_cached_content_tool(cache),
         update_todo_list,
         make_add_reference_item_tool(java_client, block_update_sink),
@@ -105,6 +119,7 @@ def build_default_graph_builder(
         make_add_timeline_item_tool(java_client, block_update_sink),
         make_add_checklist_item_tool(java_client, block_update_sink),
         make_analyze_image_tool(java_client, media_block_update_sink),
+        make_view_image_tool(java_client),
         make_transcribe_audio_tool(java_client, default_asr_client, media_block_update_sink),
         make_get_project_notes_tool(java_client),
         make_update_project_field_tool(java_client, project_field_update_sink),
