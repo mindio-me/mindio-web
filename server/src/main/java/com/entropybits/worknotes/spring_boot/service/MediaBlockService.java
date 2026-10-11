@@ -210,7 +210,7 @@ public class MediaBlockService {
         throw new ResourceNotFoundException("找不到这个块: " + blockId);
     }
 
-    private Path resolveLocalFilePath(String url) {
+    Path resolveLocalFilePath(String url) {
         int idx = url.indexOf("/uploads/");
         if (idx < 0) {
             throw new BadRequestException("无法解析文件路径: " + url);
@@ -236,7 +236,7 @@ public class MediaBlockService {
         return data.path("url").asText("");
     }
 
-    private static String guessMimeType(String filename) {
+    static String guessMimeType(String filename) {
         String ext = filename.contains(".")
                 ? filename.substring(filename.lastIndexOf('.') + 1).toLowerCase() : "";
         return switch (ext) {
