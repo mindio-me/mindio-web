@@ -216,4 +216,19 @@ class AgentNoteEditServiceTest {
         verify(revisionService).snapshotBeforeEdit(any(), eq((String) result.get("turnId")),
                 eq(NoteRevision.Source.REPLY_INSERT));
     }
+
+    @Test
+    void editorjs_blocksWithoutIds_getIdsAndClientIsToldToReload() throws Exception {
+        String doc = "{\"blocks\":[{\"type\":\"paragraph\",\"data\":{\"text\":\"一\"}},"
+                + "{\"type\":\"paragraph\",\"data\":{\"text\":\"二\"}}]}";
+        Note note = Note.builder().id(9L).title("t").owner(alice).contentType("editorjs").content(doc).build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        Map<String, Object> result = service.applyAsAgent("alice", 9L, "5", List.of(
+                Map.of("op", "delete", "blockIds", List.of("b0"), "hashes", List.of(hashOf(doc, "b0")))));
+
+        assertThat(blockIds(note.getContent())).hasSize(1).allMatch(id -> !id.isBlank());
+        assertThat(result).containsEntry("reload", true);
+        assertThat((List<?>) result.get("ops")).isEmpty();
+    }
 }

@@ -100,6 +100,10 @@ public class AgentNoteEditService {
         String newContent = "editorjs".equals(contentType)
                 ? applyEditorjs(user, note.getContent(), operations, ops)
                 : applyMarkdown(note.getContent(), operations);
+        // 库里有块没存 id（导入/服务端生成的旧笔记）时，编辑器打开后给这些块起的是随机 id，按 id
+        // 回放操作对不上；这时 applyEditorjs 已经给所有块补了 id，让前端整篇重新载入
+        boolean reload = "editorjs".equals(contentType) && hasBlockWithoutId(note.getContent());
+        if (reload) ops.clear();
 
         revisionService.snapshotBeforeEdit(note, turnId, source);
         note.setContent(newContent);
@@ -112,7 +116,20 @@ public class AgentNoteEditService {
         result.put("contentType", contentType);
         result.put("turnId", turnId);
         result.put("ops", ops);
+        result.put("reload", reload);
         return result;
+    }
+
+    private boolean hasBlockWithoutId(String content) {
+        if (content == null || content.isBlank()) return false;
+        try {
+            for (JsonNode b : om.readTree(content).path("blocks")) {
+                if (b.path("id").asText("").isBlank()) return true;
+            }
+        } catch (JsonProcessingException e) {
+            return false;
+        }
+        return false;
     }
 
     // ---------- Editor.js ----------
@@ -201,7 +218,10 @@ public class AgentNoteEditService {
         }
 
         blocksNode.removeAll();
-        list.forEach(blocksNode::add);
+        for (ObjectNode block : list) {
+            if (block.path("id").asText("").isBlank()) block.put("id", AgentEditorjsImageEditor.newBlockId());
+            blocksNode.add(block);
+        }
         try {
             return om.writeValueAsString(root);
         } catch (JsonProcessingException e) {
