@@ -914,6 +914,7 @@ export default {
     this.$nuxt.$on('note-content-updated', this.onNoteContentUpdated)
     this.$nuxt.$on('note-insert-request', this.onNoteInsertRequest)
     this.$nuxt.$on('note-turn-undone', this.onNoteTurnUndone)
+    this.$nuxt.$on('note-flush-before-undo', this.onFlushBeforeUndo)
     // 停靠在本页的 ChatPanel 点笔记引用时用：原地切换 activeNoteId，不走路由。
     // 之前改成 router.push('/workspace/notes?openNoteId=...') 试过，
     // 结果哪怕是同路由只改query，也会把这个页面整个重新挂载（实测 mounted() 复跑了一遍：
@@ -941,6 +942,7 @@ export default {
     this.$nuxt.$off('note-content-updated', this.onNoteContentUpdated)
     this.$nuxt.$off('note-insert-request', this.onNoteInsertRequest)
     this.$nuxt.$off('note-turn-undone', this.onNoteTurnUndone)
+    this.$nuxt.$off('note-flush-before-undo', this.onFlushBeforeUndo)
     this.$nuxt.$off('workspace:open-note-request', this.onOpenNoteRequest)
     this.$nuxt.$off('workspace:note-created', this.onNoteCreatedElsewhere)
     // 离开这个页面后，"当前笔记"广播必须清空，否则全局AI助手在其他页面（比如收藏夹）
@@ -1534,6 +1536,10 @@ export default {
         return
       }
       if (!this.editor) return
+      if (payload.reload) {
+        await this.reloadFromServer()
+        return
+      }
       if (Array.isArray(payload.ops)) {
         this.applyEditorOps(payload.ops)
         return
@@ -1581,22 +1587,28 @@ export default {
         return -1
       }
     },
-    /** 按服务端返回的规范化操作逐条同步到编辑器；某条失败就整篇重新载入，以库里为准 */
+    /**
+     * 按服务端返回的规范化操作逐条同步到编辑器。任何一条引用的块在编辑器里找不到，就说明编辑器
+     * 和库里已经对不上：不能跳过或退到文末——那样随后的自动保存会把错的状态写回去、冲掉 AI 正确的
+     * 修改——而是丢掉编辑器状态，整篇按库里重新载入。
+     */
     applyEditorOps(ops) {
       const blocks = this.editor.blocks
+      const resolve = (id) => {
+        const i = this.editorIndexOf(id)
+        if (i < 0) throw new Error(`块 ${id} 不在编辑器里`)
+        return i
+      }
       try {
         for (const op of ops) {
           if (op.op === 'insert') {
-            const after = this.editorIndexOf(op.afterBlockId)
-            const index = op.afterBlockId ? (after >= 0 ? after + 1 : blocks.getBlocksCount()) : 0
+            const index = op.afterBlockId ? resolve(op.afterBlockId) + 1 : 0
             blocks.insert(op.block.type, op.block.data, {}, index, false, false, op.block.id)
           } else if (op.op === 'delete') {
-            const i = this.editorIndexOf(op.blockId)
-            if (i >= 0) blocks.delete(i)
+            blocks.delete(resolve(op.blockId))
           } else if (op.op === 'move') {
-            const from = this.editorIndexOf(op.blockId)
-            if (from < 0) continue
-            const after = this.editorIndexOf(op.afterBlockId)
+            const from = resolve(op.blockId)
+            const after = op.afterBlockId ? resolve(op.afterBlockId) : -1
             const to = !op.afterBlockId ? 0 : (from < after ? after : after + 1)
             blocks.move(to, from)
           }
@@ -1605,12 +1617,63 @@ export default {
         this.debouncedSave()
       } catch (e) {
         console.warn('同步 AI 的修改到编辑器失败，重新载入笔记:', e)
-        this.loadActiveNote()
+        this.reloadFromServer()
+      }
+    },
+    /** 把还没落库的编辑先存掉：撤销/插入之前调用，让服务端的冲突检查和插入位置基于用户真实的最新内容 */
+    async flushPendingSave() {
+      if (this.saveTimeout) {
+        clearTimeout(this.saveTimeout)
+        this.saveTimeout = null
+      }
+      await this.waitForSaveIdle()
+      if (this.hasUnsavedChanges && this.isEditorjsNote && this.editor) await this.saveToBackend()
+    },
+    /**
+     * 丢掉编辑器状态、按库里重新载入。先停掉自动保存：否则载入期间到点的保存定时器会把编辑器里
+     * 的旧内容写回去，刚撤销/刚改好的内容又被冲掉。
+     */
+    async reloadFromServer() {
+      this._editorReady = false
+      if (this.saveTimeout) {
+        clearTimeout(this.saveTimeout)
+        this.saveTimeout = null
+      }
+      await this.waitForSaveIdle()
+      this.hasUnsavedChanges = false
+      await this.loadActiveNote()
+    },
+    /** ChatPanel 撤销前的握手：往 waits 里放一个"本页未保存内容已落库"的 promise */
+    onFlushBeforeUndo({ noteIds, waits }) {
+      if (this.activeNote && (noteIds || []).map(String).includes(String(this.activeNote.id))) {
+        waits.push(this.flushPendingSave())
       }
     },
     onNoteTurnUndone({ noteIds }) {
       if (this.activeNote && (noteIds || []).map(String).includes(String(this.activeNote.id))) {
-        this.loadActiveNote()
+        this.reloadFromServer()
+      }
+    },
+    /** 撤销回复插入：不强制，用户在提示出现后又改过时先确认 */
+    async undoReplyInsert(turnId, force = false) {
+      try {
+        await this.flushPendingSave()
+        await this.$globalChatService.undoTurn(turnId, force)
+        await this.reloadFromServer()
+      } catch (e) {
+        const conflicts = e && e.response && e.response.status === 409 && e.response.data && e.response.data.conflicts
+        if (conflicts && !force) {
+          try {
+            await this.$confirm(this.$t('workspace.chat.undoConfirmModified', {
+              titles: conflicts.map(n => `《${n.title || '未命名笔记'}》`).join('、')
+            }), this.$t('workspace.chat.undoTurn'), { type: 'warning' })
+          } catch (cancel) {
+            return
+          }
+          await this.undoReplyInsert(turnId, true)
+          return
+        }
+        this.$message.error(this.$t('workspace.chat.undoFailed'))
       }
     },
     currentCursorBlockId() {
@@ -1629,6 +1692,8 @@ export default {
         this.$message.warning(this.$t('workspace.chat.insertNotSupported'))
         return
       }
+      // 先落库：光标所在的块如果是刚打的、还没保存，服务端不认识它
+      await this.flushPendingSave()
       const cursorBlockId = this.currentCursorBlockId()
       let suggestion = { choice: cursorBlockId ? 'cursor' : 'end' }
       try {
@@ -1652,24 +1717,19 @@ export default {
     },
     async doInsert(markdown, after) {
       try {
-        await this.waitForSaveIdle()
-        if (this.hasUnsavedChanges && this.isEditorjsNote) await this.saveToBackend()
+        await this.flushPendingSave()
         const res = await this.$noteService.insertContent(this.activeNote.id, markdown, after || 'end')
-        if (res.contentType === 'editorjs' && this.editor) this.applyEditorOps(res.ops || [])
-        else await this.reloadActiveNoteContent()
+        if (res.contentType !== 'editorjs') await this.reloadActiveNoteContent()
+        else if (res.reload || !this.editor) await this.reloadFromServer()
+        else this.applyEditorOps(res.ops || [])
         const notify = this.$notify({
           title: '',
           message: this.$t('workspace.chat.insertedToNote'),
           type: 'success',
           duration: 8000,
-          onClick: async () => {
+          onClick: () => {
             notify.close()
-            try {
-              await this.$globalChatService.undoTurn(res.turnId, true)
-              this.loadActiveNote()
-            } catch (e) {
-              this.$message.error(this.$t('workspace.chat.undoFailed'))
-            }
+            this.undoReplyInsert(res.turnId)
           }
         })
       } catch (e) {

@@ -612,6 +612,11 @@ export default {
     async undoTurn(msg, force = false) {
       this.undoingTurnId = msg.turnId
       try {
+        // 先让打开着这些笔记的页面把未保存的输入落库：否则服务端的"之后又改过"检查看不到它们，
+        // 撤销完成后挂着的自动保存还会把撤销前的内容写回去
+        const waits = []
+        this.$nuxt.$emit('note-flush-before-undo', { noteIds: (msg.editedNotes || []).map(n => n.noteId), waits })
+        await Promise.all(waits)
         const res = await this.$globalChatService.undoTurn(msg.turnId, force)
         this.$set(msg, 'undone', true)
         this.$nuxt.$emit('note-turn-undone', { noteIds: (res && res.restoredNoteIds) || [] })
