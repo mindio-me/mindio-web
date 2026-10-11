@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 @RequiredArgsConstructor
@@ -285,11 +287,17 @@ public class EditorJsToHtmlConverter {
         return sb.append("</section>").toString();
     }
 
+    private static final Pattern MD_LINK = Pattern.compile("\\[([^\\]\\n]+)\\]\\(([^)\\n]+)\\)");
+    private static final Pattern UNSAFE_LINK =
+        Pattern.compile("^\\s*(?:javascript|vbscript|file|data):", Pattern.CASE_INSENSITIVE);
+
     private String convertMarkdown(JsonNode data) {
         String md = data.path("markdown").asText("");
         if (md.isBlank()) return "";
 
-        String h = md;
+        // 先整体转义：和站内 markdown-it（html:false）一致，原始 HTML 当文本显示；
+        // 下面的正则都基于转义后的文本（引用块匹配 "&gt; "），链接/图片地址里的 " 也随之变成 &quot;
+        String h = escapeHtml(md);
         // Code blocks (multiline, before inline code)
         h = h.replaceAll("(?s)```\\w*\\n(.*?)```",
             "<pre style=\"background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:6px;"
@@ -313,14 +321,16 @@ public class EditorJsToHtmlConverter {
         h = h.replaceAll("(?m)^# (.*)$",
             "<h1 style=\"font-size:20px;font-weight:bold;color:#333;margin:16px 0;\">$1</h1>");
         // Blockquotes
-        h = h.replaceAll("(?m)^> (.*)$",
+        h = h.replaceAll("(?m)^&gt; (.*)$",
             "<blockquote style=\"border-left:4px solid #e6622e;padding:8px 16px;"
             + "background:#f8f4f0;color:#555;margin:12px 0;font-style:italic;\">$1</blockquote>");
         // Bold & italic
         h = h.replaceAll("\\*\\*([^*\\n]+)\\*\\*", "<strong>$1</strong>");
         h = h.replaceAll("\\*([^*\\n]+)\\*", "<em>$1</em>");
         // Links — [text](url)  →  <a href="url">text</a>
-        h = h.replaceAll("\\[([^\\]\\n]+)\\]\\(([^)\\n]+)\\)", "<a href=\"$2\">$1</a>");
+        // 和 markdown-it 的 validateLink 一样，javascript:/vbscript:/file:/data: 链接只保留文字
+        h = MD_LINK.matcher(h).replaceAll(m -> Matcher.quoteReplacement(
+            UNSAFE_LINK.matcher(m.group(2)).find() ? m.group(1) : "<a href=\"" + m.group(2) + "\">" + m.group(1) + "</a>"));
         // Unordered list items
         h = h.replaceAll("(?m)^- (.*)$",
             "<li style=\"margin:4px 0;color:#333;font-size:16px;line-height:1.8;\">$1</li>");

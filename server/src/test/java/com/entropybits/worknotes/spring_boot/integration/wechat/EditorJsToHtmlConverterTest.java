@@ -156,6 +156,45 @@ class EditorJsToHtmlConverterTest {
         assertThat(html).isEmpty();
     }
 
+    private String markdownBlockJson(String markdown) throws Exception {
+        ObjectMapper om = new ObjectMapper();
+        var root = om.createObjectNode();
+        var block = root.putArray("blocks").addObject();
+        block.put("type", "markdown");
+        block.putObject("data").put("markdown", markdown);
+        return om.writeValueAsString(root);
+    }
+
+    @Test
+    void markdownBlockRawHtmlIsEscapedAsText() throws Exception {
+        String html = converter.convert(markdownBlockJson("前 <img src=x onerror=alert(1)> 后\n<script>alert(2)</script>"), Map.of());
+        assertThat(html).doesNotContain("<img src=x").doesNotContain("<script>");
+        assertThat(html).contains("&lt;img src=x onerror=alert(1)&gt;").contains("&lt;script&gt;alert(2)&lt;/script&gt;");
+    }
+
+    @Test
+    void markdownBlockQuotesInUrlsCannotBreakOutOfAttributes() throws Exception {
+        String html = converter.convert(markdownBlockJson(
+                "![a\" onerror=\"x](http://e.com/p.png\" onload=\"y) [t](http://e.com/\" onclick=\"z)"), Map.of());
+        assertThat(html).doesNotContain("\" onerror=\"").doesNotContain("\" onload=\"").doesNotContain("\" onclick=\"");
+        assertThat(html).contains("&quot; onload=&quot;y");
+    }
+
+    @Test
+    void markdownBlockDropsScriptLinks() throws Exception {
+        String html = converter.convert(markdownBlockJson("[点我](javascript:alert(1))"), Map.of());
+        assertThat(html).doesNotContain("href=\"javascript:");
+        assertThat(html).contains("点我");
+    }
+
+    @Test
+    void markdownBlockBlockquoteAndCodeStillRenderAfterEscaping() throws Exception {
+        String html = converter.convert(markdownBlockJson("> 引用 a<b\n\n`x<y`\n\n```\nif (a > b && c) {}\n```"), Map.of());
+        assertThat(html).contains("<blockquote ").contains("引用 a&lt;b</blockquote>");
+        assertThat(html).contains(">x&lt;y</code>");
+        assertThat(html).contains("if (a &gt; b &amp;&amp; c) {}");
+    }
+
     @Test
     void convert_referencesBlockRendersLinkedList() throws Exception {
         String json = "{\"blocks\":[{\"type\":\"references\",\"data\":{\"items\":["
