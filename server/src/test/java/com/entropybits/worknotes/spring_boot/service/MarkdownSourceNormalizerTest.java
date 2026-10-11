@@ -56,4 +56,32 @@ class MarkdownSourceNormalizerTest {
         assertThat(norm("![[pic 1.png|300]] [[A#小节|别名]] [[B]] ![[其他笔记]]"))
                 .isEqualTo("![pic 1.png](<pic 1.png>) 别名 B 其他笔记");
     }
+
+    @Test
+    void wikilinksInsideInlineCodeAreUntouched() {
+        assertThat(norm("取列 `df[[\"a\",\"b\"]]` 见 [[笔记]]，或 ``x `[[y]]` z``"))
+                .isEqualTo("取列 `df[[\"a\",\"b\"]]` 见 笔记，或 ``x `[[y]]` z``");
+    }
+
+    @Test
+    void unmatchedBacktickDoesNotProtectRestOfLine() {
+        assertThat(norm("单个 ` 反引号 [[A]]")).isEqualTo("单个 ` 反引号 A");
+    }
+
+    @Test
+    void indentedCodeIsUntouched() {
+        String md = "说明：\n\n    df[[\"a\"]]\n\tx = [[1]]\n\n    $$ a $$\n\n后 [[B]]";
+        assertThat(norm(md)).isEqualTo("说明：\n\n    df[[\"a\"]]\n\tx = [[1]]\n\n    $$ a $$\n\n后 B");
+    }
+
+    @Test
+    void indentedListChildrenStillRewriteWikilinks() {
+        assertThat(norm("- 父 [[A]]\n    - 子 [[B|别名]]\n\n    续段 [[C]]"))
+                .isEqualTo("- 父 A\n    - 子 别名\n\n    续段 C");
+    }
+
+    @Test
+    void bomPrefixedFrontmatterIsDetected() {
+        assertThat(norm("﻿---\ntitle: 周报\n---\n正文")).isEqualTo("```yaml\ntitle: 周报\n```\n正文");
+    }
 }
