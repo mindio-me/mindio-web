@@ -168,4 +168,32 @@ class NoteRevisionServiceTest {
 
         assertThat(service.editedNotes("77")).containsExactly(new EditedNoteRef(9L, "设计", false));
     }
+
+    @Test
+    void undo_editorjsEditorReserialization_isNotModified() {
+        String after = "{\"blocks\":[{\"id\":\"a\",\"type\":\"paragraph\",\"data\":{\"text\":\"说 &quot;好&quot;\"}},"
+                + "{\"id\":\"c\",\"type\":\"code\",\"data\":{\"code\":\"x\"}}]}";
+        String savedByEditor = "{\"blocks\":[{\"id\":\"a\",\"type\":\"paragraph\",\"data\":{\"text\":\"说 \\\"好\\\"\"}},"
+                + "{\"id\":\"c\",\"type\":\"code\",\"data\":{\"code\":\"x\"},\"tunes\":{\"codeWrap\":{\"wrap\":false}}}]}";
+        NoteRevision r = NoteRevision.builder().id(1L).noteId(9L).ownerId(1L).turnId("77")
+                .contentType("editorjs").content("{\"blocks\":[]}").contentAfter(after).build();
+        Note note = Note.builder().id(9L).owner(alice).contentType("editorjs").content(savedByEditor).build();
+        when(revisionRepository.findByTurnIdAndOwnerIdOrderByIdAsc("77", 1L)).thenReturn(List.of(r));
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        assertThat(service.undo("alice", "77", false).conflicts()).isEmpty();
+    }
+
+    @Test
+    void undo_editorjsTextChangedAfterwards_isModified() {
+        String after = "{\"blocks\":[{\"id\":\"a\",\"type\":\"paragraph\",\"data\":{\"text\":\"原\"}}]}";
+        String edited = "{\"blocks\":[{\"id\":\"a\",\"type\":\"paragraph\",\"data\":{\"text\":\"原，又改\"}}]}";
+        NoteRevision r = NoteRevision.builder().id(1L).noteId(9L).ownerId(1L).turnId("77")
+                .contentType("editorjs").content("{\"blocks\":[]}").contentAfter(after).build();
+        Note note = Note.builder().id(9L).owner(alice).contentType("editorjs").content(edited).build();
+        when(revisionRepository.findByTurnIdAndOwnerIdOrderByIdAsc("77", 1L)).thenReturn(List.of(r));
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        assertThat(service.undo("alice", "77", false).conflicts()).hasSize(1);
+    }
 }

@@ -15,7 +15,6 @@ import com.entropybits.worknotes.spring_boot.repository.AiChatMessageRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRevisionRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
@@ -133,19 +132,26 @@ public class NoteRevisionService {
         return noteRepository.findById(r.getNoteId()).filter(n -> n.getOwner().getId().equals(user.getId()));
     }
 
-    /** Editor.js 只比 blocks（自动保存会刷新 time/version）；其他格式按去尾空白后的文本比 */
+    /**
+     * Editor.js 按块的"类型 + Markdown 文本"比较，不比原始 JSON：编辑器同步 agent 的改动后自动保存
+     * 会重新序列化（刷新 time/version、给代码块加 tunes、把 &amp;quot; 存回成 "、给图片加宽度），
+     * 原始 JSON 几乎每次都不同，按它比较会让撤销每次都误报"之后又改过"。不可编辑的特殊块比 hash。
+     * 其他格式按去尾空白后的文本比。
+     */
     static boolean sameContent(String contentType, String a, String b, ObjectMapper om) {
         if (a == null || b == null) return a == b;
         if ("editorjs".equals(contentType)) {
-            try {
-                JsonNode ba = om.readTree(a).path("blocks");
-                JsonNode bb = om.readTree(b).path("blocks");
-                return ba.equals(bb);
-            } catch (Exception e) {
-                return a.equals(b);
-            }
+            return blockSignature(a, om).equals(blockSignature(b, om));
         }
         return a.stripTrailing().equals(b.stripTrailing());
+    }
+
+    private static List<String> blockSignature(String content, ObjectMapper om) {
+        List<String> result = new ArrayList<>();
+        for (AgentNoteBlocks.Block b : AgentNoteBlocks.editorjsBlocks(content, om)) {
+            result.add(b.type() + "|" + (b.editable() ? b.text() : b.hash()));
+        }
+        return result;
     }
 
     private User getUser(String username) {
