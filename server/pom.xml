@@ -132,7 +132,23 @@
 		<dependency>
 			<groupId>org.commonmark</groupId>
 			<artifactId>commonmark</artifactId>
-			<version>0.21.0</version>
+			<version>0.24.0</version>
+		</dependency>
+		<!-- Markdown 转 Editor.js 块：GFM 表格、删除线、脚注（脚注扩展 0.23 起才有，核心库须同版本） -->
+		<dependency>
+			<groupId>org.commonmark</groupId>
+			<artifactId>commonmark-ext-gfm-tables</artifactId>
+			<version>0.24.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.commonmark</groupId>
+			<artifactId>commonmark-ext-gfm-strikethrough</artifactId>
+			<version>0.24.0</version>
+		</dependency>
+		<dependency>
+			<groupId>org.commonmark</groupId>
+			<artifactId>commonmark-ext-footnotes</artifactId>
+			<version>0.24.0</version>
 		</dependency>
 
 		<!-- Readability4J: Mozilla Readability port for generic-page content extraction -->
