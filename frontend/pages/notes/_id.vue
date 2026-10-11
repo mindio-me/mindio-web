@@ -482,7 +482,11 @@ export default {
           { default: MarkdownBlock },
           { default: ReferencesTool },
           { default: GalleryTool },
-          { default: TimelineTool }
+          { default: TimelineTool },
+          { default: Marker },
+          { default: InlineCode },
+          { default: StrikethroughTool },
+          { default: MathTool }
         ] = await Promise.all([
           import('@editorjs/editorjs'),
           import('@editorjs/header'),
@@ -499,7 +503,11 @@ export default {
           import('~/utils/editorjs-markdown-block'),
           import('~/utils/editorjsReferencesTool'),
           import('~/utils/editorjsGalleryTool'),
-          import('~/utils/editorjsTimelineTool')
+          import('~/utils/editorjsTimelineTool'),
+          import('@editorjs/marker'),
+          import('@editorjs/inline-code'),
+          import('~/utils/editorjsStrikethroughTool'),
+          import('~/utils/editorjsMathTool')
         ])
 
         // 解析笔记内容
@@ -562,7 +570,12 @@ export default {
             },
             references: { class: ReferencesTool },
             mediaGallery: { class: GalleryTool },
-            timeline: { class: TimelineTool }
+            timeline: { class: TimelineTool },
+            // 只读渲染也要注册行内工具：编辑器按已注册工具的 sanitize 规则清洗正文，否则 <mark>/<s>/<code> 会被剥掉
+            marker: { class: Marker },
+            inlineCode: { class: InlineCode },
+            strikethrough: { class: StrikethroughTool },
+            math: { class: MathTool }
           },
           minHeight: 0
         })
@@ -1269,6 +1282,12 @@ export default {
 
     ::v-deep .ce-header {
       padding: 0.4em 0;
+    }
+
+    ::v-deep .cdx-math-block__preview {
+      overflow-x: auto;
+      text-align: center;
+      padding: 8px 0;
     }
 
     ::v-deep .cdx-list {

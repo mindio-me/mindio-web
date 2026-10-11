@@ -53,7 +53,7 @@ export default {
         { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool },
         { default: RecordTool },
         { default: CodeWrapTune }, { default: Undo },
-        { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }
+        { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }, { default: MathTool }, { default: StrikethroughTool }
       ] = await Promise.all([
         import('@editorjs/editorjs'), import('@editorjs/header'), import('@editorjs/list'),
         import('@editorjs/code'), import('@editorjs/delimiter'), import('@editorjs/quote'),
@@ -67,7 +67,7 @@ export default {
         import('~/utils/editorjsRecordTool'),
         import('~/utils/editorjsCodeWrapTune'),
         import('editorjs-undo'),
-        import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool')
+        import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool'), import('~/utils/editorjsMathTool'), import('~/utils/editorjsStrikethroughTool')
       ])
 
       const uploadService = this.$uploadService
@@ -76,7 +76,7 @@ export default {
       const ph = options.placeholders
 
       const tools = {
-        header: { class: Header, config: { placeholder: ph.header, levels: [1, 2, 3], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
+        header: { class: Header, config: { placeholder: ph.header, levels: [1, 2, 3, 4, 5, 6], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
         list: { class: List, inlineToolbar: true, config: { defaultStyle: 'unordered' } },
         code: { class: CodeTool, config: { placeholder: ph.code }, tunes: ['codeWrap'] },
         codeWrap: { class: CodeWrapTune },
@@ -108,6 +108,8 @@ export default {
           }
         },
         marker: { class: Marker },
+        strikethrough: { class: StrikethroughTool, shortcut: 'CMD+SHIFT+X' },
+        math: { class: MathTool },
         checklist: { class: Checklist, inlineToolbar: true },
         warning: {
           class: Warning,
@@ -293,10 +295,10 @@ export default {
             toolNames: {
               Text: '文本', Heading: '标题', List: '列表', Quote: '引用',
               Code: '代码块', Delimiter: '分割线', Table: '表格', Image: '图片',
-              InlineCode: '行内代码', Marker: '高亮', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
+              InlineCode: '行内代码', Marker: '高亮', Strikethrough: '删除线', Math: '公式', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
             },
             tools: {
-              header: { 'Heading 1': '标题 1', 'Heading 2': '标题 2', 'Heading 3': '标题 3' },
+              header: { 'Heading 1': '标题 1', 'Heading 2': '标题 2', 'Heading 3': '标题 3', 'Heading 4': '标题 4', 'Heading 5': '标题 5', 'Heading 6': '标题 6' },
               list: { Ordered: '有序列表', Unordered: '无序列表' },
               quote: { 'Align Left': '左对齐', 'Align Center': '居中' },
               table: { 'With headings': '带表头', 'Without headings': '无表头', 'Add row above': '上方插入行', 'Add row below': '下方插入行', 'Delete row': '删除行', 'Add column to the left': '左侧插入列', 'Add column to the right': '右侧插入列', 'Delete column': '删除列' },

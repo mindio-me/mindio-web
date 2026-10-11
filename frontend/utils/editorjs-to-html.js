@@ -5,6 +5,7 @@
 
 import { renderMarkdown } from './markdown'
 import { parseListItems } from './editorjs-list'
+import { renderTex } from './mathRender'
 
 function esc(str) {
   if (str == null) return ''
@@ -42,7 +43,7 @@ function renderBlock(block) {
       return d.text != null ? `<p class="pdf-paragraph">${d.text}</p>` : ''
 
     case 'header': {
-      const lvl = Math.min(Math.max(parseInt(d.level) || 2, 1), 3)
+      const lvl = Math.min(Math.max(parseInt(d.level) || 2, 1), 6)
       return `<h${lvl} class="pdf-header">${d.text || ''}</h${lvl}>`
     }
 
@@ -168,6 +169,11 @@ function renderBlock(block) {
     case 'markdown':
       if (!d.markdown) return ''
       return `<div class="pdf-markdown">${renderMarkdown(d.markdown)}</div>`
+
+    case 'math': {
+      const html = renderTex(d.tex)
+      return html ? `<div class="pdf-math">${html}</div>` : ''
+    }
 
     case 'video': {
       if (!d.url) return ''

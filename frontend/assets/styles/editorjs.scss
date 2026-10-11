@@ -8,6 +8,20 @@
   .ce-toolbox { left: 60px !important; }
   .ce-paragraph { color: var(--text-color, #333); line-height: 1.8; }
   .ce-header { color: var(--text-color, #333); font-weight: 600; padding: 0.6em 0 0.3em; }
+  h4.ce-header { font-size: 1.1em; }
+  h5.ce-header { font-size: 1em; }
+  h6.ce-header { font-size: 0.95em; color: var(--text-secondary, #555); }
+
+  .cdx-math-block { margin: 0.6em 0; }
+  .cdx-math-block__input {
+    width: 100%; box-sizing: border-box; resize: vertical;
+    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace; font-size: 14px;
+    padding: 8px 12px; border: 1px solid var(--border-color, #dcdfe6); border-radius: 6px;
+    background: var(--bg-secondary, #f8f9fa); color: var(--text-color, #333);
+  }
+  .cdx-math-block__preview { padding: 8px 0; overflow-x: auto; text-align: center; }
+  .cdx-math-block__error { color: #c0392b; white-space: pre-wrap; margin: 0; }
+  .cdx-math-block__error-msg { color: #c0392b; font-size: 12px; }
 
   .cdx-quote {
     border-left: 4px solid var(--color-nav);
