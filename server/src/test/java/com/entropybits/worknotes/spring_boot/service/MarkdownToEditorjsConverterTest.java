@@ -78,4 +78,10 @@ class MarkdownToEditorjsConverterTest {
     void emptyMarkdownGivesNoBlocks() {
         assertThat(converter.convert("  \n\n ")).isEmpty();
     }
+
+    @Test
+    void unsafeLinkSchemesAreDroppedKeepingText() {
+        assertThat(json(converter.convert("[点此](javascript:alert(1)) [好](https://x.com) [相对](/notes/1)").get(0)))
+                .isEqualTo("paragraph {\"text\":\"点此 <a href=\\\"https://x.com\\\">好</a> <a href=\\\"/notes/1\\\">相对</a>\"}");
+    }
 }

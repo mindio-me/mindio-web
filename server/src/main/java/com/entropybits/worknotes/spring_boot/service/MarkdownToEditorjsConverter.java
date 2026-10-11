@@ -207,8 +207,14 @@ final class MarkdownToEditorjsConverter {
             else if (c instanceof Emphasis) sb.append("<i>").append(inline(c)).append("</i>");
             else if (c instanceof Code code) sb.append("<code class=\"inline-code\">")
                     .append(AgentHtmlImageEditor.escape(code.getLiteral())).append("</code>");
-            else if (c instanceof Link link) sb.append("<a href=\"").append(AgentHtmlImageEditor.escape(link.getDestination()))
-                    .append("\">").append(inline(c)).append("</a>");
+            else if (c instanceof Link link) {
+                if (isSafeHref(link.getDestination())) {
+                    sb.append("<a href=\"").append(AgentHtmlImageEditor.escape(link.getDestination()))
+                            .append("\">").append(inline(c)).append("</a>");
+                } else {
+                    sb.append(inline(c));
+                }
+            }
             else if (c instanceof Image img) sb.append(AgentHtmlImageEditor.escape(plainText(img)));
             else if (c instanceof SoftLineBreak) sb.append(' ');
             else if (c instanceof HardLineBreak) sb.append("<br>");
@@ -216,6 +222,23 @@ final class MarkdownToEditorjsConverter {
             else sb.append(inline(c));
         }
         return sb.toString();
+    }
+
+    /**
+     * 链接只放行 http/https/mailto 和不带协议的相对地址：模型输出可能被网页内容注入，
+     * javascript: 之类的链接写进笔记后，公开页用 v-html 渲染，点一下就在本站执行脚本。
+     */
+    static boolean isSafeHref(String href) {
+        if (href == null) return false;
+        String h = href.trim().toLowerCase(java.util.Locale.ROOT);
+        int colon = h.indexOf(':');
+        int firstDelimiter = h.length();
+        for (char d : new char[]{'/', '?', '#'}) {
+            int i = h.indexOf(d);
+            if (i >= 0 && i < firstDelimiter) firstDelimiter = i;
+        }
+        if (colon < 0 || colon > firstDelimiter) return true;
+        return h.startsWith("http:") || h.startsWith("https:") || h.startsWith("mailto:");
     }
 
     private static String plainText(Node node) {
