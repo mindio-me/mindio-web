@@ -21,6 +21,8 @@ final class AgentMarkdownImageEditor {
 
     private static final Pattern PARAGRAPH_SEPARATOR = Pattern.compile("\\n[ \\t]*\\n");
     private static final Pattern MARKDOWN_EMPHASIS = Pattern.compile("[*_`>#~]");
+    // 段落开头是标题（#）、列表（- * + 或 1.）、引用（>）、表格（|）时视为结构块
+    private static final Pattern STRUCTURAL_LINE = Pattern.compile("^\\s*(#{1,6}\\s|[-*+]\\s|\\d+[.)]\\s|>|\\|)");
 
     private AgentMarkdownImageEditor() {}
 
@@ -37,7 +39,9 @@ final class AgentMarkdownImageEditor {
                     .filter(r -> plain(text.substring(r[0], r[1])).contains(anchor))
                     .findFirst()
                     .orElseThrow(() -> new BadRequestException("找不到包含「" + anchorText.trim() + "」的段落"));
-            boolean replace = plain(text.substring(p[0], p[1])).equals(anchor);
+            // 只替换普通段落（占位符段）；标题、列表、引用、表格即使文字相同也插在后面，不能把它们删掉
+            boolean replace = !STRUCTURAL_LINE.matcher(text.substring(p[0], p[1])).find()
+                    && plain(text.substring(p[0], p[1])).equals(anchor);
             result = replace
                     ? text.substring(0, p[0]) + snippet + text.substring(p[1])
                     : text.substring(0, p[1]) + "\n\n" + snippet + text.substring(p[1]);

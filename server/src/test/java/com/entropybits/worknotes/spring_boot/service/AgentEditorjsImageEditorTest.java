@@ -60,6 +60,17 @@ class AgentEditorjsImageEditorTest {
         assertThat(r.event()).containsEntry("afterBlockId", "p2").doesNotContainKey("replacedBlockId");
     }
 
+    /** "把图放在 4.3 方案 这节下面"——锚点恰好等于标题时不能把标题替换掉，只能插在后面 */
+    @Test
+    void insert_anchorEqualToHeader_insertsAfterInsteadOfReplacing() throws Exception {
+        AgentImageEditResult r = editor.insert(DOC, "/u.png", "", "4.3 方案");
+
+        JsonNode blocks = blocks(r.content());
+        assertThat(blocks.get(0).path("type").asText()).isEqualTo("header");
+        assertThat(blocks.get(1).path("type").asText()).isEqualTo("image");
+        assertThat(r.event()).containsEntry("afterBlockId", "h1").doesNotContainKey("replacedBlockId");
+    }
+
     @Test
     void insert_withoutAnchorAppendsToEnd() throws Exception {
         AgentImageEditResult r = editor.insert(DOC, "/api/uploads/new.png", null, null);

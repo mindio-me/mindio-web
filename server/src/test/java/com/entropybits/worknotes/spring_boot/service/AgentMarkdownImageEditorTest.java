@@ -38,6 +38,14 @@ class AgentMarkdownImageEditorTest {
     }
 
     @Test
+    void insert_anchorEqualToHeading_insertsAfterInsteadOfReplacing() {
+        String md = "## 4.3 方案\n\n正文";
+
+        assertThat(AgentMarkdownImageEditor.insert(md, "/a.png", "", "4.3 方案").content())
+                .isEqualTo("## 4.3 方案\n\n![](/a.png)\n\n正文");
+    }
+
+    @Test
     void insert_withoutAnchorAppends() {
         assertThat(AgentMarkdownImageEditor.insert("正文\n\n", "/a.png", "说明", null).content())
                 .isEqualTo("正文\n\n![说明](/a.png)\n*说明*\n");

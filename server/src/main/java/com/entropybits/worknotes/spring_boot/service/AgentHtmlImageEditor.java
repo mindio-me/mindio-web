@@ -41,7 +41,9 @@ final class AgentHtmlImageEditor {
         if (block == null) block = findBlock(DIV_BLOCK, html, anchor);
         if (block == null) throw new BadRequestException("找不到包含「" + anchor + "」的段落");
 
-        boolean replace = AgentImageLocator.stripHtml(html.substring(block[0], block[1])).equals(anchor);
+        // 只替换普通段落 <p>（占位符段）；标题、列表项等即使文字相同也插在后面，不能把它们删掉
+        boolean replace = html.regionMatches(true, block[0], "<p", 0, 2)
+                && AgentImageLocator.stripHtml(html.substring(block[0], block[1])).equals(anchor);
         String result = replace
                 ? html.substring(0, block[0]) + snippet + html.substring(block[1])
                 : html.substring(0, block[1]) + snippet + html.substring(block[1]);

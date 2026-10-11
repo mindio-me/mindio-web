@@ -65,7 +65,8 @@ final class AgentEditorjsImageEditor {
                 throw new BadRequestException("找不到包含「" + anchor + "」的段落");
             }
             String anchorId = blocks.get(i).path("id").asText(null);
-            if (plainText(blocks.get(i)).equals(anchor)) {
+            // 只替换普通段落（占位符段）；锚点恰好等于标题/列表时插在后面，不能把用户的标题删掉
+            if ("paragraph".equals(blocks.get(i).path("type").asText()) && plainText(blocks.get(i)).equals(anchor)) {
                 blocks.set(i, block);
                 event.put("replacedBlockId", anchorId);
             } else {

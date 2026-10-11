@@ -39,6 +39,14 @@ class AgentHtmlImageEditorTest {
     }
 
     @Test
+    void insert_anchorEqualToHeading_insertsAfterInsteadOfReplacing() {
+        String html = "<h2>4.3 方案</h2><p>正文</p>";
+
+        assertThat(AgentHtmlImageEditor.insert(html, "/a.png", "", "4.3 方案").content())
+                .isEqualTo("<h2>4.3 方案</h2><p><img src=\"/a.png\" alt=\"\"></p><p>正文</p>");
+    }
+
+    @Test
     void insert_withoutAnchorAppends() {
         assertThat(AgentHtmlImageEditor.insert("<p>a</p>", "/a.png", "说明", null).content())
                 .isEqualTo("<p>a</p><p><img src=\"/a.png\" alt=\"说明\"></p><p><em>说明</em></p>");
