@@ -80,9 +80,9 @@
             </svg>
           </button>
           <el-dropdown @command="handleUserCommand">
-            <span class="topbar-user">
+            <span class="topbar-user" :title="userEmail || userName">
               <i class="el-icon-user"></i>
-              {{ userName }}
+              {{ userDisplayName }}
               <i class="el-icon-arrow-down"></i>
             </span>
             <el-dropdown-menu slot="dropdown">
@@ -156,6 +156,13 @@ export default {
     },
     userName() {
       return this.$auth?.user?.username || 'User'
+    },
+    userEmail() {
+      return this.$auth?.user?.email || ''
+    },
+    // 顶栏显示邮箱前缀（完整邮箱见 title 提示），无邮箱的老账号回退到用户名
+    userDisplayName() {
+      return this.userEmail ? this.userEmail.split('@')[0] : this.userName
     },
     visibleModuleTabs() {
       return this.moduleTabs
