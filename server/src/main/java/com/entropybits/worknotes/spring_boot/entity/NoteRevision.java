@@ -43,8 +43,9 @@ public class NoteRevision {
     @Column(name = "turn_id", nullable = false, length = 64)
     private String turnId;
 
+    /** 显式 VARCHAR：开发环境 ddl-auto=update 建表时，Hibernate 6 在 MySQL 上默认建成原生 ENUM，之后新增枚举值不会补进列定义 */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 20, columnDefinition = "VARCHAR(20)")
     private Source source;
 
     @Column(name = "content_type", length = 20)
