@@ -548,3 +548,62 @@ async def test_attachment_urls_reach_state_for_insert_image(monkeypatch, fake_ja
     ))
 
     assert captured["source"] == {"type": "attachment", "url": "/api/uploads/chat/a.png"}
+
+
+def _edit_then(monkeypatch, fake_java_client, second_tool):
+    """同一轮里先 insert_image 成功，再调用 second_tool（会 interrupt 或抛异常）。"""
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from tools.edit_image import make_edit_image_tools
+
+    fake_java_client.insert_note_image = lambda username, note_id, source, caption, anchor_text: _async_return(
+        {"op": "insert", "noteId": note_id, "contentType": "editorjs", "blockId": "nb1"}
+    )
+    model = FakeMessagesListChatModel(responses=[
+        AIMessage(content="", tool_calls=[{"name": "insert_image", "args": {"image_url": "https://x/a.png"}, "id": "c1"}]),
+        AIMessage(content="", tool_calls=[{"name": second_tool.name, "args": {"x": "1"}, "id": "c2"}]),
+        AIMessage(content="完成"),
+    ])
+
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                     project_field_update_sink=None, note_content_update_sink=None):
+        tools = [*make_edit_image_tools(java_client, note_content_update_sink), second_tool]
+        return build_graph_builder(model, tools), tools
+
+    monkeypatch.setattr(chat_route, "build_default_graph_builder", fake_builder)
+
+
+async def test_note_content_update_is_not_lost_when_same_turn_ends_in_confirm_request(monkeypatch, fake_java_client):
+    """插图已经写进库了，同一轮后面的工具弹确认卡片时，插图事件也必须发出去，
+    否则打开着的编辑器不知道这张图，下一次自动保存就把它冲掉了。"""
+    from langgraph.types import interrupt
+
+    @tool
+    def confirm_stub(x: str) -> str:
+        """stub write tool that interrupts for confirmation"""
+        return str(interrupt({"blockType": "timeline", "noteId": 9, "preview": {"x": x}}))
+
+    _edit_then(monkeypatch, fake_java_client, confirm_stub)
+
+    events = await _collect_events(ChatStreamRequest(username="alice", content="插图再加一条", conversationId="alice",
+                                                     currentNoteId=9))
+
+    types = [e["type"] for e in events]
+    assert types[-1] == "confirm_request"
+    assert "note_content_updated" in types
+    assert types.index("note_content_updated") < types.index("confirm_request")
+
+
+async def test_note_content_update_is_not_lost_when_turn_errors_afterwards(monkeypatch, fake_java_client):
+    @tool
+    def boom(x: str) -> str:
+        """stub tool that crashes"""
+        raise RuntimeError("boom")
+
+    _edit_then(monkeypatch, fake_java_client, boom)
+
+    events = await _collect_events(ChatStreamRequest(username="alice", content="插图", conversationId="alice",
+                                                     currentNoteId=9))
+
+    types = [e["type"] for e in events]
+    assert types[-1] == "error"
+    assert "note_content_updated" in types

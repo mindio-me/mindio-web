@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -58,6 +58,15 @@ class ChatResumeRequest(BaseModel):
 
 def _event(type_: str, **fields) -> str:
     return json.dumps({"type": type_, **fields}, ensure_ascii=False) + "\n"
+
+
+def _drain_note_content_updates(note_content_updates: list[dict] | None) -> Iterator[str]:
+    """把已经写进库的正文改动（插图/删图/改图注）发给前端并清空列表。确认卡片和出错路径
+    也必须先发：这些改动已经落库，打开着的编辑器不知道的话，下一次整篇自动保存会把它冲掉；
+    清空是为了后面正常结束时不重复发送。"""
+    while note_content_updates:
+        update = note_content_updates.pop(0)
+        yield _event("note_content_updated", noteId=update["noteId"], data=update["data"])
 
 
 def _dedupe_citations(citations: list[dict]) -> list[dict]:
@@ -111,6 +120,9 @@ async def _drive_graph(
             query = event["data"].get("input", {}).get("query", "")
             yield _event("tool_call", query=query)
 
+    for chunk in _drain_note_content_updates(note_content_updates):
+        yield chunk
+
     state = graph.get_state(config)
     pending = [i for task in state.tasks for i in task.interrupts]
     if pending:
@@ -127,8 +139,6 @@ async def _drive_graph(
     for update in project_field_updates:
         yield _event("project_field_updated", **update)
 
-    for update in note_content_updates or []:
-        yield _event("note_content_updated", noteId=update["noteId"], data=update["data"])
 
     yield _event("done", content=final_text, citations=_dedupe_citations(citations))
 
@@ -223,6 +233,8 @@ async def _run_agent(request: ChatStreamRequest) -> AsyncIterator[str]:
                                          project_field_updates, note_content_updates):
             yield chunk
     except Exception as e:  # noqa: BLE001 - 任何失败都要转成error事件让流正常结束，不是HTTP层500
+        for chunk in _drain_note_content_updates(note_content_updates):
+            yield chunk
         yield _event("error", content=f"抱歉，这次没能回复，换个说法试试？（{e}）")
     finally:
         try:
@@ -283,6 +295,8 @@ async def _resume_agent(request: ChatResumeRequest) -> AsyncIterator[str]:
         ):
             yield chunk
     except Exception as e:  # noqa: BLE001
+        for chunk in _drain_note_content_updates(note_content_updates):
+            yield chunk
         yield _event("error", content=f"抱歉，这次没能回复，换个说法试试？（{e}）")
     finally:
         try:
