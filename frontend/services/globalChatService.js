@@ -18,6 +18,14 @@ class GlobalChatService extends ApiService {
     return this.patch(`/v1/chat/conversations/${conversationId}`, { title })
   }
 
+  getTurnRevisions(turnId) {
+    return this.get(`/v1/chat/turns/${encodeURIComponent(turnId)}/revisions`, { suppressErrorToast: true })
+  }
+
+  undoTurn(turnId, force = false) {
+    return this.post(`/v1/chat/turns/${encodeURIComponent(turnId)}/undo?force=${force}`, {}, { suppressErrorToast: true })
+  }
+
   deleteConversation(conversationId) {
     return this.delete(`/v1/chat/conversations/${conversationId}`)
   }

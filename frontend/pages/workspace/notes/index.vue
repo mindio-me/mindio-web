@@ -645,6 +645,15 @@
       </div>
     </el-dialog>
 
+    <el-dialog :title="$t('workspace.chat.insertSuggestTitle')" :visible.sync="insertDialog.visible" width="420px" append-to-body>
+      <p v-if="insertDialog.suggestion">{{ $t('workspace.chat.insertSuggestBody', { preview: insertDialog.suggestion.afterPreview, reason: insertDialog.suggestion.reason }) }}</p>
+      <span slot="footer">
+        <el-button size="small" :disabled="insertDialog.busy" @click="confirmInsert('end')">{{ $t('workspace.chat.insertAtEnd') }}</el-button>
+        <el-button v-if="insertDialog.cursorBlockId" size="small" :disabled="insertDialog.busy" @click="confirmInsert('cursor')">{{ $t('workspace.chat.insertAtCursor') }}</el-button>
+        <el-button type="primary" size="small" :disabled="insertDialog.busy" @click="confirmInsert('block')">{{ $t('workspace.chat.insertAtSuggested') }}</el-button>
+      </span>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -696,6 +705,8 @@ export default {
     return {
       // 通用
       loading: false,
+      // 聊天回复「插入到笔记」：模型建议插到某一节之后时弹窗让用户选
+      insertDialog: { visible: false, markdown: '', suggestion: null, cursorBlockId: null, busy: false },
 
       // 笔记
       searchKeyword: '',
@@ -901,6 +912,8 @@ export default {
     this.$nuxt.$on('topic-block-updated', this.onTopicBlockUpdated)
     this.$nuxt.$on('media-block-updated', this.onMediaBlockUpdated)
     this.$nuxt.$on('note-content-updated', this.onNoteContentUpdated)
+    this.$nuxt.$on('note-insert-request', this.onNoteInsertRequest)
+    this.$nuxt.$on('note-turn-undone', this.onNoteTurnUndone)
     // 停靠在本页的 ChatPanel 点笔记引用时用：原地切换 activeNoteId，不走路由。
     // 之前改成 router.push('/workspace/notes?openNoteId=...') 试过，
     // 结果哪怕是同路由只改query，也会把这个页面整个重新挂载（实测 mounted() 复跑了一遍：
@@ -926,6 +939,8 @@ export default {
     this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
     this.$nuxt.$off('media-block-updated', this.onMediaBlockUpdated)
     this.$nuxt.$off('note-content-updated', this.onNoteContentUpdated)
+    this.$nuxt.$off('note-insert-request', this.onNoteInsertRequest)
+    this.$nuxt.$off('note-turn-undone', this.onNoteTurnUndone)
     this.$nuxt.$off('workspace:open-note-request', this.onOpenNoteRequest)
     this.$nuxt.$off('workspace:note-created', this.onNoteCreatedElsewhere)
     // 离开这个页面后，"当前笔记"广播必须清空，否则全局AI助手在其他页面（比如收藏夹）
@@ -1519,6 +1534,10 @@ export default {
         return
       }
       if (!this.editor) return
+      if (Array.isArray(payload.ops)) {
+        this.applyEditorOps(payload.ops)
+        return
+      }
       const blocks = this.editor.blocks
       const indexOf = (id) => {
         if (!id) return -1
@@ -1551,6 +1570,110 @@ export default {
         this.debouncedSave()
       } catch (e) {
         console.warn('同步 agent 对图片的改动失败，下次打开笔记会显示最新内容:', e)
+      }
+    },
+    editorIndexOf(id) {
+      if (!id) return -1
+      try {
+        const i = this.editor.blocks.getBlockIndex(id)
+        return i === undefined || i === null ? -1 : i
+      } catch (e) {
+        return -1
+      }
+    },
+    /** 按服务端返回的规范化操作逐条同步到编辑器；某条失败就整篇重新载入，以库里为准 */
+    applyEditorOps(ops) {
+      const blocks = this.editor.blocks
+      try {
+        for (const op of ops) {
+          if (op.op === 'insert') {
+            const after = this.editorIndexOf(op.afterBlockId)
+            const index = op.afterBlockId ? (after >= 0 ? after + 1 : blocks.getBlocksCount()) : 0
+            blocks.insert(op.block.type, op.block.data, {}, index, false, false, op.block.id)
+          } else if (op.op === 'delete') {
+            const i = this.editorIndexOf(op.blockId)
+            if (i >= 0) blocks.delete(i)
+          } else if (op.op === 'move') {
+            const from = this.editorIndexOf(op.blockId)
+            if (from < 0) continue
+            const after = this.editorIndexOf(op.afterBlockId)
+            const to = !op.afterBlockId ? 0 : (from < after ? after : after + 1)
+            blocks.move(to, from)
+          }
+        }
+        this.hasUnsavedChanges = true
+        this.debouncedSave()
+      } catch (e) {
+        console.warn('同步 AI 的修改到编辑器失败，重新载入笔记:', e)
+        this.loadActiveNote()
+      }
+    },
+    onNoteTurnUndone({ noteIds }) {
+      if (this.activeNote && (noteIds || []).map(String).includes(String(this.activeNote.id))) {
+        this.loadActiveNote()
+      }
+    },
+    currentCursorBlockId() {
+      if (!this.editor || !this.isEditorjsNote) return null
+      try {
+        const index = this.editor.blocks.getCurrentBlockIndex()
+        const block = index >= 0 ? this.editor.blocks.getBlockByIndex(index) : null
+        return block ? block.id : null
+      } catch (e) {
+        return null
+      }
+    },
+    async onNoteInsertRequest({ markdown }) {
+      if (!this.activeNote) return
+      if (this.activeNote.contentType !== 'editorjs' && this.activeNote.contentType !== 'markdown') {
+        this.$message.warning(this.$t('workspace.chat.insertNotSupported'))
+        return
+      }
+      const cursorBlockId = this.currentCursorBlockId()
+      let suggestion = { choice: cursorBlockId ? 'cursor' : 'end' }
+      try {
+        suggestion = await this.$noteService.suggestInsertPosition(this.activeNote.id, markdown, cursorBlockId)
+      } catch (e) {
+        // 判断失败按光标处/文末直接插入
+      }
+      if (suggestion.choice === 'block') {
+        this.insertDialog = { visible: true, markdown, suggestion, cursorBlockId, busy: false }
+        return
+      }
+      await this.doInsert(markdown, suggestion.choice === 'cursor' ? cursorBlockId : 'end')
+    },
+    async confirmInsert(where) {
+      const d = this.insertDialog
+      d.busy = true
+      const after = where === 'block' ? d.suggestion.afterBlockId : (where === 'cursor' ? d.cursorBlockId : 'end')
+      await this.doInsert(d.markdown, after)
+      d.visible = false
+      d.busy = false
+    },
+    async doInsert(markdown, after) {
+      try {
+        await this.waitForSaveIdle()
+        if (this.hasUnsavedChanges && this.isEditorjsNote) await this.saveToBackend()
+        const res = await this.$noteService.insertContent(this.activeNote.id, markdown, after || 'end')
+        if (res.contentType === 'editorjs' && this.editor) this.applyEditorOps(res.ops || [])
+        else await this.reloadActiveNoteContent()
+        const notify = this.$notify({
+          title: '',
+          message: this.$t('workspace.chat.insertedToNote'),
+          type: 'success',
+          duration: 8000,
+          onClick: async () => {
+            notify.close()
+            try {
+              await this.$globalChatService.undoTurn(res.turnId, true)
+              this.loadActiveNote()
+            } catch (e) {
+              this.$message.error(this.$t('workspace.chat.undoFailed'))
+            }
+          }
+        })
+      } catch (e) {
+        this.$message.error(this.$t('workspace.chat.insertFailed'))
       }
     },
     /** 只刷新正文，不重建编辑器/不重置标签等其他状态（Markdown/富文本只读展示用） */

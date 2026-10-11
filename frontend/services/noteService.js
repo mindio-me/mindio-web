@@ -44,6 +44,14 @@ class NoteService extends ApiService {
     return this.delete(`/v1/notes/${id}`)
   }
 
+  suggestInsertPosition(noteId, content, cursorBlockId) {
+    return this.post(`/v1/notes/${noteId}/insert-position`, { content, cursorBlockId })
+  }
+
+  insertContent(noteId, markdown, after) {
+    return this.post(`/v1/notes/${noteId}/insert-content`, { markdown, after })
+  }
+
   /**
    * 全文搜索
    */

@@ -80,6 +80,17 @@
                   >{{ $t('workspace.chat.linkToNote') }}</button>
                 </div>
               </div>
+              <div v-if="msg.editedNotes && msg.editedNotes.length" class="chat-edit-card">
+                <i :class="msg.undone ? 'el-icon-refresh-left' : 'el-icon-edit-outline'"></i>
+                <span class="chat-edit-card-text">{{ msg.undone ? $t('workspace.chat.editsUndone') : $t('workspace.chat.editedNotes', { titles: noteTitles(msg.editedNotes) }) }}</span>
+                <button
+                  v-if="!msg.undone && msg.turnId"
+                  type="button"
+                  class="chat-edit-undo-btn"
+                  :disabled="undoingTurnId === msg.turnId"
+                  @click="undoTurn(msg)"
+                >{{ $t('workspace.chat.undoTurn') }}</button>
+              </div>
               <div class="chat-assistant-actions">
                 <button
                   type="button"
@@ -88,6 +99,15 @@
                   @click="copyMessage(msg)"
                 >
                   <i :class="copiedMessageId === msg.id ? 'el-icon-check' : 'el-icon-document-copy'"></i>
+                </button>
+                <button
+                  v-if="currentNoteId"
+                  type="button"
+                  class="chat-assistant-action-btn"
+                  :title="$t('workspace.chat.insertToNote')"
+                  @click="insertToNote(msg, $event)"
+                >
+                  <i class="el-icon-document-add"></i>
                 </button>
               </div>
             </div>
@@ -436,6 +456,7 @@ export default {
           id: event.id, role: 'ASSISTANT', content: event.content,
           citations: event.citations || [], createdAt: event.createdAt
         })
+        this.attachTurnEdit(this.messages[this.messages.length - 1])
         this.liveAssistantText = ''
         this.searchingQuery = null
       } else if (event.type === 'error') {
@@ -443,6 +464,7 @@ export default {
           id: `error-${Date.now()}`, role: 'ASSISTANT', content: event.content,
           citations: [], createdAt: new Date().toISOString()
         })
+        this.attachTurnEdit(this.messages[this.messages.length - 1])
         this.liveAssistantText = ''
         this.searchingQuery = null
       } else if (event.type === 'confirm_request') {
@@ -477,7 +499,13 @@ export default {
           })
         }
       } else if (event.type === 'note_content_updated') {
-        this.$nuxt.$emit('note-content-updated', { ...(event.data || {}), noteId: event.noteId })
+        const data = event.data || {}
+        if (data.turnId) {
+          if (!this.pendingTurnEdit || this.pendingTurnEdit.turnId !== data.turnId) {
+            this.pendingTurnEdit = { turnId: data.turnId }
+          }
+        }
+        this.$nuxt.$emit('note-content-updated', { ...data, noteId: event.noteId })
       } else if (event.type === 'project_field_updated') {
         this.$nuxt.$emit('project-field-updated', {
           projectId: event.projectId,
@@ -565,6 +593,58 @@ export default {
       } finally {
         this.linkingCitationKey = null
       }
+    },
+    async attachTurnEdit(msg) {
+      const pending = this.pendingTurnEdit
+      this.pendingTurnEdit = null
+      if (!pending || !msg) return
+      try {
+        const notes = await this.$globalChatService.getTurnRevisions(pending.turnId)
+        this.$set(msg, 'turnId', pending.turnId)
+        this.$set(msg, 'editedNotes', notes || [])
+      } catch (e) {
+        // 拿不到改动列表时不显示卡片；改动本身已经生效
+      }
+    },
+    noteTitles(notes) {
+      return notes.map(n => `《${n.title || '未命名笔记'}》`).join('、')
+    },
+    async undoTurn(msg, force = false) {
+      this.undoingTurnId = msg.turnId
+      try {
+        const res = await this.$globalChatService.undoTurn(msg.turnId, force)
+        this.$set(msg, 'undone', true)
+        this.$nuxt.$emit('note-turn-undone', { noteIds: (res && res.restoredNoteIds) || [] })
+      } catch (e) {
+        const conflicts = e && e.response && e.response.status === 409 && e.response.data && e.response.data.conflicts
+        if (conflicts && !force) {
+          try {
+            await this.$confirm(this.$t('workspace.chat.undoConfirmModified', { titles: this.noteTitles(conflicts) }),
+              this.$t('workspace.chat.undoTurn'), { type: 'warning' })
+          } catch (cancel) {
+            return
+          } finally {
+            this.undoingTurnId = null
+          }
+          await this.undoTurn(msg, true)
+          return
+        }
+        this.$message.error(this.$t('workspace.chat.undoFailed'))
+      } finally {
+        if (this.undoingTurnId === msg.turnId) this.undoingTurnId = null
+      }
+    },
+    /** 回复里选中了文字就只插入选中的部分，否则插入整条回复的原始 Markdown */
+    insertToNote(msg, evt) {
+      let markdown = msg.content
+      const selection = window.getSelection && window.getSelection()
+      const body = evt && evt.currentTarget && evt.currentTarget.closest('.chat-assistant-body')
+      if (selection && !selection.isCollapsed && body && body.contains(selection.anchorNode)
+        && body.contains(selection.focusNode)) {
+        markdown = selection.toString().split(/\n{2,}/).map(p => p.trim()).filter(Boolean).join('\n\n')
+      }
+      if (!markdown || !markdown.trim()) return
+      this.$nuxt.$emit('note-insert-request', { markdown })
     },
     async copyMessage(msg) {
       try {
@@ -1061,4 +1141,24 @@ export default {
   display: flex;
   gap: 8px;
 }
+.chat-edit-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--el-color-success-light-9, #f0f9eb);
+  font-size: 12px;
+  color: #606266;
+}
+.chat-edit-card-text { flex: 1; }
+.chat-edit-undo-btn {
+  border: none;
+  background: none;
+  color: #409eff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.chat-edit-undo-btn:disabled { color: #c0c4cc; cursor: default; }
 </style>

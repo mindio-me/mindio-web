@@ -50,4 +50,6 @@ export default Vue.observable({
   conversations: [],
   conversationsLoaded: false,
   conversationListOpen: false,
+  pendingTurnEdit: null,
+  undoingTurnId: null,
 })
