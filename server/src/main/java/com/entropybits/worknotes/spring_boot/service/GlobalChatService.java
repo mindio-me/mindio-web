@@ -62,6 +62,7 @@ public class GlobalChatService {
     private final AiTranslationService openAiService;
     private final AiTranslationService deepseekService;
     private final AiTranslationService doubaoService;
+    private final NoteRevisionService noteRevisionService;
 
     public GlobalChatService(AiChatMessageRepository chatMessageRepository,
                               AiChatConversationRepository conversationRepository,
@@ -78,7 +79,8 @@ public class GlobalChatService {
                               @Qualifier("anthropicTranslationService") AiTranslationService anthropicService,
                               @Qualifier("openAiTranslationService") AiTranslationService openAiService,
                               @Qualifier("deepseekTranslationService") AiTranslationService deepseekService,
-                              @Qualifier("doubaoTranslationService") AiTranslationService doubaoService) {
+                              @Qualifier("doubaoTranslationService") AiTranslationService doubaoService,
+                              NoteRevisionService noteRevisionService) {
         this.chatMessageRepository = chatMessageRepository;
         this.conversationRepository = conversationRepository;
         this.agentConversationStateRepository = agentConversationStateRepository;
@@ -95,6 +97,7 @@ public class GlobalChatService {
         this.openAiService = openAiService;
         this.deepseekService = deepseekService;
         this.doubaoService = doubaoService;
+        this.noteRevisionService = noteRevisionService;
     }
 
     // agent推理逻辑整体在独立的Python/LangGraph服务（AgentServiceClient），这里只做：
@@ -217,7 +220,7 @@ public class GlobalChatService {
 
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
                     .conversation(conversation).role(AiChatMessage.Role.ASSISTANT).content(reply)
-                    .citationsJson(citationsJson).build());
+                    .citationsJson(citationsJson).turnId(String.valueOf(userMessage.getId())).build());
 
             touchConversation(conversation);
             // 门槛是"title是否还是null"，不是"是不是这次请求里新建的会话"——V20迁移出来的
@@ -320,9 +323,12 @@ public class GlobalChatService {
             String citationsJson = chatSucceeded[0] && !resolvedCitations[0].isEmpty()
                     ? writeJson(resolvedCitations[0]) : null;
 
+            String turnId = chatMessageRepository
+                    .findFirstByConversationAndRoleOrderByIdDesc(conversation, AiChatMessage.Role.USER)
+                    .map(m -> String.valueOf(m.getId())).orElse(null);
             AiChatMessage assistantMessage = chatMessageRepository.save(AiChatMessage.builder()
                     .conversation(conversation).role(AiChatMessage.Role.ASSISTANT).content(reply)
-                    .citationsJson(citationsJson).build());
+                    .citationsJson(citationsJson).turnId(turnId).build());
 
             touchConversation(conversation);
             // 门槛同sendMessageStream：title是否还是null，而不是"这轮是不是结构上的第一轮"——
@@ -535,6 +541,8 @@ public class GlobalChatService {
                 .content(m.getContent())
                 .citations(readCitations(m.getCitationsJson()))
                 .attachments(readAttachments(m.getAttachmentsJson()))
+                .turnId(m.getTurnId())
+                .editedNotes(m.getTurnId() == null ? List.of() : noteRevisionService.editedNotes(m.getTurnId()))
                 .createdAt(m.getCreatedAt())
                 .build();
     }

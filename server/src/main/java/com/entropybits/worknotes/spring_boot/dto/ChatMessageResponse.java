@@ -18,5 +18,7 @@ public class ChatMessageResponse {
     private String content;
     private List<ChatCitation> citations;
     private List<ChatAttachmentRef> attachments;
+    private String turnId;
+    private List<EditedNoteRef> editedNotes;
     private Instant createdAt;
 }

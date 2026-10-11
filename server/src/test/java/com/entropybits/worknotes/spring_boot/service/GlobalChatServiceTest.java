@@ -61,6 +61,7 @@ class GlobalChatServiceTest {
     @Mock AiTranslationService openAiService;
     @Mock AiTranslationService deepseekService;
     @Mock AiTranslationService doubaoService;
+    @Mock NoteRevisionService noteRevisionService;
 
     private GlobalChatService service;
     private final User user = User.builder().id(1L).username("alice").build();
@@ -72,7 +73,8 @@ class GlobalChatServiceTest {
         service = new GlobalChatService(chatMessageRepository, conversationRepository, agentConversationStateRepository,
                 userRepository, noteRepository, projectRepository,
                 sourceClipRepository, chunkingService, agentServiceClient, extractionService, new ObjectMapper(),
-                () -> aiProperties, anthropicService, openAiService, deepseekService, doubaoService);
+                () -> aiProperties, anthropicService, openAiService, deepseekService, doubaoService,
+                noteRevisionService);
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
         lenient().when(chatMessageRepository.save(any())).thenAnswer(inv -> {
             AiChatMessage m = inv.getArgument(0);
@@ -740,5 +742,24 @@ class GlobalChatServiceTest {
         assertThatThrownBy(() -> service.deleteConversation("alice", 5L))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(conversationRepository, never()).delete(any());
+    }
+
+    @Test
+    void sendMessageStream_assistantMessageRecordsTurnIdOfUserMessage() throws Exception {
+        doAnswer(inv -> {
+            AgentServiceClient.StreamListener listener = inv.getArgument(8);
+            listener.onDone("改好了", List.of());
+            return null;
+        }).when(agentServiceClient).streamChat(anyString(), anyString(), anyString(), any(), any(), any(), any(), any(), any());
+
+        service.sendMessageStream("alice", "把第二段改短", null, null, null, List.of(), captureEmitter(new RecordingEmitterListener()));
+
+        ArgumentCaptor<AiChatMessage> saved = ArgumentCaptor.forClass(AiChatMessage.class);
+        verify(chatMessageRepository, atLeastOnce()).save(saved.capture());
+        AiChatMessage userMessage = saved.getAllValues().stream()
+                .filter(m -> m.getRole() == AiChatMessage.Role.USER).findFirst().orElseThrow();
+        AiChatMessage assistant = saved.getAllValues().stream()
+                .filter(m -> m.getRole() == AiChatMessage.Role.ASSISTANT).findFirst().orElseThrow();
+        assertThat(assistant.getTurnId()).isEqualTo(String.valueOf(userMessage.getId()));
     }
 }
