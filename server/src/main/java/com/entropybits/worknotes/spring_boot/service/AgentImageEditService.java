@@ -127,7 +127,7 @@ public class AgentImageEditService {
     }
 
     /** 本地已有的图直接共用地址；外链（收藏里常见）下载到本地，避免插进去后失效或被防盗链挡住 */
-    private String localize(User user, String url) {
+    String localize(User user, String url) {
         if (url.startsWith("data:")) throw new BadRequestException("暂不支持插入内嵌（data:）图片");
         if (url.contains("/uploads/") && localFileExists(url)) return url;
         if (url.startsWith("http://") || url.startsWith("https://")) return downloadToUploads(user, url);

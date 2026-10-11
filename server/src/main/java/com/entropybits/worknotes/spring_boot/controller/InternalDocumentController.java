@@ -10,6 +10,7 @@ import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
 import com.entropybits.worknotes.spring_boot.dto.AgentInsertImageRequest;
 import com.entropybits.worknotes.spring_boot.service.AgentDocumentService;
 import com.entropybits.worknotes.spring_boot.service.AgentImageEditService;
+import com.entropybits.worknotes.spring_boot.service.AgentNoteEditService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +28,7 @@ public class InternalDocumentController {
 
     private final AgentDocumentService agentDocumentService;
     private final AgentImageEditService agentImageEditService;
+    private final AgentNoteEditService agentNoteEditService;
 
     @GetMapping("/notes")
     public List<AgentDocumentSummary> findNotes(@RequestParam String username, @RequestParam String title) {
@@ -83,5 +85,17 @@ public class InternalDocumentController {
     public Map<String, Object> setNoteImageCaption(@RequestParam String username, @PathVariable Long noteId,
                                                    @PathVariable int index, @RequestBody Map<String, String> body) {
         return agentImageEditService.setImageCaption(username, noteId, index, body.get("caption"));
+    }
+
+    @GetMapping("/notes/{noteId}/blocks")
+    public Map<String, Object> noteBlocks(@RequestParam String username, @PathVariable Long noteId) {
+        return agentNoteEditService.readBlocks(username, noteId);
+    }
+
+    @PostMapping("/notes/{noteId}/edits")
+    public Map<String, Object> editNote(@RequestParam String username, @PathVariable Long noteId,
+                                        @RequestParam(required = false) String conversationId,
+                                        @RequestBody Map<String, List<Map<String, Object>>> body) {
+        return agentNoteEditService.applyAsAgent(username, noteId, conversationId, body.get("operations"));
     }
 }
