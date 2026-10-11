@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -144,7 +145,8 @@ public class AgentImageEditService {
         try {
             Path path = mediaBlockService.resolveLocalFilePath(url);
             return path != null && Files.exists(path);
-        } catch (BadRequestException e) {
+        } catch (BadRequestException | InvalidPathException e) {
+            // 外链里带 ?、: 等字符时 Windows 上 Path.resolve 会抛 InvalidPathException，按外链处理
             return false;
         }
     }

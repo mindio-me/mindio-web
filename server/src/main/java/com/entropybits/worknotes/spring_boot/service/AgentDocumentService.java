@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -178,7 +179,8 @@ public class AgentDocumentService {
     private Path tryResolveLocal(String url) {
         try {
             return mediaBlockService.resolveLocalFilePath(url);
-        } catch (BadRequestException e) {
+        } catch (BadRequestException | InvalidPathException e) {
+            // 外链里带 ?、: 等字符时 Windows 上 Path.resolve 会抛 InvalidPathException，按外链处理
             return null;
         }
     }

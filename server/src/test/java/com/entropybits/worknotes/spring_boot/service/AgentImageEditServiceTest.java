@@ -102,6 +102,24 @@ class AgentImageEditServiceTest {
         assertThat(file.getValue().getOriginalFilename()).isEqualTo("agent-image.png");
     }
 
+    /** Windows 上 Path.resolve 遇到 ?、: 会抛 InvalidPathException，不能变成 500，应当按外链下载 */
+    @Test
+    void insert_fromClipImageWithUploadsAndQueryInUrl_fallsBackToDownloadOnInvalidPath() throws Exception {
+        Note note = markdownNote(alice, "");
+        String wp = "https://blog.example.com/wp-content/uploads/2024/05/x.jpg?w=1024";
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(note));
+        when(agentDocumentService.listClipImages("alice", 7L)).thenReturn(List.of(new AgentImageRef(1, wp, "")));
+        when(mediaBlockService.resolveLocalFilePath(wp)).thenThrow(new java.nio.file.InvalidPathException(wp, "Illegal char <?>"));
+        when(downloader.download(wp)).thenReturn(new SafeImageDownloader.DownloadedImage(new byte[]{1}, "image/jpeg", "jpg"));
+        FileResultVo stored = new FileResultVo();
+        stored.setUrl("/api/uploads/agent_image/x.jpg");
+        when(uploadService.imageUpload(any(MultipartFile.class), eq("agent_image"), eq(1), eq(1L))).thenReturn(stored);
+
+        service.insertImage("alice", 10L, new AgentImageSource("clip", 7L, 1, null), "", null);
+
+        assertThat(note.getContent()).isEqualTo("![](/api/uploads/agent_image/x.jpg)");
+    }
+
     @Test
     void insert_fromUrl_usesDownloader() throws Exception {
         Note note = markdownNote(alice, "");

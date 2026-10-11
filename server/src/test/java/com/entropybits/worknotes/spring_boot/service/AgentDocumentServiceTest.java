@@ -188,6 +188,19 @@ class AgentDocumentServiceTest {
     }
 
     @Test
+    void loadClipImage_externalUrlThatIsAnInvalidLocalPath_returnsUrlInsteadOf500() {
+        String wp = "https://example.com/wp-content/uploads/2.png?w=1024";
+        SourceClip c = SourceClip.builder().id(20L).title("t").owner(alice).contentFormat("markdown")
+                .content("![](" + wp + ")").build();
+        when(clipRepository.findById(20L)).thenReturn(Optional.of(c));
+        when(mediaBlockService.resolveLocalFilePath(wp)).thenThrow(new java.nio.file.InvalidPathException(wp, "Illegal char <?>"));
+
+        Map<String, Object> media = service.loadClipImage("alice", 20L, 1);
+
+        assertThat(media).containsExactly(Map.entry("url", wp));
+    }
+
+    @Test
     void loadNoteImage_indexOutOfRange_throwsBadRequest() {
         Note n = Note.builder().id(10L).title("t").owner(alice).contentType("markdown").content("![](/uploads/1.png)").build();
         when(noteRepository.findById(10L)).thenReturn(Optional.of(n));
