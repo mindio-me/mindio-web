@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from langgraph.graph.message import add_messages
-from typing_extensions import TypedDict
+from typing_extensions import NotRequired, TypedDict
 
 
 class TodoItem(TypedDict):
@@ -27,3 +27,6 @@ class AgentState(TypedDict):
     current_note_id: int | None
     current_project_context: str | None
     current_project_id: int | None
+    # 旧会话的 checkpoint 和测试输入里没有这个键；必须是 NotRequired，否则 InjectedState 的
+    # 参数校验会让所有注入 state 的工具一起失败
+    current_attachments: NotRequired[list[dict] | None]

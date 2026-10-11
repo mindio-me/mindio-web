@@ -47,4 +47,15 @@ def build_human_message(content: str, attachments: list[dict] | None, provider: 
                 # 明确的降级提示，而不是让请求静默失败或丢内容。
                 blocks.append({"type": "image_url", "image_url": {"url": data_url}})
 
+    image_names = [
+        att.get("fileName") or att.get("url") for att in attachments
+        if att.get("type") == "image" and att.get("url")
+    ]
+    if image_names:
+        listing = "；".join(f"第{i}张：{name}" for i, name in enumerate(image_names, start=1))
+        blocks.append({
+            "type": "text",
+            "text": f"【本条消息附带的图片】{listing}。需要把其中某张插入笔记时，调用 insert_image(attachment_index=序号)。",
+        })
+
     return HumanMessage(content=blocks)

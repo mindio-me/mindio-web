@@ -207,6 +207,35 @@ class JavaClient:
         except httpx.HTTPError as e:
             raise JavaClientError(f"get image failed for {kind} id={doc_id!r} index={index!r}: {e}") from e
 
+    async def insert_note_image(
+        self, username: str, note_id: int, source: dict, caption: str, anchor_text: str | None,
+    ) -> dict:
+        return await self._write_document(
+            "POST", f"/internal/documents/notes/{note_id}/images", username,
+            {"source": source, "caption": caption, "anchorText": anchor_text},
+        )
+
+    async def delete_note_image(self, username: str, note_id: int, index: int) -> dict:
+        return await self._write_document("DELETE", f"/internal/documents/notes/{note_id}/images/{index}", username)
+
+    async def set_note_image_caption(self, username: str, note_id: int, index: int, caption: str) -> dict:
+        return await self._write_document(
+            "PATCH", f"/internal/documents/notes/{note_id}/images/{index}", username, {"caption": caption},
+        )
+
+    async def _write_document(self, method: str, path: str, username: str, body: dict | None = None) -> dict:
+        """4xx/5xx 时把 Java 返回的 message 原样放进异常——"找不到包含「…」的段落"这类原因
+        要让模型看到，它才能换锚点重试。网上图片要下载，超时放宽到 60 秒。"""
+        try:
+            resp = await self._client.request(
+                method, path, params={"username": username}, json=body, timeout=60.0,
+            )
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"{method} {path} failed: {e}") from e
+        if resp.status_code >= 400:
+            raise JavaClientError(_error_message(resp))
+        return resp.json()
+
     async def _read_document(self, username: str, kind: str, doc_id: int) -> dict | None:
         try:
             resp = await self._client.get(f"/internal/documents/{kind}/{doc_id}", params={"username": username})
@@ -232,3 +261,12 @@ class JavaClient:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+
+def _error_message(resp: httpx.Response) -> str:
+    try:
+        body = resp.json()
+    except ValueError:
+        body = None
+    message = body.get("message") if isinstance(body, dict) else None
+    return message or f"HTTP {resp.status_code}"

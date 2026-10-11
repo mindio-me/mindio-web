@@ -1,5 +1,6 @@
 # Copyright (c) 2026 Fasong Wu
 # SPDX-License-Identifier: AGPL-3.0-only
+import json
 
 import httpx
 import pytest
@@ -405,3 +406,45 @@ async def test_get_document_image_wraps_http_errors(test_settings):
     client = _client_with_transport(test_settings, lambda request: httpx.Response(400, json={}))
     with pytest.raises(JavaClientError):
         await client.get_document_image("alice", "notes", 7, 9)
+
+
+async def test_insert_note_image_posts_source_and_returns_event(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"], captured["url"] = request.method, request.url
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"op": "insert", "noteId": 9})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.insert_note_image("alice", 9, {"type": "url", "url": "https://x/a.png"}, "图", None)
+
+    assert captured["method"] == "POST"
+    assert captured["url"].path == "/internal/documents/notes/9/images"
+    assert dict(captured["url"].params) == {"username": "alice"}
+    assert captured["body"] == {"source": {"type": "url", "url": "https://x/a.png"}, "caption": "图", "anchorText": None}
+    assert result == {"op": "insert", "noteId": 9}
+
+
+async def test_delete_and_caption_use_expected_methods(test_settings):
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path, request.content))
+        return httpx.Response(200, json={"op": "x"})
+
+    client = _client_with_transport(test_settings, handler)
+    await client.delete_note_image("alice", 9, 2)
+    await client.set_note_image_caption("alice", 9, 1, "新")
+
+    assert seen[0][:2] == ("DELETE", "/internal/documents/notes/9/images/2")
+    assert seen[1][:2] == ("PATCH", "/internal/documents/notes/9/images/1")
+    assert json.loads(seen[1][2]) == {"caption": "新"}
+
+
+async def test_write_errors_surface_java_message(test_settings):
+    client = _client_with_transport(test_settings, lambda request: httpx.Response(
+        400, json={"status": 400, "error": "Bad Request", "message": "找不到包含「xx」的段落"}))
+
+    with pytest.raises(JavaClientError, match="找不到包含「xx」的段落"):
+        await client.delete_note_image("alice", 9, 1)

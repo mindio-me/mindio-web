@@ -39,6 +39,7 @@ from tools.transcribe_audio import make_transcribe_audio_tool
 from tools.update_project_field import make_update_project_field_tool
 from tools.update_todo_list import update_todo_list
 from tools.view_image import make_view_image_tool
+from tools.edit_image import make_edit_image_tools
 
 SYSTEM_PROMPT = (
     "你是这款笔记应用内置的AI助手，可以自由对话、协助写作和总结。"
@@ -62,6 +63,10 @@ SYSTEM_PROMPT = (
     "如果只是需要了解某张图的内容来回答问题或写作（比如用户说参考某篇笔记/收藏里的截图、"
     "架构图，或者 read_note/read_clip 提示文档里有图片），调用 view_image 带着具体问题去看，"
     "它可以看任意一篇笔记或收藏里的图片，只读、不改动笔记。不要因为看不到图就让用户自己描述图片。"
+    "如果用户要求把图片放进笔记、删掉某张图或给图片写图注，直接调用 insert_image / delete_image / "
+    "set_image_caption（都直接生效，不需要用户确认），不要说做不到、也不要让用户自己粘贴。"
+    "插图前如果不确定来源图片的序号，先用 view_image 不带 index 列出图片；正文里有【配图位】之类的"
+    "占位段落时，把整段占位文字作为 anchor_text，图片会替换掉占位段。一次插多张就逐张调用。"
     '如果用户想把笔记里的一段音频/录音转成文字（比如"帮我转录一下这段录音"、"这段语音'
     '说了什么"），调用 transcribe_audio；这个工具会把音频交给后台转写，几十秒到几分钟后'
     "逐字稿和总结会显示在音频下方，不需要用户额外确认。不要在回复里编造转写内容。"
@@ -104,6 +109,7 @@ def build_default_graph_builder(
     java_client: JavaClient, provider: str,
     citations_sink: list | None = None, block_update_sink: list | None = None,
     media_block_update_sink: list | None = None, project_field_update_sink: list | None = None,
+    note_content_update_sink: list | None = None,
 ) -> tuple[StateGraph, list]:
     cache = ContentCache()
     tools = [
@@ -120,6 +126,7 @@ def build_default_graph_builder(
         make_add_checklist_item_tool(java_client, block_update_sink),
         make_analyze_image_tool(java_client, media_block_update_sink),
         make_view_image_tool(java_client),
+        *make_edit_image_tools(java_client, note_content_update_sink),
         make_transcribe_audio_tool(java_client, default_asr_client, media_block_update_sink),
         make_get_project_notes_tool(java_client),
         make_update_project_field_tool(java_client, project_field_update_sink),

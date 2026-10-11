@@ -47,3 +47,17 @@ def test_no_text_content_with_only_attachment():
     msg = build_human_message("", attachments, "anthropic")
 
     assert not any(b.get("type") == "text" for b in msg.content)
+
+
+def test_image_attachments_with_url_are_listed_in_text_for_insert_image():
+    attachments = [
+        {"type": "image", "mimeType": "image/png", "base64Data": "AAAA", "url": "/api/uploads/a.png", "fileName": "a.png"},
+        {"type": "document", "mimeType": "application/pdf", "base64Data": "BBBB", "url": "/api/uploads/b.pdf",
+         "fileName": "b.pdf"},
+    ]
+
+    msg = build_human_message("插进笔记", attachments, "openai")
+
+    texts = [b["text"] for b in msg.content if b["type"] == "text"]
+    assert any("第1张：a.png" in t and "attachment_index" in t for t in texts)
+    assert not any("b.pdf" in t for t in texts)
