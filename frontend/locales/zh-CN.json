@@ -5,8 +5,8 @@
     "achievements": "成就",
     "resources": "资源",
     "clips": "收藏夹",
-    "localDocs": "本地文档",
-    "localMedia": "本地媒体",
+    "localDocs": "文档",
+    "localMedia": "媒体",
     "tags": "标签"
   },
   "actions": {
