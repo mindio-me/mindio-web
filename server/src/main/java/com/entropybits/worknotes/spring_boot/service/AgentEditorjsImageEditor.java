@@ -45,7 +45,7 @@ final class AgentEditorjsImageEditor {
         block.put("type", "image");
         ObjectNode data = block.putObject("data");
         data.putObject("file").put("url", url);
-        data.put("caption", caption == null ? "" : caption);
+        data.put("caption", escapeCaption(caption));
         data.put("withBorder", false);
         data.put("withBackground", false);
         data.put("stretched", false);
@@ -95,7 +95,7 @@ final class AgentEditorjsImageEditor {
         ObjectNode block = (ObjectNode) blocks.get(indexOfBlock(blocks, image.blockId()));
         ObjectNode data = block.has("data") && block.get("data").isObject()
                 ? (ObjectNode) block.get("data") : block.putObject("data");
-        data.put("caption", caption == null ? "" : caption);
+        data.put("caption", escapeCaption(caption));
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("op", "caption");
         event.put("blockId", image.blockId());
@@ -125,6 +125,14 @@ final class AgentEditorjsImageEditor {
             if (blockId != null && blockId.equals(blocks.get(i).path("id").asText(null))) return i;
         }
         throw new ResourceNotFoundException("找不到这个图片块: " + blockId);
+    }
+
+    /**
+     * @editorjs/image 用 innerHTML 渲染图注，而图注来自模型（可能被网页/收藏内容注入），
+     * 存之前必须转义，否则 &lt;img onerror&gt; 之类会在每次打开笔记时执行。
+     */
+    private static String escapeCaption(String caption) {
+        return caption == null ? "" : AgentHtmlImageEditor.escape(caption);
     }
 
     private static void requireStandalone(AgentImageLocator.LocatedImage image) {

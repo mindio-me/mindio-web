@@ -114,6 +114,22 @@ class AgentEditorjsImageEditorTest {
         assertThat(((Map<?, ?>) r.event().get("data")).get("caption")).isEqualTo("新图注");
     }
 
+    /** @editorjs/image 用 innerHTML 渲染图注；模型给的图注可能被网页内容注入，必须转义后再存 */
+    @Test
+    void captionIsHtmlEscaped_onInsertAndSetCaption() throws Exception {
+        String evil = "<img src=x onerror=alert(1)> A&B";
+        String escaped = "&lt;img src=x onerror=alert(1)&gt; A&amp;B";
+
+        AgentImageEditResult inserted = editor.insert(DOC, "/u.png", evil, null);
+        JsonNode blocks = blocks(inserted.content());
+        assertThat(blocks.get(blocks.size() - 1).path("data").path("caption").asText()).isEqualTo(escaped);
+
+        var image = AgentImageLocator.locateInNote("editorjs", DOC, om).get(0);
+        AgentImageEditResult captioned = editor.setCaption(DOC, image, evil);
+        assertThat(blocks(captioned.content()).get(3).path("data").path("caption").asText()).isEqualTo(escaped);
+        assertThat(((Map<?, ?>) captioned.event().get("data")).get("caption")).isEqualTo(escaped);
+    }
+
     @Test
     void deleteOrCaption_inlineImage_rejected() {
         var inline = AgentImageLocator.locateInNote("editorjs", DOC, om).get(1);
