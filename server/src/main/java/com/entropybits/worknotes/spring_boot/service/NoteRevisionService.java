@@ -80,6 +80,12 @@ public class NoteRevisionService {
         });
     }
 
+    /** 该笔记最近一次"转为 editor.js 文档"前存的原文快照（只查此 owner 的） */
+    public Optional<NoteRevision> latestConvertRevision(Long noteId, Long ownerId) {
+        return revisionRepository.findFirstByNoteIdAndOwnerIdAndSourceOrderByIdDesc(
+                noteId, ownerId, NoteRevision.Source.CONVERT);
+    }
+
     public List<EditedNoteRef> editedNotes(String turnId) {
         List<EditedNoteRef> result = new ArrayList<>();
         for (NoteRevision r : revisionRepository.findByTurnIdOrderByIdAsc(turnId)) {

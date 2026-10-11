@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -104,6 +105,40 @@ class NoteConversionServiceTest {
         when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
 
         assertThatThrownBy(() -> service.convertMarkdownToEditorjs("alice", 9L))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verifyNoInteractions(revisionService);
+    }
+
+    @Test
+    void originalMarkdownReturnsLatestConvertSnapshot() {
+        Note note = Note.builder().id(9L).owner(alice).contentType("editorjs").content("{\"blocks\":[]}").build();
+        LocalDateTime convertedAt = LocalDateTime.of(2026, 10, 11, 20, 5);
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(revisionService.latestConvertRevision(9L, 1L)).thenReturn(Optional.of(
+                NoteRevision.builder().content("# 原文").createdAt(convertedAt).build()));
+
+        NoteConversionService.Original original = service.originalMarkdown("alice", 9L);
+
+        assertThat(original.markdown()).isEqualTo("# 原文");
+        assertThat(original.convertedAt()).isEqualTo(convertedAt);
+    }
+
+    @Test
+    void originalMarkdownWithoutSnapshotIsNotFound() {
+        Note note = Note.builder().id(9L).owner(alice).contentType("editorjs").content("{\"blocks\":[]}").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(revisionService.latestConvertRevision(9L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.originalMarkdown("alice", 9L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void originalMarkdownOfForeignNoteIsNotFound() {
+        Note note = Note.builder().id(9L).owner(bob).contentType("editorjs").content("{\"blocks\":[]}").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        assertThatThrownBy(() -> service.originalMarkdown("alice", 9L))
                 .isInstanceOf(ResourceNotFoundException.class);
         verifyNoInteractions(revisionService);
     }

@@ -331,9 +331,9 @@
                       <i class="el-icon-sort" style="margin-right:4px;"></i>
                       {{ $t('workspace.notes.convertToEditorjs') }}
                     </el-dropdown-item>
-                    <el-dropdown-item v-if="isEditorjsNote && activeNote.convertRevisionTurnId" command="restore-markdown">
-                      <i class="el-icon-refresh-left" style="margin-right:4px;"></i>
-                      {{ $t('workspace.notes.restoreMarkdown') }}
+                    <el-dropdown-item v-if="isEditorjsNote && activeNote.convertRevisionTurnId" command="view-original-markdown">
+                      <i class="el-icon-document-copy" style="margin-right:4px;"></i>
+                      {{ $t('workspace.notes.viewOriginalMarkdown') }}
                     </el-dropdown-item>
                     <el-dropdown-item command="export-pdf">
                       <i class="el-icon-document" style="margin-right:4px;"></i>
@@ -662,6 +662,17 @@
       </span>
     </el-dialog>
 
+    <el-dialog :title="$t('workspace.notes.viewOriginalMarkdown')" :visible.sync="originalDialog.visible" width="720px" append-to-body>
+      <p v-if="originalDialog.convertedAt" style="margin:0 0 8px;color:var(--text-muted, #999);font-size:12px;">
+        {{ $t('workspace.notes.originalMarkdownConvertedAt', { time: String(originalDialog.convertedAt).replace('T', ' ').slice(0, 16) }) }}
+      </p>
+      <el-input type="textarea" :value="originalDialog.markdown" readonly :autosize="{ minRows: 12, maxRows: 24 }" />
+      <span slot="footer">
+        <el-button size="small" @click="originalDialog.visible = false">{{ $t('workspace.notes.close') }}</el-button>
+        <el-button type="primary" size="small" @click="copyOriginalMarkdown">{{ $t('workspace.chat.copy') }}</el-button>
+      </span>
+    </el-dialog>
+
   </div>
 </template>
 
@@ -715,6 +726,7 @@ export default {
       loading: false,
       // 聊天回复「插入到笔记」：模型建议插到某一节之后时弹窗让用户选
       insertDialog: { visible: false, markdown: '', suggestion: null, cursorBlockId: null, busy: false },
+      originalDialog: { visible: false, markdown: '', convertedAt: null },
 
       // 笔记
       searchKeyword: '',
@@ -1684,7 +1696,7 @@ export default {
         this.$message.error(this.$t('workspace.chat.undoFailed'))
       }
     },
-    /** Markdown 笔记原地转为块文档；成功提示可点击撤销，"更多"菜单里也一直保留"恢复为 Markdown 原文" */
+    /** Markdown 笔记原地转为块文档；成功提示可点击撤销，之后"更多"菜单里只能查看原文，不再恢复 */
     async convertNoteToEditorjs(note) {
       try {
         await this.$confirm(this.$t('workspace.notes.convertToEditorjsConfirm'),
@@ -1710,7 +1722,7 @@ export default {
         this.$message.error(this.$t('workspace.notes.convertToEditorjsFailed') + (e.response?.data?.message || e.message))
       }
     },
-    /** 恢复为 Markdown 原文：复用 AI 改笔记的撤销接口；转换后又改过时（409）先确认再强制恢复 */
+    /** 转换成功提示里的撤销：复用 AI 改笔记的撤销接口；转换后又改过时（409）先确认再强制恢复 */
     async restoreNoteMarkdown(turnId, noteId, force = false) {
       const isActive = this.activeNote && String(this.activeNote.id) === String(noteId)
       try {
@@ -1738,6 +1750,23 @@ export default {
       }
     },
     /** 列表里的类型标签跟着变，不重新拉整页列表 */
+    /** 只读查看转换前的 Markdown 原文 */
+    async openOriginalMarkdown(note) {
+      try {
+        const res = await this.$noteService.getConvertOriginal(note.id)
+        this.originalDialog = { visible: true, markdown: res.markdown || '', convertedAt: res.convertedAt || null }
+      } catch (e) {
+        this.$message.error(this.$t('workspace.notes.viewOriginalMarkdownFailed'))
+      }
+    },
+    async copyOriginalMarkdown() {
+      try {
+        await navigator.clipboard.writeText(this.originalDialog.markdown)
+        this.$message.success(this.$t('workspace.chat.copied'))
+      } catch (e) {
+        this.$message.error(this.$t('workspace.chat.copyFailed'))
+      }
+    },
     syncNoteListType(noteId, contentType) {
       const item = (this.notes || []).find(n => String(n.id) === String(noteId))
       if (item) item.contentType = contentType
@@ -1983,7 +2012,7 @@ export default {
       else if (command === 'export-pdf') this.exportNoteToPdf(note)
       else if (command === 'publish-linkedin') this.openLinkedinShareDialog(note)
       else if (command === 'convert-to-editorjs') this.convertNoteToEditorjs(note)
-      else if (command === 'restore-markdown') this.restoreNoteMarkdown(note.convertRevisionTurnId, note.id)
+      else if (command === 'view-original-markdown') this.openOriginalMarkdown(note)
     },
     openLinkedinShareDialog(note) {
       if (!note) return

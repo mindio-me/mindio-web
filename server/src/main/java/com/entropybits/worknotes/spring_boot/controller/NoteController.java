@@ -99,6 +99,17 @@ public class NoteController {
     }
 
     /**
+     * 查看"转为 editor.js 文档"之前的 Markdown 原文（只读）
+     */
+    @GetMapping("/{id}/convert-original")
+    public ResponseEntity<NoteConversionService.Original> convertOriginal(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        return ResponseEntity.ok(noteConversionService.originalMarkdown(userDetails.getUsername(), id));
+    }
+
+    /**
      * 获取当前用户的笔记列表（分页）
      * 支持按项目ID列表和标签ID列表筛选
      */

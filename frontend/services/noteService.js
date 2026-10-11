@@ -51,6 +51,13 @@ class NoteService extends ApiService {
     return this.post(`/v1/notes/${id}/convert-to-editorjs`, {}, { suppressErrorToast: true })
   }
 
+  /**
+   * 转为 editor.js 文档之前的 Markdown 原文（只读查看）；返回 { markdown, convertedAt }
+   */
+  getConvertOriginal(id) {
+    return this.get(`/v1/notes/${id}/convert-original`, { suppressErrorToast: true })
+  }
+
   suggestInsertPosition(noteId, content, cursorBlockId) {
     return this.post(`/v1/notes/${noteId}/insert-position`, { content, cursorBlockId })
   }

@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -31,6 +32,8 @@ import java.util.UUID;
 public class NoteConversionService {
 
     public record Result(String turnId) {}
+
+    public record Original(String markdown, LocalDateTime convertedAt) {}
 
     private final NoteRepository noteRepository;
     private final UserRepository userRepository;
@@ -52,11 +55,7 @@ public class NoteConversionService {
 
     @Transactional
     public Result convertMarkdownToEditorjs(String username, Long noteId) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("用户不存在"));
-        Note note = noteRepository.findById(noteId)
-                .filter(n -> n.getOwner().getId().equals(user.getId()))
-                .orElseThrow(() -> new ResourceNotFoundException("笔记不存在"));
+        Note note = loadOwnedNote(username, noteId);
         if (!"markdown".equals(note.getContentType())) {
             throw new BadRequestException("只有 Markdown 笔记可以转换");
         }
@@ -80,6 +79,23 @@ public class NoteConversionService {
         revisionService.recordAfter(turnId, note.getId(), content);
         contentIndexingService.reindexNote(note.getId());
         return new Result(turnId);
+    }
+
+    /** 转换前的 Markdown 原文（只读查看用）；没有转换快照时 404 */
+    @Transactional(readOnly = true)
+    public Original originalMarkdown(String username, Long noteId) {
+        Note note = loadOwnedNote(username, noteId);
+        NoteRevision revision = revisionService.latestConvertRevision(note.getId(), note.getOwner().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("这篇笔记没有转换前的原文"));
+        return new Original(revision.getContent(), revision.getCreatedAt());
+    }
+
+    private Note loadOwnedNote(String username, Long noteId) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("用户不存在"));
+        return noteRepository.findById(noteId)
+                .filter(n -> n.getOwner().getId().equals(user.getId()))
+                .orElseThrow(() -> new ResourceNotFoundException("笔记不存在"));
     }
 
     private String toEditorjsJson(ArrayNode blocks) {

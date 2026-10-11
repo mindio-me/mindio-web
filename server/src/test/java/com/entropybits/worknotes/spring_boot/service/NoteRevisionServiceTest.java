@@ -233,4 +233,13 @@ class NoteRevisionServiceTest {
         assertThat(note.getSectionContents()).isEmpty();
         assertThat(note.getSectionTypes()).isEmpty();
     }
+
+    @Test
+    void latestConvertRevision_looksUpNewestConvertSnapshotOfOwner() {
+        NoteRevision r = NoteRevision.builder().turnId("convert-2").build();
+        when(revisionRepository.findFirstByNoteIdAndOwnerIdAndSourceOrderByIdDesc(9L, 1L, NoteRevision.Source.CONVERT))
+                .thenReturn(Optional.of(r));
+
+        assertThat(service.latestConvertRevision(9L, 1L)).containsSame(r);
+    }
 }
