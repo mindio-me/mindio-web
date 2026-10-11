@@ -16,6 +16,7 @@ import com.entropybits.worknotes.spring_boot.integration.feishu.repository.Feish
 import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteImageRefRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteRevisionRepository;
 import com.entropybits.worknotes.spring_boot.repository.ProjectRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
@@ -131,9 +132,10 @@ class NoteServiceTest {
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
         NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         AudioTranscriptionRepository audioTranscriptionRepository = mock(AudioTranscriptionRepository.class);
+        NoteRevisionRepository noteRevisionRepository = mock(NoteRevisionRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository);
+                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository, noteRevisionRepository);
 
         User user = User.builder().id(1L).build();
         Tag tag = Tag.builder().id(5L).owner(user).name("学习").usedByNotes(false).build();
@@ -164,9 +166,10 @@ class NoteServiceTest {
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
         NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         AudioTranscriptionRepository audioTranscriptionRepository = mock(AudioTranscriptionRepository.class);
+        NoteRevisionRepository noteRevisionRepository = mock(NoteRevisionRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository);
+                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository, noteRevisionRepository);
 
         User user = User.builder().id(1L).build();
         when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
@@ -198,9 +201,10 @@ class NoteServiceTest {
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
         NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         AudioTranscriptionRepository audioTranscriptionRepository = mock(AudioTranscriptionRepository.class);
+        NoteRevisionRepository noteRevisionRepository = mock(NoteRevisionRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository);
+                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository, noteRevisionRepository);
 
         User user = User.builder().id(1L).build();
         Note existingNote = Note.builder().id(42L).owner(user).build();
@@ -230,9 +234,10 @@ class NoteServiceTest {
         ContentIndexingService contentIndexingService = mock(ContentIndexingService.class);
         NoteImageRefRepository noteImageRefRepository = mock(NoteImageRefRepository.class);
         AudioTranscriptionRepository audioTranscriptionRepository = mock(AudioTranscriptionRepository.class);
+        NoteRevisionRepository noteRevisionRepository = mock(NoteRevisionRepository.class);
         NoteService service = new NoteService(noteRepository, userRepository, tagRepository, projectRepository,
                 feishuWikiImportMappingRepository, feishuDocumentSnapshotRepository, feishuImageMappingRepository,
-                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository);
+                contentIndexingService, noteImageRefRepository, audioTranscriptionRepository, noteRevisionRepository);
 
         User user = User.builder().id(1L).build();
         Note existingNote = Note.builder().id(9L).owner(user).build();
@@ -241,10 +246,12 @@ class NoteServiceTest {
 
         service.deleteNote(9L, "alice");
 
-        InOrder inOrder = inOrder(contentIndexingService, noteImageRefRepository, audioTranscriptionRepository, noteRepository);
+        InOrder inOrder = inOrder(contentIndexingService, noteImageRefRepository, audioTranscriptionRepository,
+                noteRevisionRepository, noteRepository);
         inOrder.verify(contentIndexingService).deleteChunksFor(ContentChunk.SourceType.NOTE, 9L);
         inOrder.verify(noteImageRefRepository).deleteByNote(existingNote);
         inOrder.verify(audioTranscriptionRepository).deleteByNoteId(9L);
+        inOrder.verify(noteRevisionRepository).deleteByNoteId(9L);
         inOrder.verify(noteRepository).delete(existingNote);
     }
 }

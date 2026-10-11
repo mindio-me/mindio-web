@@ -48,6 +48,10 @@ public class AiChatMessage {
     @Column(columnDefinition = "TEXT")
     private String attachmentsJson;
 
+    /** 助手回复所属的一轮对话（= 该轮用户消息 id）；这一轮 agent 改过笔记时，据此显示改动卡片 */
+    @Column(name = "turn_id", length = 64)
+    private String turnId;
+
     @Column(nullable = false)
     private Instant createdAt;
 

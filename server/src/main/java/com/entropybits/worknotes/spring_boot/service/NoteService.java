@@ -24,6 +24,7 @@ import com.entropybits.worknotes.spring_boot.integration.feishu.repository.Feish
 import com.entropybits.worknotes.spring_boot.integration.feishu.repository.FeishuWikiImportMappingRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteImageRefRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
+import com.entropybits.worknotes.spring_boot.repository.NoteRevisionRepository;
 import com.entropybits.worknotes.spring_boot.repository.ProjectRepository;
 import com.entropybits.worknotes.spring_boot.repository.TagRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
@@ -60,6 +61,7 @@ public class NoteService {
     private final ContentIndexingService contentIndexingService;
     private final NoteImageRefRepository noteImageRefRepository;
     private final AudioTranscriptionRepository audioTranscriptionRepository;
+    private final NoteRevisionRepository noteRevisionRepository;
 
     /**
      * 创建笔记
@@ -171,6 +173,7 @@ public class NoteService {
         contentIndexingService.deleteChunksFor(ContentChunk.SourceType.NOTE, note.getId());
         noteImageRefRepository.deleteByNote(note);
         audioTranscriptionRepository.deleteByNoteId(note.getId());
+        noteRevisionRepository.deleteByNoteId(note.getId());
         noteRepository.delete(note);
     }
 
