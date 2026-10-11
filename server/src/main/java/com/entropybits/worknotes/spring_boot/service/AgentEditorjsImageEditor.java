@@ -165,7 +165,7 @@ final class AgentEditorjsImageEditor {
     }
 
     /** 和 Editor.js 自己生成的 id 同长度同字符集，前端按这个 id 插入后两边一致 */
-    private static String newBlockId() {
+    static String newBlockId() {
         StringBuilder sb = new StringBuilder(10);
         for (int i = 0; i < 10; i++) sb.append(ID_CHARS.charAt(RANDOM.nextInt(ID_CHARS.length())));
         return sb.toString();
