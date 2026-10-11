@@ -164,7 +164,13 @@ final class MarkdownToEditorjsConverter {
                     blocks.add(markdownBlock(sourceOf(n, lines)));
                 }
             }
-            appendFootnotes();
+            int beforeFootnotes = blocks.size();
+            try {
+                appendFootnotes();
+            } catch (RuntimeException e) {
+                // 整篇转换不失败：脚注区出错就整段不要，正文块保留
+                blocks.subList(beforeFootnotes, blocks.size()).clear();
+            }
             return blocks;
         }
 

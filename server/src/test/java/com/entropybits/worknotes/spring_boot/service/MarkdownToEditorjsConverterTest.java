@@ -190,6 +190,46 @@ class MarkdownToEditorjsConverterTest {
                         + "{\"content\":\"乙说明\",\"meta\":{},\"items\":[]}]}");
     }
 
+    /**
+     * 测试用：在指定方法（按调用栈判断）里第 n 次 createObjectNode 时抛一次异常，模拟转换中途出错。
+     * 转换器没有别的可注入点，ObjectMapper 是唯一的构造参数。
+     */
+    private static final class FailingMapper extends ObjectMapper {
+        private final String method;
+        private int remaining;
+
+        FailingMapper(String method, int n) {
+            this.method = method;
+            this.remaining = n;
+        }
+
+        @Override
+        public ObjectNode createObjectNode() {
+            boolean inMethod = java.util.Arrays.stream(new Throwable().getStackTrace())
+                    .anyMatch(e -> e.getMethodName().equals(method));
+            if (inMethod && remaining > 0 && --remaining == 0) throw new IllegalStateException("boom");
+            return super.createObjectNode();
+        }
+    }
+
+    @Test
+    void failingTopLevelNodeFallsBackToMarkdownBlockWithItsSource() {
+        List<ObjectNode> blocks = new MarkdownToEditorjsConverter(new FailingMapper("addBlock", 1))
+                .convert("# 标题 *强调*\n\n正文");
+
+        assertThat(blocks).extracting(this::json).containsExactly(
+                "markdown {\"markdown\":\"# 标题 *强调*\",\"mode\":\"preview\"}",
+                "paragraph {\"text\":\"正文\"}");
+    }
+
+    @Test
+    void failingFootnoteSectionIsSkippedButBodyIsKept() {
+        List<ObjectNode> blocks = new MarkdownToEditorjsConverter(new FailingMapper("appendFootnotes", 3))
+                .convert("正文[^a]。\n\n[^a]: 甲说明");
+
+        assertThat(blocks).extracting(this::json).containsExactly("paragraph {\"text\":\"正文<sup>1</sup>。\"}");
+    }
+
     @Test
     void looseListStaysOneList() {
         List<ObjectNode> blocks = converter.convert("- 一\n\n- 二\n\n- 三");
