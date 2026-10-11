@@ -85,4 +85,19 @@ class AgentNoteBlocksTest {
         assertThat(AgentNoteBlocks.htmlToMarkdown("<i>斜</i><br><code class=\"inline-code\">c</code> &lt;x&gt;"))
                 .isEqualTo("*斜*\n`c` <x>");
     }
+
+    @Test
+    void mathBlockIsEditableAsDollarFence() {
+        List<AgentNoteBlocks.Block> blocks = AgentNoteBlocks.editorjsBlocks(
+                "{\"blocks\":[{\"id\":\"m\",\"type\":\"math\",\"data\":{\"tex\":\"E=mc^2\"}}]}", om);
+
+        assertThat(blocks.get(0).editable()).isTrue();
+        assertThat(blocks.get(0).text()).isEqualTo("$$\nE=mc^2\n$$");
+    }
+
+    @Test
+    void htmlToMarkdown_keepsStrikethroughAndHighlight() {
+        assertThat(AgentNoteBlocks.htmlToMarkdown("<s>删</s> <mark class=\"cdx-marker\">亮</mark>"))
+                .isEqualTo("~~删~~ ==亮==");
+    }
 }

@@ -26,7 +26,7 @@ final class AgentNoteBlocks {
     record MarkdownSegment(int start, int end, String text) {}
 
     static final Set<String> EDITABLE_TYPES =
-            Set.of("paragraph", "header", "list", "checklist", "code", "quote", "table", "image", "delimiter");
+            Set.of("paragraph", "header", "list", "checklist", "code", "quote", "table", "image", "delimiter", "math");
 
     private AgentNoteBlocks() {}
 
@@ -125,6 +125,7 @@ final class AgentNoteBlocks {
             case "image" -> "![" + AgentImageLocator.stripHtml(data.path("caption").asText("")) + "]("
                     + imageUrl(data) + ")";
             case "delimiter" -> "---";
+            case "math" -> "$$\n" + data.path("tex").asText("") + "\n$$";
             default -> "";
         };
     }
@@ -135,6 +136,8 @@ final class AgentNoteBlocks {
         s = s.replaceAll("(?is)<(b|strong)\\b[^>]*>(.*?)</\\1>", "**$2**");
         s = s.replaceAll("(?is)<(i|em)\\b[^>]*>(.*?)</\\1>", "*$2*");
         s = s.replaceAll("(?is)<code\\b[^>]*>(.*?)</code>", "`$1`");
+        s = s.replaceAll("(?is)<s\\b[^>]*>(.*?)</s>", "~~$1~~");
+        s = s.replaceAll("(?is)<mark\\b[^>]*>(.*?)</mark>", "==$1==");
         s = s.replaceAll("(?is)<a\\b[^>]*href=\"([^\"]*)\"[^>]*>(.*?)</a>", "[$2]($1)");
         s = s.replaceAll("<[^>]+>", "");
         return s.replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">")
