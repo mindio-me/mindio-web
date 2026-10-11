@@ -7,7 +7,9 @@ package com.entropybits.worknotes.spring_boot.controller;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentContent;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentSummary;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
+import com.entropybits.worknotes.spring_boot.dto.AgentInsertImageRequest;
 import com.entropybits.worknotes.spring_boot.service.AgentDocumentService;
+import com.entropybits.worknotes.spring_boot.service.AgentImageEditService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,6 +26,7 @@ import java.util.Map;
 public class InternalDocumentController {
 
     private final AgentDocumentService agentDocumentService;
+    private final AgentImageEditService agentImageEditService;
 
     @GetMapping("/notes")
     public List<AgentDocumentSummary> findNotes(@RequestParam String username, @RequestParam String title) {
@@ -61,5 +64,24 @@ public class InternalDocumentController {
     public Map<String, Object> clipImage(@RequestParam String username, @PathVariable Long clipId,
                                          @PathVariable int index) {
         return agentDocumentService.loadClipImage(username, clipId, index);
+    }
+
+    @PostMapping("/notes/{noteId}/images")
+    public Map<String, Object> insertNoteImage(@RequestParam String username, @PathVariable Long noteId,
+                                               @RequestBody AgentInsertImageRequest request) {
+        return agentImageEditService.insertImage(username, noteId, request.source(), request.caption(),
+                request.anchorText());
+    }
+
+    @DeleteMapping("/notes/{noteId}/images/{index}")
+    public Map<String, Object> deleteNoteImage(@RequestParam String username, @PathVariable Long noteId,
+                                               @PathVariable int index) {
+        return agentImageEditService.deleteImage(username, noteId, index);
+    }
+
+    @PatchMapping("/notes/{noteId}/images/{index}")
+    public Map<String, Object> setNoteImageCaption(@RequestParam String username, @PathVariable Long noteId,
+                                                   @PathVariable int index, @RequestBody Map<String, String> body) {
+        return agentImageEditService.setImageCaption(username, noteId, index, body.get("caption"));
     }
 }
