@@ -74,6 +74,21 @@ class NoteConversionServiceTest {
     }
 
     @Test
+    void fillsSectionsLikeTheEditorSaveDoes() throws Exception {
+        Note note = Note.builder().id(9L).owner(alice).contentType("markdown").content("# 标题\n\n正文").build();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        service.convertMarkdownToEditorjs("alice", 9L);
+
+        JsonNode blocks = om.readTree(note.getContent()).path("blocks");
+        assertThat(note.getSectionTypes()).containsExactly("header", "paragraph");
+        assertThat(note.getSectionContents()).hasSize(2);
+        for (int i = 0; i < blocks.size(); i++) {
+            assertThat(om.readTree(note.getSectionContents().get(i))).isEqualTo(blocks.get(i).path("data"));
+        }
+    }
+
+    @Test
     void rejectsNonMarkdownNote() {
         Note note = Note.builder().id(9L).owner(alice).contentType("editorjs").content("{\"blocks\":[]}").build();
         when(noteRepository.findById(9L)).thenReturn(Optional.of(note));

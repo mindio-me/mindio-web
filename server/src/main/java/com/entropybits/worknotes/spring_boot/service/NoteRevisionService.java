@@ -111,6 +111,11 @@ public class NoteRevisionService {
         List<Long> restored = new ArrayList<>();
         for (NoteRevision r : revisions) {
             ownedNote(r, user).ifPresent(note -> {
+                // 从 editorjs 恢复成其他类型（如撤销"转为 editor.js"）时，按块生成的 sections 已失效，不能留着
+                if ("editorjs".equals(note.getContentType()) && !"editorjs".equals(r.getContentType())) {
+                    note.setSectionContents(new ArrayList<>());
+                    note.setSectionTypes(new ArrayList<>());
+                }
                 note.setContent(r.getContent());
                 note.setContentType(r.getContentType());
                 noteRepository.save(note);

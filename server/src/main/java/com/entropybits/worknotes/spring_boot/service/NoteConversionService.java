@@ -12,12 +12,15 @@ import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -59,23 +62,37 @@ public class NoteConversionService {
         }
         String turnId = "convert-" + UUID.randomUUID();
         revisionService.snapshotBeforeEdit(note, turnId, NoteRevision.Source.CONVERT);
-        String content = toEditorjsJson(note.getContent());
+        ArrayNode blocks = objectMapper.createArrayNode();
+        converter.convert(note.getContent()).forEach(blocks::add);
+        String content = toEditorjsJson(blocks);
         note.setContent(content);
         note.setContentType("editorjs");
+        // 与前端编辑器保存 editorjs 笔记时一致：每块一条 section，内容是 JSON.stringify(block.data)，类型是 block.type
+        List<String> sectionContents = new ArrayList<>();
+        List<String> sectionTypes = new ArrayList<>();
+        for (JsonNode block : blocks) {
+            sectionContents.add(writeJson(block.path("data")));
+            sectionTypes.add(block.path("type").asText());
+        }
+        note.setSectionContents(sectionContents);
+        note.setSectionTypes(sectionTypes);
         noteRepository.save(note);
         revisionService.recordAfter(turnId, note.getId(), content);
         contentIndexingService.reindexNote(note.getId());
         return new Result(turnId);
     }
 
-    private String toEditorjsJson(String markdown) {
+    private String toEditorjsJson(ArrayNode blocks) {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("time", System.currentTimeMillis());
-        ArrayNode blocks = root.putArray("blocks");
-        converter.convert(markdown).forEach(blocks::add);
+        root.set("blocks", blocks);
         root.put("version", "2.31.1");
+        return writeJson(root);
+    }
+
+    private String writeJson(JsonNode node) {
         try {
-            return objectMapper.writeValueAsString(root);
+            return objectMapper.writeValueAsString(node);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException(e);
         }

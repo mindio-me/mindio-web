@@ -296,6 +296,13 @@
                     </component>
                   </li>
                 </component>
+                <!-- Markdown 块：走 markdown-it（html:false），不直接 v-html 原文 -->
+                <div
+                  v-else-if="note.sectionTypes?.[index] === 'markdown'"
+                  class="markdown-content"
+                  v-mermaid
+                  v-html="renderMarkdown(parseBlockData(section, 'markdown') || '')"
+                ></div>
                 <!-- 其他类型 fallback -->
                 <div v-else class="plain-content" v-html="section"></div>
               </div>
