@@ -44,6 +44,13 @@ class NoteService extends ApiService {
     return this.delete(`/v1/notes/${id}`)
   }
 
+  /**
+   * Markdown 笔记原地转为 editor.js 块文档；返回 { turnId }，用于撤销/恢复原文
+   */
+  convertToEditorjs(id) {
+    return this.post(`/v1/notes/${id}/convert-to-editorjs`, {})
+  }
+
   suggestInsertPosition(noteId, content, cursorBlockId) {
     return this.post(`/v1/notes/${noteId}/insert-position`, { content, cursorBlockId })
   }

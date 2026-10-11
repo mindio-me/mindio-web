@@ -327,6 +327,14 @@
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="#0077B5" style="margin-right:4px;vertical-align:-2px;"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.32 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
                       {{ $t('workspace.notes.publishLinkedIn') }}
                     </el-dropdown-item>
+                    <el-dropdown-item v-if="activeNote.contentType === 'markdown'" command="convert-to-editorjs">
+                      <i class="el-icon-sort" style="margin-right:4px;"></i>
+                      {{ $t('workspace.notes.convertToEditorjs') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="isEditorjsNote && activeNote.convertRevisionTurnId" command="restore-markdown">
+                      <i class="el-icon-refresh-left" style="margin-right:4px;"></i>
+                      {{ $t('workspace.notes.restoreMarkdown') }}
+                    </el-dropdown-item>
                     <el-dropdown-item command="export-pdf">
                       <i class="el-icon-document" style="margin-right:4px;"></i>
                       {{ $t('workspace.notes.exportPdf') }}
@@ -1676,6 +1684,64 @@ export default {
         this.$message.error(this.$t('workspace.chat.undoFailed'))
       }
     },
+    /** Markdown 笔记原地转为块文档；成功提示可点击撤销，"更多"菜单里也一直保留"恢复为 Markdown 原文" */
+    async convertNoteToEditorjs(note) {
+      try {
+        await this.$confirm(this.$t('workspace.notes.convertToEditorjsConfirm'),
+          this.$t('workspace.notes.convertToEditorjs'), { type: 'warning' })
+      } catch (cancel) {
+        return
+      }
+      try {
+        const res = await this.$noteService.convertToEditorjs(note.id)
+        this.syncNoteListType(note.id, 'editorjs')
+        if (this.activeNote && String(this.activeNote.id) === String(note.id)) await this.reloadFromServer()
+        const notify = this.$notify({
+          title: '',
+          message: this.$t('workspace.notes.convertedToEditorjs'),
+          type: 'success',
+          duration: 8000,
+          onClick: () => {
+            notify.close()
+            this.restoreNoteMarkdown(res.turnId, note.id)
+          }
+        })
+      } catch (e) {
+        this.$message.error(this.$t('workspace.notes.convertToEditorjsFailed') + (e.response?.data?.message || e.message))
+      }
+    },
+    /** 恢复为 Markdown 原文：复用 AI 改笔记的撤销接口；转换后又改过时（409）先确认再强制恢复 */
+    async restoreNoteMarkdown(turnId, noteId, force = false) {
+      const isActive = this.activeNote && String(this.activeNote.id) === String(noteId)
+      try {
+        if (isActive) await this.flushPendingSave()
+        await this.$globalChatService.undoTurn(turnId, force)
+        this.syncNoteListType(noteId, 'markdown')
+        if (isActive) {
+          this.destroyEditor()
+          await this.reloadFromServer()
+        }
+        this.$message.success(this.$t('workspace.notes.restoredMarkdown'))
+      } catch (e) {
+        const conflicts = e && e.response && e.response.status === 409 && e.response.data && e.response.data.conflicts
+        if (conflicts && !force) {
+          try {
+            await this.$confirm(this.$t('workspace.notes.restoreMarkdownConfirmModified'),
+              this.$t('workspace.notes.restoreMarkdown'), { type: 'warning' })
+          } catch (cancel) {
+            return
+          }
+          await this.restoreNoteMarkdown(turnId, noteId, true)
+          return
+        }
+        this.$message.error(this.$t('workspace.notes.restoreMarkdownFailed'))
+      }
+    },
+    /** 列表里的类型标签跟着变，不重新拉整页列表 */
+    syncNoteListType(noteId, contentType) {
+      const item = (this.notes || []).find(n => String(n.id) === String(noteId))
+      if (item) item.contentType = contentType
+    },
     currentCursorBlockId() {
       if (!this.editor || !this.isEditorjsNote) return null
       try {
@@ -1916,6 +1982,8 @@ export default {
       else if (command === 'translate-english') this.openTranslationDialog(note)
       else if (command === 'export-pdf') this.exportNoteToPdf(note)
       else if (command === 'publish-linkedin') this.openLinkedinShareDialog(note)
+      else if (command === 'convert-to-editorjs') this.convertNoteToEditorjs(note)
+      else if (command === 'restore-markdown') this.restoreNoteMarkdown(note.convertRevisionTurnId, note.id)
     },
     openLinkedinShareDialog(note) {
       if (!note) return
