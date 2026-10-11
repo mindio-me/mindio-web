@@ -53,7 +53,7 @@ export default {
         { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool },
         { default: RecordTool },
         { default: CodeWrapTune }, { default: Undo },
-        { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }, { default: MathTool }, { default: StrikethroughTool }
+        { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }, { default: MathTool }, { default: StrikethroughTool }, { default: SuperscriptTool }
       ] = await Promise.all([
         import('@editorjs/editorjs'), import('@editorjs/header'), import('@editorjs/list'),
         import('@editorjs/code'), import('@editorjs/delimiter'), import('@editorjs/quote'),
@@ -67,8 +67,16 @@ export default {
         import('~/utils/editorjsRecordTool'),
         import('~/utils/editorjsCodeWrapTune'),
         import('editorjs-undo'),
-        import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool'), import('~/utils/editorjsMathTool'), import('~/utils/editorjsStrikethroughTool')
+        import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool'), import('~/utils/editorjsMathTool'), import('~/utils/editorjsStrikethroughTool'), import('~/utils/editorjsSuperscriptTool')
       ])
+
+      // @editorjs/warning 自带 sanitize 是 message: {}，保存时只放行行内工具的标签、会清掉 <br>，
+      // 多行提示框（含 Markdown callout 转换来的）保存后塌成一行；这里额外放行 <br>
+      class WarningWithBreaks extends Warning {
+        static get sanitize() {
+          return { title: {}, message: { br: true } }
+        }
+      }
 
       const uploadService = this.$uploadService
       const model = options.model
@@ -76,12 +84,12 @@ export default {
       const ph = options.placeholders
 
       const tools = {
-        header: { class: Header, config: { placeholder: ph.header, levels: [1, 2, 3, 4, 5, 6], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
+        header: { class: Header, inlineToolbar: true, config: { placeholder: ph.header, levels: [1, 2, 3, 4, 5, 6], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
         list: { class: List, inlineToolbar: true, config: { defaultStyle: 'unordered' } },
         code: { class: CodeTool, config: { placeholder: ph.code }, tunes: ['codeWrap'] },
         codeWrap: { class: CodeWrapTune },
         delimiter: { class: Delimiter },
-        quote: { class: Quote, config: { quotePlaceholder: ph.quote, captionPlaceholder: ph.quoteCaption }, shortcut: 'CMD+SHIFT+O' },
+        quote: { class: Quote, inlineToolbar: true, config: { quotePlaceholder: ph.quote, captionPlaceholder: ph.quoteCaption }, shortcut: 'CMD+SHIFT+O' },
         table: { class: Table, inlineToolbar: true, config: { rows: 3, cols: 3, withHeadings: true } },
         inlineCode: { class: InlineCode, shortcut: 'CMD+SHIFT+M' },
         image: {
@@ -109,10 +117,11 @@ export default {
         },
         marker: { class: Marker },
         strikethrough: { class: StrikethroughTool, shortcut: 'CMD+SHIFT+X' },
+        superscript: { class: SuperscriptTool },
         math: { class: MathTool },
         checklist: { class: Checklist, inlineToolbar: true },
         warning: {
-          class: Warning,
+          class: WarningWithBreaks,
           inlineToolbar: true,
           config: { titlePlaceholder: ph.warningTitle, messagePlaceholder: ph.warningMessage }
         },
@@ -295,7 +304,7 @@ export default {
             toolNames: {
               Text: '文本', Heading: '标题', List: '列表', Quote: '引用',
               Code: '代码块', Delimiter: '分割线', Table: '表格', Image: '图片',
-              InlineCode: '行内代码', Marker: '高亮', Strikethrough: '删除线', Math: '公式', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
+              InlineCode: '行内代码', Marker: '高亮', Strikethrough: '删除线', Superscript: '上标', Math: '公式', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
             },
             tools: {
               header: { 'Heading 1': '标题 1', 'Heading 2': '标题 2', 'Heading 3': '标题 3', 'Heading 4': '标题 4', 'Heading 5': '标题 5', 'Heading 6': '标题 6' },
