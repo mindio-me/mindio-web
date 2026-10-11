@@ -227,6 +227,26 @@ public class AgentServiceClient {
         return (String) result.get("text");
     }
 
+    public Map<String, Object> insertPosition(List<Map<String, Object>> outline, String content, String cursorBlockId)
+            throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("outline", outline);
+        body.put("content", content);
+        body.put("cursorBlockId", cursorBlockId);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/internal/insert-position"))
+                .header("X-Internal-Token", internalToken)
+                .header("content-type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                .timeout(Duration.ofSeconds(30))
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() >= 400) {
+            throw new RuntimeException("insert-position failed: HTTP " + response.statusCode() + " " + response.body());
+        }
+        return objectMapper.readValue(response.body(), new TypeReference<>() {});
+    }
+
     @SuppressWarnings("unchecked")
     private List<ChatCitation> parseCitations(Object raw) {
         if (!(raw instanceof List<?> list)) return List.of();
