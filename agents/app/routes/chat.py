@@ -116,6 +116,11 @@ async def _drive_graph(
             output_content = event["data"]["output"].content
             if isinstance(output_content, str) and output_content:
                 final_text = output_content
+        elif kind == "on_tool_end":
+            # 每个写工具一结束就推送，不等整轮结束：打开着的编辑器要尽快同步，否则用户的
+            # 自动保存会在这一轮后面的工具执行期间把刚写进库的改动冲掉
+            for chunk in _drain_note_content_updates(note_content_updates):
+                yield chunk
         elif kind == "on_tool_start" and event.get("name") in ("search_workspace", "search_web"):
             query = event["data"].get("input", {}).get("query", "")
             yield _event("tool_call", query=query)

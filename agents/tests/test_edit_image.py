@@ -12,17 +12,17 @@ class FakeJavaClient:
         self.error = error
         self.calls: list[tuple] = []
 
-    async def insert_note_image(self, username, note_id, source, caption, anchor_text):
+    async def insert_note_image(self, username, note_id, source, caption, anchor_text, conversation_id=None):
         self.calls.append(("insert", username, note_id, source, caption, anchor_text))
         if self.error:
             raise self.error
         return self.result
 
-    async def delete_note_image(self, username, note_id, index):
+    async def delete_note_image(self, username, note_id, index, conversation_id=None):
         self.calls.append(("delete", username, note_id, index))
         return {"op": "delete", "noteId": note_id, "contentType": "markdown"}
 
-    async def set_note_image_caption(self, username, note_id, index, caption):
+    async def set_note_image_caption(self, username, note_id, index, caption, conversation_id=None):
         self.calls.append(("caption", username, note_id, index, caption))
         return {"op": "caption", "noteId": note_id, "contentType": "editorjs", "blockId": "b1"}
 

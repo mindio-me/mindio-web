@@ -492,7 +492,7 @@ async def test_edit_image_emits_note_content_updated_before_done(monkeypatch, fa
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     from tools.edit_image import make_edit_image_tools
 
-    fake_java_client.insert_note_image = lambda username, note_id, source, caption, anchor_text: _async_return(
+    fake_java_client.insert_note_image = lambda username, note_id, source, caption, anchor_text, conversation_id=None: _async_return(
         {"op": "insert", "noteId": note_id, "contentType": "editorjs", "blockId": "nb1", "afterBlockId": "p1"}
     )
     tool_call_msg = AIMessage(content="", tool_calls=[{
@@ -524,7 +524,7 @@ async def test_attachment_urls_reach_state_for_insert_image(monkeypatch, fake_ja
 
     captured = {}
 
-    async def fake_insert(username, note_id, source, caption, anchor_text):
+    async def fake_insert(username, note_id, source, caption, anchor_text, conversation_id=None):
         captured["source"] = source
         return {"op": "insert", "noteId": note_id, "contentType": "markdown"}
 
@@ -555,7 +555,7 @@ def _edit_then(monkeypatch, fake_java_client, second_tool):
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     from tools.edit_image import make_edit_image_tools
 
-    fake_java_client.insert_note_image = lambda username, note_id, source, caption, anchor_text: _async_return(
+    fake_java_client.insert_note_image = lambda username, note_id, source, caption, anchor_text, conversation_id=None: _async_return(
         {"op": "insert", "noteId": note_id, "contentType": "editorjs", "blockId": "nb1"}
     )
     model = FakeMessagesListChatModel(responses=[
@@ -607,3 +607,34 @@ async def test_note_content_update_is_not_lost_when_turn_errors_afterwards(monke
     types = [e["type"] for e in events]
     assert types[-1] == "error"
     assert "note_content_updated" in types
+
+
+async def test_edit_event_is_streamed_as_soon_as_tool_ends(monkeypatch, fake_java_client):
+    """edit_note 结束后、下一个工具开始前，note_content_updated 就应该已经推送出去。"""
+    from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+    from tools.content_cache import ContentCache
+    from tools.edit_note import make_note_edit_tools
+    from tools.search_workspace import make_search_workspace_tool
+
+    fake_java_client.edit_note = lambda username, note_id, conversation_id, operations: _async_return(
+        {"noteId": note_id, "contentType": "editorjs", "turnId": "77", "ops": []})
+    model = FakeMessagesListChatModel(responses=[
+        AIMessage(content="", tool_calls=[{"name": "edit_note", "args": {
+            "operations": [{"op": "insert", "after": "end", "markdown": "x"}]}, "id": "c1"}]),
+        AIMessage(content="", tool_calls=[{"name": "search_workspace", "args": {"query": "q"}, "id": "c2"}]),
+        AIMessage(content="完成"),
+    ])
+
+    def fake_builder(java_client, provider, citations_sink=None, block_update_sink=None, media_block_update_sink=None,
+                     project_field_update_sink=None, note_content_update_sink=None):
+        tools = [*make_note_edit_tools(java_client, ContentCache(), note_content_update_sink),
+                 make_search_workspace_tool(java_client, ContentCache())]
+        return build_graph_builder(model, tools), tools
+
+    monkeypatch.setattr(chat_route, "build_default_graph_builder", fake_builder)
+
+    events = await _collect_events(ChatStreamRequest(username="alice", content="改", conversationId="alice",
+                                                     currentNoteId=9))
+
+    types = [e["type"] for e in events]
+    assert types.index("note_content_updated") < types.index("tool_call")

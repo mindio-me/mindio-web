@@ -71,7 +71,9 @@ def make_edit_image_tools(java_client: JavaClient, note_content_updates: list | 
             source = {"type": "url", "url": image_url}
 
         try:
-            result = await java_client.insert_note_image(state["username"], note_id, source, caption, anchor_text)
+            result = await java_client.insert_note_image(
+                state["username"], note_id, source, caption, anchor_text, conversation_id=state.get("conversation_id"),
+            )
         except Exception as e:
             return f"插入图片失败：{e}"
         _record(note_id, result)
@@ -88,7 +90,9 @@ def make_edit_image_tools(java_client: JavaClient, note_content_updates: list | 
         if not target:
             return "需要提供 note_id（当前也没有正在编辑的笔记）。"
         try:
-            result = await java_client.delete_note_image(state["username"], target, index)
+            result = await java_client.delete_note_image(
+                state["username"], target, index, conversation_id=state.get("conversation_id"),
+            )
         except Exception as e:
             return f"删除图片失败：{e}"
         _record(target, result)
@@ -104,7 +108,9 @@ def make_edit_image_tools(java_client: JavaClient, note_content_updates: list | 
         if not target:
             return "需要提供 note_id（当前也没有正在编辑的笔记）。"
         try:
-            result = await java_client.set_note_image_caption(state["username"], target, index, caption)
+            result = await java_client.set_note_image_caption(
+                state["username"], target, index, caption, conversation_id=state.get("conversation_id"),
+            )
         except Exception as e:
             return f"修改图注失败：{e}"
         _record(target, result)

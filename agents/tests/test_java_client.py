@@ -448,3 +448,43 @@ async def test_write_errors_surface_java_message(test_settings):
 
     with pytest.raises(JavaClientError, match="找不到包含「xx」的段落"):
         await client.delete_note_image("alice", 9, 1)
+
+
+async def test_get_note_blocks_and_404(test_settings):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/9/blocks"):
+            assert dict(request.url.params) == {"username": "alice"}
+            return httpx.Response(200, json={"blocks": []})
+        return httpx.Response(404, json={})
+
+    client = _client_with_transport(test_settings, handler)
+    assert await client.get_note_blocks("alice", 9) == {"blocks": []}
+    assert await client.get_note_blocks("alice", 8) is None
+
+
+async def test_edit_note_posts_operations_with_conversation(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"], captured["body"] = request.url, json.loads(request.content)
+        return httpx.Response(200, json={"ops": []})
+
+    client = _client_with_transport(test_settings, handler)
+    await client.edit_note("alice", 9, "5", [{"op": "insert", "after": "end", "markdown": "x"}])
+
+    assert captured["url"].path == "/internal/documents/notes/9/edits"
+    assert dict(captured["url"].params) == {"username": "alice", "conversationId": "5"}
+    assert captured["body"] == {"operations": [{"op": "insert", "after": "end", "markdown": "x"}]}
+
+
+async def test_image_writes_pass_conversation_id(test_settings):
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json={})
+
+    client = _client_with_transport(test_settings, handler)
+    await client.delete_note_image("alice", 9, 1, conversation_id="5")
+
+    assert seen == [{"username": "alice", "conversationId": "5"}]

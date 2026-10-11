@@ -40,6 +40,7 @@ from tools.update_project_field import make_update_project_field_tool
 from tools.update_todo_list import update_todo_list
 from tools.view_image import make_view_image_tool
 from tools.edit_image import make_edit_image_tools
+from tools.edit_note import make_note_edit_tools
 
 SYSTEM_PROMPT = (
     "你是这款笔记应用内置的AI助手，可以自由对话、协助写作和总结。"
@@ -75,6 +76,10 @@ SYSTEM_PROMPT = (
     "没有或不够时可以再用 search_workspace 按项目名/关键词搜索可能相关但未显式关联的笔记；"
     "确实找不到任何相关材料就如实告诉用户，不要凭空编造。写入时只调用 update_project_field，"
     "且只写用户当前对话语言对应的那个字段（中文对话写 descriptionZh，英文对话写 description）。"
+    "\n\n关于直接编辑笔记正文：用户要求改写、精简、合并、删除、调整顺序、补充内容，或者把你回复中的内容"
+    "写进笔记时，先调用 read_note_blocks 读取块视图，再用 edit_note 一次提交需要的操作，直接生效，不需要"
+    "用户确认（用户可以在回复下方一键撤销本轮修改）。不要说做不到，也不要让用户自己复制粘贴。"
+    "只改用户要求改的部分；改完简要说明改了哪里。edit_note 提示文档被修改过时，重新读取后再改。"
 )
 
 RECURSION_LIMIT = 30  # 兜底熔断，正常深度研究不应该触碰到这个上限
@@ -127,6 +132,7 @@ def build_default_graph_builder(
         make_analyze_image_tool(java_client, media_block_update_sink),
         make_view_image_tool(java_client),
         *make_edit_image_tools(java_client, note_content_update_sink),
+        *make_note_edit_tools(java_client, cache, note_content_update_sink),
         make_transcribe_audio_tool(java_client, default_asr_client, media_block_update_sink),
         make_get_project_notes_tool(java_client),
         make_update_project_field_tool(java_client, project_field_update_sink),
