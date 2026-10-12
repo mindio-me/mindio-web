@@ -140,6 +140,9 @@ public class SecurityConfig {
         // 允许的请求头
         configuration.setAllowedHeaders(List.of("*"));
 
+        // 让浏览器能读到 .mindio 导出的统计响应头（跨域时默认不暴露）
+        configuration.setExposedHeaders(List.of("X-Mindio-Note-Count", "X-Mindio-Missing-Assets", "Content-Disposition"));
+
         // 允许发送凭证
         configuration.setAllowCredentials(true);
 

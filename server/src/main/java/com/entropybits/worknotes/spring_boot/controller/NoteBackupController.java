@@ -48,9 +48,17 @@ public class NoteBackupController {
                                                       HttpServletRequest http) throws IOException {
         NoteExportService.ExportResult result = exportService.export(userDetails.getUsername(), request.noteIds(),
                 Boolean.TRUE.equals(request.all()), originOf(http), request.exportedFrom());
-        long size = Files.size(result.file());
-        // 流读完关闭时删除临时文件
-        InputStream in = Files.newInputStream(result.file(), StandardOpenOption.DELETE_ON_CLOSE);
+        InputStream in;
+        long size;
+        try {
+            size = Files.size(result.file());
+            // 流读完关闭时删除临时文件
+            in = Files.newInputStream(result.file(), StandardOpenOption.DELETE_ON_CLOSE);
+        } catch (IOException | RuntimeException e) {
+            // 打开流之前失败时，临时文件不会被自动删除，这里手动清理
+            Files.deleteIfExists(result.file());
+            throw e;
+        }
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"mindio-notes.mindio\"")
                 .header("X-Mindio-Note-Count", String.valueOf(result.noteCount()))
@@ -73,10 +81,37 @@ public class NoteBackupController {
                 request.overwrite() == null ? List.of() : request.overwrite()));
     }
 
-    /** 当前请求的 origin（经反向代理时是对外域名），用来识别正文里写成本站绝对地址的上传文件 */
-    private static String originOf(HttpServletRequest http) {
+    /**
+     * 当前请求的 origin（经反向代理时是对外域名），用来识别正文里写成本站绝对地址的上传文件。
+     * 优先取 X-Forwarded-Proto / X-Forwarded-Host（取第一个逗号分隔的值），没有时退回到直连的 scheme/host/port。
+     */
+    static String originOf(HttpServletRequest http) {
+        String scheme = firstForwarded(http.getHeader("X-Forwarded-Proto"));
+        String forwardedHost = firstForwarded(http.getHeader("X-Forwarded-Host"));
+        if (scheme == null) {
+            scheme = http.getScheme();
+        }
+        if (forwardedHost != null) {
+            return scheme + "://" + stripDefaultPort(forwardedHost, scheme);
+        }
         int port = http.getServerPort();
-        boolean defaultPort = ("http".equals(http.getScheme()) && port == 80) || ("https".equals(http.getScheme()) && port == 443);
-        return http.getScheme() + "://" + http.getServerName() + (defaultPort ? "" : ":" + port);
+        boolean defaultPort = ("http".equals(scheme) && port == 80) || ("https".equals(scheme) && port == 443);
+        return scheme + "://" + http.getServerName() + (defaultPort ? "" : ":" + port);
+    }
+
+    private static String firstForwarded(String header) {
+        if (header == null) {
+            return null;
+        }
+        String first = header.split(",")[0].trim();
+        return first.isEmpty() ? null : first;
+    }
+
+    /** X-Forwarded-Host 可能带端口；如果是该 scheme 的默认端口则省略，与直连时的 origin 保持一致 */
+    private static String stripDefaultPort(String host, String scheme) {
+        if (("http".equals(scheme) && host.endsWith(":80")) || ("https".equals(scheme) && host.endsWith(":443"))) {
+            return host.substring(0, host.lastIndexOf(':'));
+        }
+        return host;
     }
 }
