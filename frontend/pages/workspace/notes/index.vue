@@ -574,6 +574,13 @@
       @select-blank="handleCreateBlankNote"
       @select-feishu="handleImportFeishu"
       @select-markdown="handleImportMarkdown"
+      @select-mindio="handleImportMindio"
+    />
+
+    <NoteImportDialog
+      v-model="noteImportDialogVisible"
+      :file="noteImportFile"
+      @imported="handleMindioImported"
     />
 
     <FeishuCredentialDialog
@@ -719,6 +726,7 @@ export default {
   mixins: [workspaceLayoutResize, workspaceAiDock, editorjsHost],
   components: {
     WechatPublishDialog: () => import('~/components/WechatPublishDialog.vue'),
+    NoteImportDialog: () => import('~/components/NoteImportDialog.vue'),
     TranslationDialog: () => import('~/components/TranslationDialog.vue'),
     LinkedinShareDialog: () => import('~/components/LinkedinShareDialog.vue')
   },
@@ -747,6 +755,9 @@ export default {
   },
   data() {
     return {
+      // 笔记备份：导入 .mindio
+      noteImportDialogVisible: false,
+      noteImportFile: null,
       // 笔记备份：列表多选导出
       selectMode: false,
       selectedNoteIds: [],
@@ -1173,6 +1184,15 @@ export default {
     },
     showCreateNoteDialog() {
       this.createNoteDialogVisible = true
+    },
+    handleImportMindio({ file }) {
+      // 重新赋值同一个 File 对象时 watch 不会触发，所以先清空
+      this.noteImportFile = null
+      this.$nextTick(() => { this.noteImportFile = file })
+    },
+    async handleMindioImported() {
+      this.page = 0
+      await this.loadNotes()
     },
     async handleCreateBlankNote() {
       try {

@@ -46,6 +46,17 @@
             <p class="option-desc">{{ $t('workspace.createNote.markdownDesc') }}</p>
           </div>
         </div>
+
+        <!-- 导入 mindio 备份 -->
+        <div class="option-card" @click="handleSelect('mindio')">
+          <div class="option-icon">
+            <i class="el-icon-upload2"></i>
+          </div>
+          <div class="option-content">
+            <h3 class="option-title">{{ $t('workspace.noteBackup.importOption') }}</h3>
+            <p class="option-desc">{{ $t('workspace.noteBackup.importOptionDesc') }}</p>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -56,6 +67,13 @@
       accept=".md,.markdown"
       style="display: none"
       @change="handleFileSelect"
+    />
+    <input
+      ref="mindioInput"
+      type="file"
+      accept=".mindio"
+      style="display: none"
+      @change="handleMindioSelect"
     />
   </el-dialog>
 </template>
@@ -93,7 +111,20 @@ export default {
       } else if (type === 'markdown') {
         // 触发文件选择
         this.$refs.fileInput.click()
+      } else if (type === 'mindio') {
+        this.$refs.mindioInput.click()
       }
+    },
+    handleMindioSelect(event) {
+      const file = event.target.files[0]
+      event.target.value = ''
+      if (!file) return
+      if (!/\.mindio$/i.test(file.name)) {
+        this.$message.error(this.$t('workspace.noteBackup.invalidFile'))
+        return
+      }
+      this.$emit('select-mindio', { file })
+      this.handleClose()
     },
     async handleFileSelect(event) {
       const file = event.target.files[0]
