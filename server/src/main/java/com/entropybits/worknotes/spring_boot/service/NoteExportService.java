@@ -111,8 +111,12 @@ public class NoteExportService {
         if (note.getUid() != null) return note.getUid();
         String candidate = UUID.randomUUID().toString();
         // 不调用 note.setUid：托管实体一旦变脏，提交时会被 flush 并触发 @PreUpdate 刷新 modifiedAt
-        return noteRepository.assignUidIfAbsent(note.getId(), candidate) == 1
+        // 赢得竞争时返回本次分配的值；输掉时读取胜者的 uid。REPEATABLE READ 下胜者的 uid 可能读不到
+        // （快照不可见），或笔记在导出中途被删除——此时无法写出合法条目，整次导出失败而不是静默跳过
+        String uid = noteRepository.assignUidIfAbsent(note.getId(), candidate) == 1
                 ? candidate : noteRepository.findUidById(note.getId());
+        if (uid == null) throw new BadRequestException("笔记在导出过程中被修改，请重试");
+        return uid;
     }
 
     private String packText(String text, String uid, NoteAssetRewriter rewriter, MindioPackageWriter writer,

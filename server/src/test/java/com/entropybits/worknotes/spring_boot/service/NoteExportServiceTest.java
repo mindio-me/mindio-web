@@ -130,9 +130,17 @@ class NoteExportServiceTest {
     }
 
     @Test
-    void missingAndTraversalUploadsAreReportedNotPacked() {
+    void missingAndTraversalUploadsAreReportedNotPacked() throws Exception {
+        // 真实存在的文件，位于上传目录之外（out 与 uploads 是两个兄弟临时目录）。
+        // 没有越界保护时，/api/uploads/../<out>/secret.txt 会解析到它并被打包。
+        Path secret = out.resolve("secret.txt");
+        Files.writeString(secret, "top secret");
+        String rel = uploads.relativize(secret).toString().replace('\\', '/');
+        assertThat(rel).startsWith("..");
+        String traversal = "/api/uploads/" + rel;
+
         Note n = note(5L, alice, "11111111-1111-1111-1111-111111111111",
-                "{\"a\":\"/api/uploads/file/gone.png\",\"b\":\"/api/uploads/../../etc/passwd\"}");
+                "{\"a\":\"/api/uploads/file/gone.png\",\"b\":\"" + traversal + "\"}");
         n.setSectionTypes(new ArrayList<>());
         n.setSectionContents(new ArrayList<>());
         when(noteRepository.findAllById(List.of(5L))).thenReturn(List.of(n));
@@ -143,7 +151,32 @@ class NoteExportServiceTest {
         assertThat(r.missingAssetCount()).isEqualTo(2);
         assertThat(pkg.assets()).isEmpty();
         assertThat(pkg.manifest().missingAssets()).hasSize(2);
-        assertThat(pkg.notes().get(0).content()).contains("/api/uploads/file/gone.png");
+        assertThat(pkg.manifest().missingAssets()).extracting(MindioPackage.MissingAsset::url)
+                .containsExactlyInAnyOrder("/api/uploads/file/gone.png", traversal);
+        assertThat(pkg.notes().get(0).content()).contains("/api/uploads/file/gone.png").contains(traversal);
+    }
+
+    @Test
+    void uidLostAndNotReadableFailsExportInsteadOfWritingNullUid() {
+        Note n = note(6L, alice, null, "{}");
+        when(noteRepository.findAllById(List.of(6L))).thenReturn(List.of(n));
+        when(noteRepository.assignUidIfAbsent(eq(6L), anyString())).thenReturn(0);
+        when(noteRepository.findUidById(6L)).thenReturn(null);
+
+        long before = countExportTemps();
+        assertThatThrownBy(() -> service.export("alice", List.of(6L), false, "https://mindio.example.com", "web"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("笔记在导出过程中被修改，请重试");
+        assertThat(countExportTemps()).isEqualTo(before);
+    }
+
+    static long countExportTemps() {
+        try (java.util.stream.Stream<Path> s = Files.list(Path.of(System.getProperty("java.io.tmpdir")))) {
+            return s.filter(p -> p.getFileName().toString().startsWith("mindio-export-")
+                    && p.getFileName().toString().endsWith(".mindio")).count();
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     @Test
