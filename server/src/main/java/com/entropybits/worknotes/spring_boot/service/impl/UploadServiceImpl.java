@@ -447,6 +447,16 @@ public class UploadServiceImpl implements UploadService {
     }
 
     @Override
+    public boolean isAcceptableUpload(String filename, long size) {
+        if (filename == null) return false;
+        String ext = UploadUtil.getFileExtension(filename);
+        if (ext == null || ext.isEmpty()) return false;
+        ext = ext.toLowerCase();
+        if (ALLOWED_IMAGE_EXTENSIONS.contains(ext)) return size <= maxImageSizeMb * 1024L * 1024L;
+        return ALLOWED_FILE_EXTENSIONS.contains(ext) && size <= maxFileSizeMb * 1024L * 1024L;
+    }
+
+    @Override
     public java.util.Optional<String> findOwnedImageUrlByContentHash(Long ownerId, String sha256) {
         if (ownerId == null || sha256 == null) return java.util.Optional.empty();
         java.nio.file.Path root = java.nio.file.Path.of(uploadPathConfig.getUploadPath()).toAbsolutePath().normalize();

@@ -58,6 +58,8 @@ class NoteImportPreviewTest {
     void setUp() {
         lenient().when(uploadPathConfig.getUploadPath()).thenReturn(uploads.toString());
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
+        lenient().when(uploadService.isAcceptableUpload(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
+                .thenAnswer(inv -> !((String) inv.getArgument(0)).endsWith(".bin"));
         service = new NoteImportService(noteRepository, userRepository, revisionService, uploadService,
                 contentIndexingService, store, uploadPathConfig, om, "", 500);
     }
@@ -96,7 +98,28 @@ class NoteImportPreviewTest {
                 UID2, "本机标题", "2026-02-01T00:00:00Z", "包里标题", "2026-03-01T00:00:00Z"));
         assertThat(p.missingAssets()).containsExactly("d".repeat(64) + ".jpg");
         verify(noteRepository).findByOwnerAndUidIn(alice, List.of(UID1, UID2));
-        verifyNoInteractions(uploadService, revisionService);
+        verifyNoInteractions(revisionService);
+    }
+
+    @Test
+    void assetsTheUploadServiceWouldRejectAreListedAsMissingOnce() throws Exception {
+        Path png = Files.writeString(uploads.resolve("src.png"), "img");
+        Path bin = Files.writeString(uploads.resolve("src.bin"), "blob");
+        String binName = "b".repeat(64) + ".bin";
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (MindioPackageWriter w = new MindioPackageWriter(bytes, om)) {
+            w.writeNote(pn(UID1, "一", "{\"u\":\"asset://" + HASH + ".png\",\"v\":\"asset://" + binName + "\",\"w\":\"asset://" + binName + "\"}"));
+            w.writeAsset(HASH + ".png", png);
+            w.writeAsset(binName, bin);
+            w.writeAsset("a".repeat(64) + ".bin", bin);
+            w.writeManifest(new MindioPackage.Manifest(MindioPackage.FORMAT, 1, null, "desktop", 1, List.of()));
+        }
+        when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenReturn(List.of());
+
+        NoteImportService.Preview p = service.preview("alice",
+                new MockMultipartFile("file", "b.mindio", "application/octet-stream", bytes.toByteArray()));
+
+        assertThat(p.missingAssets()).containsExactly(binName);
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
 import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
@@ -119,7 +120,8 @@ public class NoteImportService {
                 }
                 for (String text : textsOf(n)) {
                     for (String name : rewriter.findAssetNames(text)) {
-                        if (!pkg.assets().containsKey(name)) missing.add(name);
+                        Path asset = pkg.assets().get(name);
+                        if (asset == null || !isAcceptable(name, asset)) missing.add(name);
                     }
                 }
             }
@@ -175,6 +177,7 @@ public class NoteImportService {
                 .collect(Collectors.toMap(Note::getUid, Function.identity()));
         NoteAssetRewriter rewriter = rewriter();
         Map<String, String> assetUrls = new HashMap<>();
+        Set<String> unusable = new HashSet<>();
         String turnId = "import-" + importToken;
 
         int created = 0, overwritten = 0, kept = 0;
@@ -184,7 +187,7 @@ public class NoteImportService {
                 kept++;
                 continue;
             }
-            Map<String, String> urls = resolveAssets(n, rewriter, pkg, user, assetUrls, writtenFiles);
+            Map<String, String> urls = resolveAssets(n, rewriter, pkg, user, assetUrls, unusable, writtenFiles);
             String content = rewriter.restoreAssets(n.content(), urls);
             List<String> sectionTypes = new ArrayList<>();
             List<String> sectionContents = new ArrayList<>();
@@ -224,19 +227,33 @@ public class NoteImportService {
     /** 每个资源在一次导入里只落盘一次；图片优先复用本机已有的同哈希文件 */
     private Map<String, String> resolveAssets(MindioPackage.PackagedNote n, NoteAssetRewriter rewriter,
                                               MindioPackageReader.ReadPackage pkg, User user,
-                                              Map<String, String> assetUrls, List<Path> writtenFiles) {
+                                              Map<String, String> assetUrls, Set<String> unusable,
+                                              List<Path> writtenFiles) {
         for (String text : textsOf(n)) {
             for (String name : rewriter.findAssetNames(text)) {
-                if (assetUrls.containsKey(name) || !pkg.assets().containsKey(name)) continue;
+                if (assetUrls.containsKey(name) || unusable.contains(name) || !pkg.assets().containsKey(name)) continue;
+                Path asset = pkg.assets().get(name);
+                // 单个资源不合格（类型/大小不被接受，或内容与文件名里的哈希对不上）只让它自己缺失，占位符留在正文里，其余照常导入
+                if (!isAcceptable(name, asset) || !hashMatches(name, asset)) {
+                    unusable.add(name);
+                    continue;
+                }
                 String hash = name.substring(0, 64);
                 String ext = name.length() > 65 ? name.substring(65).toLowerCase(Locale.ROOT) : "";
                 boolean image = IMAGE_EXTS.contains(ext);
                 String url = image ? uploadService.findOwnedImageUrlByContentHash(user.getId(), hash).orElse(null) : null;
                 if (url == null) {
-                    PathMultipartFile file = new PathMultipartFile(pkg.assets().get(name), name);
-                    FileResultVo vo = image
-                            ? uploadService.imageUpload(file, "note", 0, user.getId())
-                            : uploadService.fileUpload(file, "note", 0, user.getId());
+                    PathMultipartFile file = new PathMultipartFile(asset, name);
+                    FileResultVo vo;
+                    try {
+                        vo = image
+                                ? uploadService.imageUpload(file, "note", 0, user.getId())
+                                : uploadService.fileUpload(file, "note", 0, user.getId());
+                    } catch (BadRequestException e) {
+                        // 兜底：预判漏掉的拒绝原因同样只影响这一个资源（UploadServiceImpl 无事务注解，不会把外层事务标成仅回滚）
+                        unusable.add(name);
+                        continue;
+                    }
                     url = vo.getUrl();
                     rewriter.findUploads(url).stream().map(NoteAssetRewriter.UploadRef::file)
                             .filter(java.util.Objects::nonNull).forEach(writtenFiles::add);
@@ -245,6 +262,22 @@ public class NoteImportService {
             }
         }
         return assetUrls;
+    }
+
+    private boolean isAcceptable(String name, Path asset) {
+        try {
+            return uploadService.isAcceptableUpload(name, Files.size(asset));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static boolean hashMatches(String name, Path asset) {
+        try {
+            return NoteAssetRewriter.sha256Hex(asset).equals(name.substring(0, 64));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private static String normalizeTitle(String title) {

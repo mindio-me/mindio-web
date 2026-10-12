@@ -81,5 +81,11 @@ public interface UploadService {
      * 只有图片登记了 contentHash，非图片文件总是返回空。
      */
     java.util.Optional<String> findOwnedImageUrlByContentHash(Long ownerId, String sha256);
+
+    /**
+     * Whether the file would pass the upload allowlist and size limit (images use the image limit, others the file limit; empty extension is rejected).
+     * Shares the checks of imageUpload/fileUpload so batch imports can pre-screen each file before writing anything.
+     */
+    boolean isAcceptableUpload(String filename, long size);
 }
 

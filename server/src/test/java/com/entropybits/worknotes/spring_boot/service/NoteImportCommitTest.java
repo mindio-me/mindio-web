@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -79,6 +80,8 @@ class NoteImportCommitTest {
             if (n.getId() == null) n.setId(100L);
             return n;
         });
+        lenient().when(uploadService.isAcceptableUpload(anyString(), anyLong()))
+                .thenAnswer(inv -> !((String) inv.getArgument(0)).endsWith(".bin"));
         service = new NoteImportService(noteRepository, userRepository, revisionService, uploadService,
                 contentIndexingService, store, uploadPathConfig, om, "", 500);
         TransactionSynchronizationManager.initSynchronization();
@@ -245,6 +248,66 @@ class NoteImportCommitTest {
 
         assertThat(written).doesNotExist();
         verify(contentIndexingService, never()).reindexNote(any());
+    }
+
+    String previewWithAssets(java.util.Map<String, Path> assets, String content) throws Exception {
+        when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenReturn(List.of());
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        try (MindioPackageWriter w = new MindioPackageWriter(bytes, om)) {
+            w.writeNote(new MindioPackage.PackagedNote(UID1, "一", "s", "2026-01-01T00:00:00Z", "2026-03-01T00:00:00Z",
+                    "editorjs", content, List.of()));
+            for (var e : assets.entrySet()) w.writeAsset(e.getKey(), e.getValue());
+            w.writeManifest(new MindioPackage.Manifest(MindioPackage.FORMAT, 1, null, "web", 1, List.of()));
+        }
+        return service.preview("alice", new org.springframework.mock.web.MockMultipartFile(
+                "file", "b.mindio", "application/octet-stream", bytes.toByteArray())).importToken();
+    }
+
+    @Test
+    void unacceptableAssetStaysAsPlaceholderWhileTheRestOfTheImportProceeds() throws Exception {
+        Path bin = Files.writeString(src.resolve("b.bin"), "blob");
+        String binName = NoteAssetRewriter.sha256Hex(bin) + ".bin";
+        String content = "{\"a\":\"asset://" + hash + ".png\",\"b\":\"asset://" + binName + "\"}";
+        String token = previewWithAssets(new java.util.LinkedHashMap<>(java.util.Map.of(
+                hash + ".png", src.resolve("a.png"), binName, bin)), content);
+        when(uploadService.findOwnedImageUrlByContentHash(1L, hash)).thenReturn(Optional.empty());
+        when(uploadService.imageUpload(any(), eq("note"), eq(0), eq(1L))).thenReturn(uploaded("/api/uploads/file/new.png"));
+
+        NoteImportService.CommitResult r = service.commit("alice", token, Set.of());
+
+        assertThat(r.created()).isEqualTo(1);
+        ArgumentCaptor<Note> saved = ArgumentCaptor.forClass(Note.class);
+        verify(noteRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getContent()).contains("/api/uploads/file/new.png").contains("asset://" + binName);
+        verify(uploadService, times(1)).imageUpload(any(), eq("note"), eq(0), eq(1L));
+        verify(uploadService, never()).fileUpload(any(), anyString(), anyInt(), any());
+    }
+
+    @Test
+    void uploadRejectionOfSingleAssetIsSwallowedAndLeavesPlaceholder() throws Exception {
+        String token = preview("alice", pn(UID1, "一"));
+        when(uploadService.findOwnedImageUrlByContentHash(1L, hash)).thenReturn(Optional.empty());
+        when(uploadService.imageUpload(any(), eq("note"), eq(0), eq(1L))).thenThrow(new BadRequestException("nope"));
+
+        assertThat(service.commit("alice", token, Set.of()).created()).isEqualTo(1);
+        ArgumentCaptor<Note> saved = ArgumentCaptor.forClass(Note.class);
+        verify(noteRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getContent()).contains("asset://" + hash + ".png");
+    }
+
+    @Test
+    void assetWhoseBytesDoNotMatchItsNameIsTreatedAsMissing() throws Exception {
+        String wrongName = "e".repeat(64) + ".png";
+        String token = previewWithAssets(java.util.Map.of(wrongName, src.resolve("a.png")),
+                "{\"a\":\"asset://" + wrongName + "\"}");
+
+        assertThat(service.commit("alice", token, Set.of()).created()).isEqualTo(1);
+
+        ArgumentCaptor<Note> saved = ArgumentCaptor.forClass(Note.class);
+        verify(noteRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue().getContent()).contains("asset://" + wrongName);
+        verify(uploadService, never()).findOwnedImageUrlByContentHash(any(), anyString());
+        verify(uploadService, never()).imageUpload(any(), anyString(), anyInt(), any());
     }
 
     @Test
