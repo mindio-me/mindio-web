@@ -6,6 +6,8 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
@@ -57,6 +59,7 @@ class NoteAssetRewriterTest {
     }
 
     @Test
+    @EnabledOnOs(OS.WINDOWS)
     void pathIllegalOnThisOsGivesNullFileInsteadOfThrowing() {
         List<NoteAssetRewriter.UploadRef> colon = rewriter.findUploads("see /api/uploads/file/a.png:");
         assertThat(colon).hasSize(1);
