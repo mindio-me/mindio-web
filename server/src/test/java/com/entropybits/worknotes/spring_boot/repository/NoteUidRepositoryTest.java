@@ -92,6 +92,25 @@ class NoteUidRepositoryTest {
     }
 
     @Test
+    void overwriteSequenceOnManagedEntityKeepsPackageModifiedAt() {
+        Note n = note(alice, null);
+        LocalDateTime packageTime = LocalDateTime.of(2025, 5, 6, 7, 8, 9);
+        em.clear();
+
+        Note managed = noteRepository.findById(n.getId()).orElseThrow();
+        managed.setTitle("overwritten");
+        managed.setContent("{\"blocks\":[]}");
+        noteRepository.saveAndFlush(managed);
+        assertThat(noteRepository.overwriteModifiedAt(managed.getId(), packageTime)).isEqualTo(1);
+        em.flush();
+        em.clear();
+
+        Note reread = noteRepository.findById(n.getId()).orElseThrow();
+        assertThat(reread.getTitle()).isEqualTo("overwritten");
+        assertThat(reread.getModifiedAt()).isEqualTo(packageTime);
+    }
+
+    @Test
     void listsOnlyOwnersEditorjsNotes() {
         note(alice, null);
         noteRepository.saveAndFlush(Note.builder().title("md").contentType("markdown").owner(alice).build());
