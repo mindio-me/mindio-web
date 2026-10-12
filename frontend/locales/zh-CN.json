@@ -398,6 +398,7 @@
       "invalidFile": "请选择 .mindio 备份文件",
       "previewing": "正在读取备份…",
       "importFailed": "导入失败：",
+      "tooLarge": "备份过大，请在笔记列表中分批选择导出",
       "conflictTitle": "以下笔记本机已有",
       "conflictIntro": "备份里有 {n} 篇笔记在本机已存在，请选择每篇的处理方式。另有 {m} 篇新笔记会直接导入。",
       "keepAll": "全部保留",

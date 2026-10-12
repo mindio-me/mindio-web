@@ -398,6 +398,7 @@
       "invalidFile": "Please choose a .mindio backup file",
       "previewing": "Reading backup…",
       "importFailed": "Import failed: ",
+      "tooLarge": "The backup is too large. Select fewer notes in the note list and export them in batches.",
       "conflictTitle": "These notes already exist",
       "conflictIntro": "{n} notes in the backup already exist here. Choose what to do with each. {m} new notes will be imported directly.",
       "keepAll": "Keep all",

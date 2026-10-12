@@ -68,7 +68,7 @@ export default {
   name: 'NoteImportDialog',
   props: {
     value: { type: Boolean, default: false },
-    file: { type: File, default: null }
+    file: { type: typeof File !== 'undefined' ? File : Object, default: null }
   },
   data() {
     return { loading: false, committing: false, preview: null, choices: {}, runId: 0 }
@@ -103,7 +103,11 @@ export default {
         }
       } catch (e) {
         if (runId !== this.runId) return
-        this.$message.error(this.$t('workspace.noteBackup.importFailed') + await errorMessageOf(e, ''))
+        if (e && e.response && e.response.status === 413) {
+          this.$message.error(this.$t('workspace.noteBackup.tooLarge'))
+        } else {
+          this.$message.error(this.$t('workspace.noteBackup.importFailed') + await errorMessageOf(e, ''))
+        }
         this.close()
       } finally {
         if (runId === this.runId) this.loading = false
