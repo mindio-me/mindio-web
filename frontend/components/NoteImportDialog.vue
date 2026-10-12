@@ -122,6 +122,8 @@ export default {
         this.close()
       } catch (e) {
         this.$message.error(this.$t('workspace.noteBackup.importFailed') + await errorMessageOf(e, ''))
+        // 导入令牌提交时即被消费，失败后重试只会报"已过期"，所以直接关闭，让用户重新选文件
+        this.close()
       } finally {
         this.committing = false
       }
