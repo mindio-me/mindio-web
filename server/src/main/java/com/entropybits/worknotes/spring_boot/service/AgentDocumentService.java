@@ -4,6 +4,7 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
+import com.entropybits.worknotes.spring_boot.dto.AgentClipListing;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentContent;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentSummary;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
@@ -16,6 +17,7 @@ import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.SourceClipRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,8 @@ import java.util.Map;
 public class AgentDocumentService {
 
     private static final int TITLE_MATCH_LIMIT = 10;
+    private static final int CLIP_LIST_DEFAULT_LIMIT = 50;
+    private static final int CLIP_LIST_MAX_LIMIT = 200;
     // 视觉模型单图上限普遍在 10~20MB，base64 后还要再胀 1/3，这里取保守值
     private static final long MAX_IMAGE_BYTES = 10L * 1024 * 1024;
 
@@ -69,6 +73,51 @@ public class AgentDocumentService {
         PageRequest page = PageRequest.of(0, TITLE_MATCH_LIMIT, Sort.by(Sort.Direction.DESC, "modifiedAt"));
         return noteRepository.findByOwnerAndTitleContaining(user, titleKeyword.trim(), page).stream()
                 .map(n -> new AgentDocumentSummary("note", n.getId(), n.getTitle()))
+                .toList();
+    }
+
+    /**
+     * 按域名/标签/关键词精确筛选收藏，给"列出所有 github 上的收藏"这类请求用——语义检索只回
+     * topK 条，而且收藏的 URL 不在索引文本里，按网站找天然找不全。
+     */
+    @Transactional(readOnly = true)
+    public AgentClipListing listClips(String username, String domain, String tag, String keyword, Integer limit) {
+        User user = getUser(username);
+        String host = normalizeHost(domain);
+        int size = limit == null ? CLIP_LIST_DEFAULT_LIMIT : Math.max(1, Math.min(limit, CLIP_LIST_MAX_LIMIT));
+        Page<SourceClip> page = clipRepository.filterForAgent(user,
+                host == null ? null : "%://" + host + "/%",
+                host == null ? null : "%://" + host,
+                host == null ? null : "%://%." + host + "/%",
+                host == null ? null : "%://%." + host,
+                blankToNull(keyword), blankToNull(tag), PageRequest.of(0, size));
+        List<AgentClipListing.Item> items = page.getContent().stream()
+                .map(c -> new AgentClipListing.Item(c.getId(), c.getTitle(), c.getSourceUrl(), activeTagNames(c),
+                        c.getOriginalBookmarkedAt() != null ? c.getOriginalBookmarkedAt() : c.getCreatedAt()))
+                .toList();
+        return new AgentClipListing(page.getTotalElements(), items);
+    }
+
+    /** 模型传来的可能是 "https://www.github.com/"、"GitHub.com" 之类，统一成小写裸 host；www. 去掉后由子域匹配兜住。 */
+    static String normalizeHost(String domain) {
+        String d = blankToNull(domain);
+        if (d == null) return null;
+        d = d.toLowerCase().replaceFirst("^[a-z][a-z0-9+.-]*://", "");
+        int slash = d.indexOf('/');
+        if (slash >= 0) d = d.substring(0, slash);
+        if (d.startsWith("www.")) d = d.substring(4);
+        return d.isEmpty() ? null : d;
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
+    }
+
+    private static List<String> activeTagNames(SourceClip clip) {
+        return clip.getClipTagLinks().stream()
+                .filter(l -> Boolean.TRUE.equals(l.getManuallyAdded()) || Boolean.TRUE.equals(l.getAiSuggested()))
+                .map(l -> l.getTag().getName())
+                .sorted()
                 .toList();
     }
 

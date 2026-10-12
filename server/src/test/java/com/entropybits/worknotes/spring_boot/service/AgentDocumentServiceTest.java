@@ -4,11 +4,14 @@
  */
 package com.entropybits.worknotes.spring_boot.service;
 
+import com.entropybits.worknotes.spring_boot.dto.AgentClipListing;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentContent;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentSummary;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
+import com.entropybits.worknotes.spring_boot.entity.ClipTagLink;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.SourceClip;
+import com.entropybits.worknotes.spring_boot.entity.Tag;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
@@ -22,10 +25,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -67,6 +73,36 @@ class AgentDocumentServiceTest {
         List<AgentDocumentSummary> result = service.findNotesByTitle("alice", "sms-gateway");
 
         assertThat(result).containsExactly(new AgentDocumentSummary("note", 10L, "2026-10-05-sms-gateway-design"));
+    }
+
+    @Test
+    void listClips_matchesHostOrSubdomainAndReportsTotalBeyondLimit() {
+        LocalDateTime bookmarkedAt = LocalDateTime.of(2019, 3, 1, 0, 0);
+        Tag tag = Tag.builder().name("开源").build();
+        SourceClip c = SourceClip.builder().id(7L).title("vuejs/core").sourceUrl("https://github.com/vuejs/core")
+                .originalBookmarkedAt(bookmarkedAt).owner(alice).build();
+        c.getClipTagLinks().add(ClipTagLink.builder().clip(c).tag(tag).manuallyAdded(true).build());
+        c.getClipTagLinks().add(ClipTagLink.builder().clip(c).tag(Tag.builder().name("被移除").build()).build());
+        when(clipRepository.filterForAgent(eq(alice), eq("%://github.com/%"), eq("%://github.com"),
+                eq("%://%.github.com/%"), eq("%://%.github.com"), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(c), PageRequest.of(0, 1), 42));
+
+        AgentClipListing result = service.listClips("alice", "https://www.GitHub.com/", null, " ", 1);
+
+        assertThat(result.total()).isEqualTo(42);
+        assertThat(result.items()).containsExactly(new AgentClipListing.Item(
+                7L, "vuejs/core", "https://github.com/vuejs/core", List.of("开源"), bookmarkedAt));
+    }
+
+    @Test
+    void listClips_withoutDomainPassesNullHostPatternsAndCapsLimit() {
+        when(clipRepository.filterForAgent(eq(alice), isNull(), isNull(), isNull(), isNull(),
+                eq("vue"), eq("开源"), eq(PageRequest.of(0, 200))))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        AgentClipListing result = service.listClips("alice", null, "开源", "vue", 5000);
+
+        assertThat(result.total()).isZero();
     }
 
     @Test

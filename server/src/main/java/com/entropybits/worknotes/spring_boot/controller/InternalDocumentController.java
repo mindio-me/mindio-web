@@ -4,6 +4,7 @@
  */
 package com.entropybits.worknotes.spring_boot.controller;
 
+import com.entropybits.worknotes.spring_boot.dto.AgentClipListing;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentContent;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentSummary;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
@@ -38,6 +39,15 @@ public class InternalDocumentController {
     @GetMapping("/notes/{noteId}")
     public AgentDocumentContent readNote(@RequestParam String username, @PathVariable Long noteId) {
         return agentDocumentService.readNote(username, noteId);
+    }
+
+    @GetMapping("/clips")
+    public AgentClipListing listClips(@RequestParam String username,
+                                      @RequestParam(required = false) String domain,
+                                      @RequestParam(required = false) String tag,
+                                      @RequestParam(required = false) String keyword,
+                                      @RequestParam(required = false) Integer limit) {
+        return agentDocumentService.listClips(username, domain, tag, keyword, limit);
     }
 
     @GetMapping("/clips/{clipId}")

@@ -63,6 +63,26 @@ public interface SourceClipRepository extends JpaRepository<SourceClip, Long> {
                                                     @Param("sourceType") SourceClip.SourceType sourceType,
                                                     Pageable pageable);
 
+    // 给 agent 的 list_clips 用的结构化筛选：域名/标签/关键词都是可选的精确过滤，补语义检索
+    // 做不到的"列出全部 xx"。域名按 host 匹配（本域或子域），四个 LIKE 由调用方拼好传入；
+    // 标签用 EXISTS 而不是 JOIN+DISTINCT——DISTINCT 配 ORDER BY 表达式在 MySQL 8 会报 3065。
+    @Query("SELECT c FROM SourceClip c WHERE c.owner = :owner " +
+           "AND (:hostExact IS NULL OR c.sourceUrl LIKE :hostExact OR c.sourceUrl LIKE :hostExactBare " +
+           "     OR c.sourceUrl LIKE :hostSub OR c.sourceUrl LIKE :hostSubBare) " +
+           "AND (:keyword IS NULL OR c.title LIKE %:keyword% OR c.sourceTitle LIKE %:keyword% " +
+           "     OR c.excerpt LIKE %:keyword% OR c.sourceUrl LIKE %:keyword%) " +
+           "AND (:tag IS NULL OR EXISTS (SELECT 1 FROM ClipTagLink l WHERE l.clip = c AND l.tag.name = :tag " +
+           "     AND (l.manuallyAdded = true OR l.aiSuggested = true))) " +
+           "ORDER BY COALESCE(c.originalBookmarkedAt, c.createdAt) DESC")
+    Page<SourceClip> filterForAgent(@Param("owner") User owner,
+                                    @Param("hostExact") String hostExact,
+                                    @Param("hostExactBare") String hostExactBare,
+                                    @Param("hostSub") String hostSub,
+                                    @Param("hostSubBare") String hostSubBare,
+                                    @Param("keyword") String keyword,
+                                    @Param("tag") String tag,
+                                    Pageable pageable);
+
     // 从未打开过详情的收藏没有 lastAccessedAt，排序时回退用 createdAt
     @Query("SELECT c FROM SourceClip c WHERE c.owner = :owner " +
            "ORDER BY COALESCE(c.lastAccessedAt, c.createdAt) DESC")
