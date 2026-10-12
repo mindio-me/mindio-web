@@ -28,7 +28,7 @@ import java.time.LocalDateTime;
 @Builder
 public class NoteRevision {
 
-    public enum Source { AGENT, REPLY_INSERT, CONVERT }
+    public enum Source { AGENT, REPLY_INSERT, CONVERT, IMPORT }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

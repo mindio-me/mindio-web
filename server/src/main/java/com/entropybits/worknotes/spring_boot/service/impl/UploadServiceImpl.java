@@ -446,6 +446,19 @@ public class UploadServiceImpl implements UploadService {
         return result;
     }
 
+    @Override
+    public java.util.Optional<String> findOwnedImageUrlByContentHash(Long ownerId, String sha256) {
+        if (ownerId == null || sha256 == null) return java.util.Optional.empty();
+        java.nio.file.Path root = java.nio.file.Path.of(uploadPathConfig.getUploadPath()).toAbsolutePath().normalize();
+        return attachmentRepository.findFirstByOwnerAndContentHash(ownerId, sha256)
+                .filter(a -> a.getAttDir() != null && a.getAttDir().startsWith("/uploads/"))
+                .filter(a -> {
+                    java.nio.file.Path file = root.resolve(a.getAttDir().substring("/uploads/".length())).normalize();
+                    return file.startsWith(root) && java.nio.file.Files.isRegularFile(file);
+                })
+                .map(a -> publicUrlPrefix() + a.getAttDir());
+    }
+
     /**
      * 对外可访问的 URL 前缀：
      * 配置了 {@code worknotes.upload.url-prefix} 时用它（绝对地址，供跨源/多环境场景）；

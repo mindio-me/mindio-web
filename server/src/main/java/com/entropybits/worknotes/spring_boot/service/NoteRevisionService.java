@@ -80,6 +80,17 @@ public class NoteRevisionService {
         });
     }
 
+    /**
+     * .mindio 导入覆盖前的整篇快照。content 存的是本机笔记打包后的 JSON（标题、正文、sections、summary 都在里面），
+     * content_type 记为 mindio-note，和 AI 编辑/转换的纯正文快照区分开；恢复入口以后再做。
+     */
+    public void snapshotForImport(Note note, String turnId, String packagedNoteJson) {
+        revisionRepository.save(NoteRevision.builder()
+                .noteId(note.getId()).ownerId(note.getOwner().getId()).turnId(turnId)
+                .source(NoteRevision.Source.IMPORT).contentType("mindio-note").content(packagedNoteJson)
+                .build());
+    }
+
     /** 该笔记最近一次"转为 editor.js 文档"前存的原文快照（只查此 owner 的） */
     public Optional<NoteRevision> latestConvertRevision(Long noteId, Long ownerId) {
         return revisionRepository.findFirstByNoteIdAndOwnerIdAndSourceOrderByIdDesc(

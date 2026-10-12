@@ -75,5 +75,11 @@ public interface UploadService {
      * @return FileResultVo
      */
     FileResultVo remoteUpload(String url, String model, Integer pid, Long ownerId);
+
+    /**
+     * 当前用户名下内容哈希（sha256 小写十六进制）相同、且文件仍在磁盘上的图片，返回它的对外 URL。
+     * 只有图片登记了 contentHash，非图片文件总是返回空。
+     */
+    java.util.Optional<String> findOwnedImageUrlByContentHash(Long ownerId, String sha256);
 }
 

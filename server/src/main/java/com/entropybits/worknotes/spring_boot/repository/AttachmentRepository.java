@@ -58,5 +58,7 @@ public interface AttachmentRepository extends JpaRepository<Attachment, Long> {
      * 根据名称查询附件（按创建时间倒序）
      */
     List<Attachment> findByNameOrderByCreateTimeDesc(String name);
+
+    java.util.Optional<Attachment> findFirstByOwnerAndContentHash(Long owner, String contentHash);
 }
 

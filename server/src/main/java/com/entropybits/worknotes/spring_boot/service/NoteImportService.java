@@ -5,14 +5,19 @@
 package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
+import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.FileSystemUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,9 +25,14 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -121,6 +131,124 @@ public class NoteImportService {
         } catch (RuntimeException e) {
             deleteQuietly(dir);
             throw e;
+        }
+    }
+
+    public record CommitResult(int created, int overwritten, int kept) {}
+
+    private static final Set<String> IMAGE_EXTS = Set.of("jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "heic");
+    private static final int MAX_TITLE = 200;
+
+    @Transactional
+    public CommitResult commit(String username, String importToken, Collection<String> overwriteUids) {
+        User user = loadUser(username);
+        NoteImportStagingStore.Staged staged = stagingStore.take(importToken, user.getId());
+        List<Path> writtenFiles = new ArrayList<>();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    writtenFiles.forEach(f -> {
+                        try {
+                            Files.deleteIfExists(f);
+                        } catch (IOException ignored) {
+                            // 残留的孤儿文件不影响数据一致性
+                        }
+                    });
+                }
+                stagingStore.release(staged);
+            }
+        });
+
+        Set<String> overwrite = overwriteUids == null ? Set.of() : new HashSet<>(overwriteUids);
+        MindioPackageReader.ReadPackage pkg = staged.pkg();
+        List<String> uids = pkg.notes().stream().map(MindioPackage.PackagedNote::uid).toList();
+        Map<String, Note> existing = uids.isEmpty() ? Map.of()
+                : noteRepository.findByOwnerAndUidIn(user, uids).stream()
+                .collect(Collectors.toMap(Note::getUid, Function.identity()));
+        NoteAssetRewriter rewriter = rewriter();
+        Map<String, String> assetUrls = new HashMap<>();
+        String turnId = "import-" + importToken;
+
+        int created = 0, overwritten = 0, kept = 0;
+        for (MindioPackage.PackagedNote n : pkg.notes()) {
+            Note local = existing.get(n.uid());
+            if (local != null && !overwrite.contains(n.uid())) {
+                kept++;
+                continue;
+            }
+            Map<String, String> urls = resolveAssets(n, rewriter, pkg, user, assetUrls, writtenFiles);
+            String content = rewriter.restoreAssets(n.content(), urls);
+            List<String> sectionTypes = new ArrayList<>();
+            List<String> sectionContents = new ArrayList<>();
+            if (n.sections() != null) {
+                for (MindioPackage.Section s : n.sections()) {
+                    sectionTypes.add(s.type());
+                    sectionContents.add(rewriter.restoreAssets(s.content(), urls));
+                }
+            }
+            LocalDateTime modifiedAt = MindioPackage.fromIso(n.modifiedAt());
+            if (local == null) {
+                Note note = Note.builder().uid(n.uid()).owner(user).title(normalizeTitle(n.title()))
+                        .summary(n.summary()).contentType("editorjs").content(content).isPublic(false)
+                        .createdAt(MindioPackage.fromIso(n.createdAt())).modifiedAt(modifiedAt)
+                        .sectionTypes(sectionTypes).sectionContents(sectionContents).build();
+                noteRepository.saveAndFlush(note);
+                contentIndexingService.reindexNote(note.getId());
+                created++;
+            } else {
+                revisionService.snapshotForImport(local, turnId, toJson(MindioPackage.fromNote(
+                        local, local.getUid(), local.getContent(), MindioPackage.sectionsOf(local))));
+                local.setTitle(normalizeTitle(n.title()));
+                local.setSummary(n.summary());
+                local.setContent(content);
+                local.setSectionTypes(sectionTypes);
+                local.setSectionContents(sectionContents);
+                noteRepository.saveAndFlush(local);
+                if (modifiedAt != null) noteRepository.overwriteModifiedAt(local.getId(), modifiedAt);
+                contentIndexingService.reindexNote(local.getId());
+                overwritten++;
+            }
+        }
+        return new CommitResult(created, overwritten, kept);
+    }
+
+    /** 每个资源在一次导入里只落盘一次；图片优先复用本机已有的同哈希文件 */
+    private Map<String, String> resolveAssets(MindioPackage.PackagedNote n, NoteAssetRewriter rewriter,
+                                              MindioPackageReader.ReadPackage pkg, User user,
+                                              Map<String, String> assetUrls, List<Path> writtenFiles) {
+        for (String text : textsOf(n)) {
+            for (String name : rewriter.findAssetNames(text)) {
+                if (assetUrls.containsKey(name) || !pkg.assets().containsKey(name)) continue;
+                String hash = name.substring(0, 64);
+                String ext = name.length() > 65 ? name.substring(65).toLowerCase(Locale.ROOT) : "";
+                boolean image = IMAGE_EXTS.contains(ext);
+                String url = image ? uploadService.findOwnedImageUrlByContentHash(user.getId(), hash).orElse(null) : null;
+                if (url == null) {
+                    PathMultipartFile file = new PathMultipartFile(pkg.assets().get(name), name);
+                    FileResultVo vo = image
+                            ? uploadService.imageUpload(file, "note", 0, user.getId())
+                            : uploadService.fileUpload(file, "note", 0, user.getId());
+                    url = vo.getUrl();
+                    rewriter.findUploads(url).stream().map(NoteAssetRewriter.UploadRef::file)
+                            .filter(java.util.Objects::nonNull).forEach(writtenFiles::add);
+                }
+                assetUrls.put(name, url);
+            }
+        }
+        return assetUrls;
+    }
+
+    private static String normalizeTitle(String title) {
+        String t = title == null || title.isBlank() ? "未命名笔记" : title.trim();
+        return t.length() > MAX_TITLE ? t.substring(0, MAX_TITLE) : t;
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException(e);
         }
     }
 
