@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -84,8 +85,13 @@ public class NoteAssetRewriter {
 
     private Path resolve(String suffix) {
         String path = suffix.split("[?#]", 2)[0];
-        Path file = uploadRoot.resolve(path).normalize();
-        return file.startsWith(uploadRoot) ? file : null;
+        try {
+            Path file = uploadRoot.resolve(path).normalize();
+            return file.startsWith(uploadRoot) ? file : null;
+        } catch (InvalidPathException e) {
+            // 本 OS 不允许的文件名字符（如 Windows 下的 : * |）：视为缺失资源，不能中断整次导出
+            return null;
+        }
     }
 
     public String replaceUploads(String text, Map<String, String> urlToReplacement) {

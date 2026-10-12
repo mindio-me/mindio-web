@@ -57,6 +57,17 @@ class NoteAssetRewriterTest {
     }
 
     @Test
+    void pathIllegalOnThisOsGivesNullFileInsteadOfThrowing() {
+        List<NoteAssetRewriter.UploadRef> colon = rewriter.findUploads("see /api/uploads/file/a.png:");
+        assertThat(colon).hasSize(1);
+        assertThat(colon.get(0).file()).isNull();
+
+        List<NoteAssetRewriter.UploadRef> star = rewriter.findUploads("/api/uploads/file/a*.png");
+        assertThat(star).hasSize(1);
+        assertThat(star.get(0).file()).isNull();
+    }
+
+    @Test
     void queryStringIsIgnoredForFileResolution() {
         List<NoteAssetRewriter.UploadRef> refs = rewriter.findUploads("/api/uploads/file/a.png?v=2");
         assertThat(refs.get(0).file()).isEqualTo(root.resolve("file/a.png").toAbsolutePath().normalize());
