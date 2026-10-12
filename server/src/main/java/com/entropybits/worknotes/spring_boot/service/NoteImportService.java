@@ -144,7 +144,14 @@ public class NoteImportService {
         User user = loadUser(username);
         NoteImportStagingStore.Staged staged = stagingStore.take(importToken, user.getId());
         List<Path> writtenFiles = new ArrayList<>();
+        List<Long> reindexIds = new ArrayList<>();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                // reindexNote 是 @Async，必须等事务提交后再触发，否则别的线程读不到新内容
+                reindexIds.forEach(contentIndexingService::reindexNote);
+            }
+
             @Override
             public void afterCompletion(int status) {
                 if (status == STATUS_ROLLED_BACK) {
@@ -194,7 +201,7 @@ public class NoteImportService {
                         .createdAt(MindioPackage.fromIso(n.createdAt())).modifiedAt(modifiedAt)
                         .sectionTypes(sectionTypes).sectionContents(sectionContents).build();
                 noteRepository.saveAndFlush(note);
-                contentIndexingService.reindexNote(note.getId());
+                reindexIds.add(note.getId());
                 created++;
             } else {
                 revisionService.snapshotForImport(local, turnId, toJson(MindioPackage.fromNote(
@@ -202,11 +209,12 @@ public class NoteImportService {
                 local.setTitle(normalizeTitle(n.title()));
                 local.setSummary(n.summary());
                 local.setContent(content);
+                local.setContentType("editorjs");
                 local.setSectionTypes(sectionTypes);
                 local.setSectionContents(sectionContents);
                 noteRepository.saveAndFlush(local);
                 if (modifiedAt != null) noteRepository.overwriteModifiedAt(local.getId(), modifiedAt);
-                contentIndexingService.reindexNote(local.getId());
+                reindexIds.add(local.getId());
                 overwritten++;
             }
         }

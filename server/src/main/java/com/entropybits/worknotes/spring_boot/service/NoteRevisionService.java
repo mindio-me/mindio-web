@@ -118,6 +118,9 @@ public class NoteRevisionService {
         User user = getUser(username);
         List<NoteRevision> revisions = revisionRepository.findByTurnIdAndOwnerIdOrderByIdAsc(turnId, user.getId());
         if (revisions.isEmpty()) throw new ResourceNotFoundException("没有可撤销的修改");
+        if (revisions.stream().anyMatch(r -> r.getSource() == NoteRevision.Source.IMPORT)) {
+            throw new com.entropybits.worknotes.spring_boot.exception.BadRequestException("导入前的快照暂不支持撤销");
+        }
 
         List<EditedNoteRef> conflicts = new ArrayList<>();
         for (NoteRevision r : revisions) {

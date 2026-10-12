@@ -152,6 +152,17 @@ class NoteRevisionServiceTest {
     }
 
     @Test
+    void undo_importSnapshot_isRejected() {
+        NoteRevision r = NoteRevision.builder().noteId(9L).ownerId(1L).turnId("import-x")
+                .source(NoteRevision.Source.IMPORT).contentType("mindio-note").content("{}").build();
+        when(revisionRepository.findByTurnIdAndOwnerIdOrderByIdAsc("import-x", 1L)).thenReturn(List.of(r));
+
+        assertThatThrownBy(() -> service.undo("alice", "import-x", true))
+                .isInstanceOf(com.entropybits.worknotes.spring_boot.exception.BadRequestException.class);
+        verify(noteRepository, never()).save(any());
+    }
+
+    @Test
     void undo_withoutSnapshots_throwsNotFound() {
         when(revisionRepository.findByTurnIdAndOwnerIdOrderByIdAsc("88", 1L)).thenReturn(List.of());
 

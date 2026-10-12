@@ -141,7 +141,33 @@ class NoteImportCommitTest {
         assertThat(n.getModifiedAt()).isEqualTo(LocalDateTime.of(2026, 3, 1, 0, 0));
         assertThat(n.getTags()).isEmpty();
         assertThat(n.getProject()).isNull();
+        verify(contentIndexingService, never()).reindexNote(any());
+        for (TransactionSynchronization s : TransactionSynchronizationManager.getSynchronizations()) {
+            s.afterCommit();
+            s.afterCompletion(TransactionSynchronization.STATUS_COMMITTED);
+        }
         verify(contentIndexingService, times(2)).reindexNote(100L);
+    }
+
+    @Test
+    void overwriteOfNoLongerEditorjsNoteSwitchesContentTypeAfterSnapshot() throws Exception {
+        String token = preview("alice", pn(UID1, "包里标题"));
+        Note local = Note.builder().id(9L).owner(alice).uid(UID1).title("本机").contentType("markdown")
+                .content("# md").sectionTypes(new ArrayList<>()).sectionContents(new ArrayList<>()).build();
+        when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenReturn(List.of(local));
+        when(uploadService.findOwnedImageUrlByContentHash(1L, hash)).thenReturn(Optional.of("/api/uploads/file/e.png"));
+        List<String> typeAtSnapshot = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(inv -> typeAtSnapshot.add(((Note) inv.getArgument(0)).getContentType()))
+                .when(revisionService).snapshotForImport(any(), anyString(), anyString());
+
+        service.commit("alice", token, Set.of(UID1));
+
+        assertThat(typeAtSnapshot).containsExactly("markdown");
+        assertThat(local.getContentType()).isEqualTo("editorjs");
+        for (TransactionSynchronization s : TransactionSynchronizationManager.getSynchronizations()) {
+            s.afterCommit();
+        }
+        verify(contentIndexingService).reindexNote(9L);
     }
 
     @Test
@@ -218,6 +244,7 @@ class NoteImportCommitTest {
         }
 
         assertThat(written).doesNotExist();
+        verify(contentIndexingService, never()).reindexNote(any());
     }
 
     @Test
