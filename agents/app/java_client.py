@@ -178,6 +178,21 @@ class JavaClient:
         except httpx.HTTPError as e:
             raise JavaClientError(f"find_notes_by_title failed for title={title!r}: {e}") from e
 
+    async def list_clips(
+        self, username: str, domain: str | None = None, tag: str | None = None,
+        keyword: str | None = None, limit: int | None = None,
+    ) -> dict:
+        """返回 {total, items:[{id,title,url,tags,savedAt}]}；未传的筛选条件不发给 Java。"""
+        params = {"username": username, "domain": domain, "tag": tag, "keyword": keyword, "limit": limit}
+        try:
+            resp = await self._client.get(
+                "/internal/documents/clips", params={k: v for k, v in params.items() if v is not None},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"list_clips failed for domain={domain!r} tag={tag!r} keyword={keyword!r}: {e}") from e
+
     async def read_note(self, username: str, note_id: int) -> dict | None:
         """不存在或不属于该用户时返回 None（Java 侧两种情况统一回 404，不区分）。"""
         return await self._read_document(username, "notes", note_id)

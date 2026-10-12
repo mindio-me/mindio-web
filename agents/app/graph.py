@@ -30,6 +30,7 @@ from tools.add_timeline_item import make_add_timeline_item_tool
 from tools.analyze_image import make_analyze_image_tool
 from tools.content_cache import ContentCache
 from tools.get_project_notes import make_get_project_notes_tool
+from tools.list_clips import make_list_clips_tool
 from tools.read_cached_content import make_read_cached_content_tool
 from tools.read_document import make_read_clip_tool, make_read_note_tool
 from tools.read_note_references import make_read_note_references_tool
@@ -52,6 +53,8 @@ SYSTEM_PROMPT = (
     "（比如《xxx》）时，直接用 read_note(title=...) 读全文再回答；search_workspace 搜到的"
     "片段不够时，按片段前标注的 id 调 read_note/read_clip 读整篇。不要只凭片段或标题作答，"
     "也不要让用户把内容贴进来或关联进笔记。"
+    "用户要按网站/域名、标签或关键词列出收藏（比如“github 上的所有收藏”“打了‘开源’标签的收藏”）时，"
+    "用 list_clips 精确筛选，不要用 search_workspace——语义搜索只返回少量片段，列不全。"
     "当前笔记的正文如果在系统提示里被截断（以“内容过长，已截断”结尾），需要后半部分时"
     "也可以用 read_note 按当前笔记的标题读全文。"
     "用户要求总结/整理关联资料时，给出结构清晰、可以直接放进笔记正文的文本。"
@@ -123,6 +126,7 @@ def build_default_graph_builder(
         make_read_note_references_tool(java_client, cache),
         make_read_note_tool(java_client, cache),
         make_read_clip_tool(java_client, cache),
+        make_list_clips_tool(java_client),
         make_read_cached_content_tool(cache),
         update_todo_list,
         make_add_reference_item_tool(java_client, block_update_sink),

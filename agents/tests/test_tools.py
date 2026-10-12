@@ -403,3 +403,50 @@ async def test_read_note_mentions_images_when_document_has_them():
 
     assert "3张图片" in result
     assert "view_image(note_id=12" in result
+
+
+from tools.list_clips import make_list_clips_tool
+
+
+class FakeClipListJavaClient:
+    def __init__(self, result=None, error: Exception | None = None):
+        self._result = result
+        self._error = error
+        self.calls: list[tuple] = []
+
+    async def list_clips(self, username, domain=None, tag=None, keyword=None, limit=None):
+        self.calls.append((username, domain, tag, keyword, limit))
+        if self._error:
+            raise self._error
+        return self._result
+
+
+async def test_list_clips_passes_filters_and_reports_truncation():
+    java = FakeClipListJavaClient({"total": 120, "items": [
+        {"id": 7, "title": "vuejs/core", "url": "https://github.com/vuejs/core", "tags": ["开源"],
+         "savedAt": "2019-03-01T00:00:00"},
+    ]})
+    tool_ = make_list_clips_tool(java)
+
+    result = await tool_.ainvoke({"domain": "github.com", "limit": 1, "state": _agent_state()})
+
+    assert java.calls == [("alice", "github.com", None, None, 1)]
+    assert "共 120 条" in result
+    assert "最新的 1 条" in result
+    assert "- vuejs/core — https://github.com/vuejs/core（收藏 id=7，标签：开源，收藏于 2019-03-01）" in result
+
+
+async def test_list_clips_says_so_when_nothing_matches():
+    tool_ = make_list_clips_tool(FakeClipListJavaClient({"total": 0, "items": []}))
+
+    result = await tool_.ainvoke({"tag": "不存在", "state": _agent_state()})
+
+    assert result == "没有符合条件的收藏。"
+
+
+async def test_list_clips_returns_error_text_instead_of_raising():
+    tool_ = make_list_clips_tool(FakeClipListJavaClient(error=RuntimeError("boom")))
+
+    result = await tool_.ainvoke({"domain": "github.com", "state": _agent_state()})
+
+    assert "列出收藏失败" in result

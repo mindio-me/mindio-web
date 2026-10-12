@@ -488,3 +488,18 @@ async def test_image_writes_pass_conversation_id(test_settings):
     await client.delete_note_image("alice", 9, 1, conversation_id="5")
 
     assert seen == [{"username": "alice", "conversationId": "5"}]
+
+
+async def test_list_clips_sends_only_given_filters(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["url"] = request.url
+        return httpx.Response(200, json={"total": 0, "items": []})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.list_clips("alice", domain="github.com", limit=50)
+
+    assert captured["url"].path == "/internal/documents/clips"
+    assert dict(captured["url"].params) == {"username": "alice", "domain": "github.com", "limit": "50"}
+    assert result == {"total": 0, "items": []}
