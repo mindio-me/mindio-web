@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -44,16 +45,23 @@ public class MindioPackageReader {
     static final String UUID_RE = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
     private static final Pattern NOTE_ENTRY = Pattern.compile("notes/(" + UUID_RE + ")\\.json");
     private static final Pattern ASSET_ENTRY = Pattern.compile("assets/([0-9a-f]{64}(?:\\.[a-z0-9]{1,10})?)");
-    private static final int MAX_JSON_BYTES = 64 * 1024 * 1024;
+    static final long DEFAULT_MAX_JSON_BYTES = 64L * 1024 * 1024;
 
     private final ObjectMapper om;
     private final long maxTotalBytes;
     private final int maxEntries;
+    private final long maxJsonBytes;
 
     public MindioPackageReader(ObjectMapper om, long maxTotalBytes, int maxEntries) {
+        this(om, maxTotalBytes, maxEntries, DEFAULT_MAX_JSON_BYTES);
+    }
+
+    /** maxJsonBytes：单个 manifest/笔记 JSON 条目的解压字节上限，超出即拒绝（在复制过程中强制，不会先整个缓存） */
+    public MindioPackageReader(ObjectMapper om, long maxTotalBytes, int maxEntries, long maxJsonBytes) {
         this.om = om;
         this.maxTotalBytes = maxTotalBytes;
         this.maxEntries = maxEntries;
+        this.maxJsonBytes = maxJsonBytes;
     }
 
     public ReadPackage read(Path zipFile, Path extractDir) {
@@ -75,15 +83,17 @@ public class MindioPackageReader {
                     Matcher note = NOTE_ENTRY.matcher(name);
                     Matcher asset = ASSET_ENTRY.matcher(name);
                     if ("manifest.json".equals(name)) {
-                        manifest = om.readValue(readLimited(zip, total), MindioPackage.Manifest.class);
+                        manifest = om.readValue(readJson(zip, total), MindioPackage.Manifest.class);
+                        if (manifest == null) throw new InvalidPackageException("备份文件的 manifest.json 无效");
                     } else if (note.matches()) {
-                        MindioPackage.PackagedNote n = om.readValue(readLimited(zip, total), MindioPackage.PackagedNote.class);
+                        MindioPackage.PackagedNote n = om.readValue(readJson(zip, total), MindioPackage.PackagedNote.class);
+                        if (n == null) throw new InvalidPackageException("备份文件里有无效的笔记：" + note.group(1));
                         validateNote(n, note.group(1));
                         notes.add(n);
                     } else if (asset.matches()) {
                         Path target = extractDir.resolve("assets").resolve(asset.group(1));
                         try (OutputStream out = Files.newOutputStream(target)) {
-                            copyLimited(zip, out, total);
+                            copyLimited(zip, out, total, Long.MAX_VALUE, "备份文件解压后过大");
                         }
                         assets.put(asset.group(1), target);
                     } else {
@@ -117,20 +127,44 @@ public class MindioPackageReader {
             throw new InvalidPackageException("备份文件里有不支持的笔记类型：" + n.contentType());
         }
         if (n.content() == null) throw new InvalidPackageException("备份文件里有缺少正文的笔记：" + uidFromName);
+        checkIso(n.createdAt(), uidFromName);
+        checkIso(n.modifiedAt(), uidFromName);
+        if (n.sections() != null) {
+            for (MindioPackage.Section s : n.sections()) {
+                if (s == null || s.type() == null || s.content() == null) {
+                    throw new InvalidPackageException("备份文件里有格式不完整的段落：" + uidFromName);
+                }
+            }
+        }
     }
 
-    private byte[] readLimited(InputStream in, long[] total) throws IOException {
+    private void checkIso(String iso, String uid) {
+        try {
+            MindioPackage.fromIso(iso);
+        } catch (DateTimeParseException e) {
+            throw new InvalidPackageException("备份文件里的笔记时间格式无效：" + uid);
+        }
+    }
+
+    /** 读取一个 JSON 条目；单条目超过 maxJsonBytes 立即拒绝，缓存的内存因此不超过该上限 */
+    private byte[] readJson(InputStream in, long[] total) throws IOException {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        long before = total[0];
-        copyLimited(in, buf, total);
-        if (total[0] - before > MAX_JSON_BYTES) throw new InvalidPackageException("备份文件里的笔记过大");
+        copyLimited(in, buf, total, maxJsonBytes, "备份文件里的笔记过大");
         return buf.toByteArray();
     }
 
-    private void copyLimited(InputStream in, OutputStream out, long[] total) throws IOException {
+    /**
+     * 复制一个条目。entryLimit 是本条目自身的字节上限，maxTotalBytes 是整包上限；
+     * 任一超出都在读到那一块时立即抛出 InvalidPackageException。
+     */
+    private void copyLimited(InputStream in, OutputStream out, long[] total, long entryLimit, String entryMessage)
+            throws IOException {
         byte[] buf = new byte[64 * 1024];
+        long entryBytes = 0;
         int n;
         while ((n = in.read(buf)) > 0) {
+            entryBytes += n;
+            if (entryBytes > entryLimit) throw new InvalidPackageException(entryMessage);
             total[0] += n;
             if (total[0] > maxTotalBytes) throw new InvalidPackageException("备份文件解压后过大");
             out.write(buf, 0, n);

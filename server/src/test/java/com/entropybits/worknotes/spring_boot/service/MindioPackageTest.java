@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -128,6 +129,49 @@ class MindioPackageTest {
         Path zip2 = rawZip("uid.mindio", "manifest.json", manifestJson(1), "notes/" + otherUid + ".json", om.writeValueAsString(sample()));
         assertThatThrownBy(() -> reader().read(zip2, tmp.resolve("g")))
                 .isInstanceOf(MindioPackageReader.InvalidPackageException.class);
+    }
+
+    @Test
+    void rejectsNullNoteAndNullManifestBodies() throws Exception {
+        Path nullNote = rawZip("nn.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", "null");
+        assertThatThrownBy(() -> reader().read(nullNote, tmp.resolve("h")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                .hasMessage("备份文件里有无效的笔记：" + UID);
+
+        Path nullManifest = rawZip("nman.mindio", "manifest.json", "null");
+        assertThatThrownBy(() -> reader().read(nullManifest, tmp.resolve("i")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                .hasMessage("备份文件的 manifest.json 无效");
+    }
+
+    @Test
+    void rejectsOversizedJsonEntryWithSmallPerEntryCap() throws Exception {
+        MindioPackage.PackagedNote big = new MindioPackage.PackagedNote(UID, "t", null, null, null,
+                "editorjs", "x".repeat(500), List.of());
+        Path zip = rawZip("jbig.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", om.writeValueAsString(big));
+        assertThatThrownBy(() -> new MindioPackageReader(om, 10_000_000, 1000, 200).read(zip, tmp.resolve("j")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                .hasMessage("备份文件里的笔记过大");
+    }
+
+    @Test
+    void rejectsBadCreatedAtDate() throws Exception {
+        MindioPackage.PackagedNote bad = new MindioPackage.PackagedNote(UID, "t", null, "not-a-date", null,
+                "editorjs", "{}", List.of());
+        Path zip = rawZip("baddate.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", om.writeValueAsString(bad));
+        assertThatThrownBy(() -> reader().read(zip, tmp.resolve("k")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                .hasMessage("备份文件里的笔记时间格式无效：" + UID);
+    }
+
+    @Test
+    void rejectsNullSectionElement() throws Exception {
+        MindioPackage.PackagedNote withNull = new MindioPackage.PackagedNote(UID, "t", null, null, null,
+                "editorjs", "{}", Arrays.asList(new MindioPackage.Section("paragraph", "{}"), null));
+        Path zip = rawZip("nullsec.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", om.writeValueAsString(withNull));
+        assertThatThrownBy(() -> reader().read(zip, tmp.resolve("l")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                .hasMessage("备份文件里有格式不完整的段落：" + UID);
     }
 
     @Test
