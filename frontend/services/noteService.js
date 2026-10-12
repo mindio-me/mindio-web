@@ -58,6 +58,37 @@ class NoteService extends ApiService {
     return this.get(`/v1/notes/${id}/convert-original`, { suppressErrorToast: true })
   }
 
+  /**
+   * 导出 editor.js 笔记为 .mindio 备份包；返回 { blob, noteCount, missingAssets }
+   */
+  async exportNotes({ noteIds = null, all = false, exportedFrom = 'web' } = {}) {
+    const response = await this.$axios.post('/v1/notes/export', { noteIds, all, exportedFrom }, {
+      responseType: 'blob',
+      suppressErrorToast: true
+    })
+    return {
+      blob: response.data,
+      noteCount: Number(response.headers['x-mindio-note-count'] || 0),
+      missingAssets: Number(response.headers['x-mindio-missing-assets'] || 0)
+    }
+  }
+
+  /**
+   * 上传 .mindio 包做导入预检（不写库）；返回 { importToken, newNotes, conflicts, missingAssets }
+   */
+  previewImport(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.post('/v1/notes/import/preview', formData, { suppressErrorToast: true })
+  }
+
+  /**
+   * 执行导入；overwrite 是选择"用备份覆盖"的 uid 列表。返回 { created, overwritten, kept }
+   */
+  commitImport(importToken, overwrite) {
+    return this.post('/v1/notes/import/commit', { importToken, overwrite }, { suppressErrorToast: true })
+  }
+
   suggestInsertPosition(noteId, content, cursorBlockId) {
     return this.post(`/v1/notes/${noteId}/insert-position`, { content, cursorBlockId })
   }
