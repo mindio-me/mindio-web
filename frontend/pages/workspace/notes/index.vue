@@ -102,6 +102,9 @@
             <div class="sidebar-section-header">
               <span class="section-title">{{ $t('workspace.notes.allNotes') }}</span>
               <span class="section-subtitle">{{ $t('workspace.notes.countSuffix', { n: total }) }}</span>
+              <el-button type="text" size="mini" class="note-select-toggle" @click="toggleSelectMode">
+                {{ selectMode ? $t('workspace.noteBackup.cancelSelect') : $t('workspace.noteBackup.select') }}
+              </el-button>
             </div>
             <div v-loading="loading" class="note-list-wrapper">
               <div v-if="notes.length > 0" ref="noteListEl" class="note-list">
@@ -109,10 +112,19 @@
                   v-for="note in notes"
                   :key="note.id"
                   class="note-list-item"
-                  :class="{ active: note.id === activeNoteId }"
+                  :class="{ active: note.id === activeNoteId, 'is-selecting': selectMode }"
                   :title="noteListItemTooltip(note)"
-                  @click="selectNote(note)"
+                  @click="onNoteListItemClick(note)"
                 >
+                  <el-checkbox
+                    v-if="selectMode"
+                    :value="selectedNoteIds.includes(note.id)"
+                    :disabled="note.contentType !== 'editorjs'"
+                    :title="note.contentType !== 'editorjs' ? $t('workspace.noteBackup.onlyEditorjs') : ''"
+                    class="note-select-checkbox"
+                    @click.native.stop
+                    @change="toggleNoteSelected(note)"
+                  />
                   <div class="note-list-title">
                     {{ note.title || $t('workspace.notes.untitledNote') }}
                     <span v-if="note.language === 'en'" class="note-lang-badge">EN</span>
@@ -127,6 +139,18 @@
                 <p>{{ $t('workspace.notes.noNotes') }}</p>
                 <el-button type="primary" size="mini" @click="showCreateNoteDialog">{{ $t('workspace.notes.createNow') }}</el-button>
               </div>
+            </div>
+            <div v-if="selectMode" class="note-select-bar">
+              <span>{{ $t('workspace.noteBackup.selectedCount', { n: selectedNoteIds.length }) }}</span>
+              <el-button
+                type="primary"
+                size="mini"
+                :disabled="selectedNoteIds.length === 0"
+                :loading="exportingSelected"
+                @click="exportSelectedNotes"
+              >
+                {{ $t('workspace.noteBackup.exportSelected') }}
+              </el-button>
             </div>
           </div>
           <!-- 月历视图 -->
@@ -681,6 +705,7 @@ import { renderMarkdown as renderMd } from '~/utils/markdown'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 import workspaceAiDock from '~/mixins/workspaceAiDock'
 import editorjsHost from '~/mixins/editorjsHost'
+import { downloadBlob, backupFileName, isDesktopRuntime, errorMessageOf } from '~/utils/note-backup'
 
 // 左侧笔记列表每批加载的数量（无限滚动的批大小），asyncData 首屏预取和后续
 // loadMoreNotes 都必须用同一个值——否则首屏拿到的 size 和 page=1 时按这个
@@ -722,6 +747,10 @@ export default {
   },
   data() {
     return {
+      // 笔记备份：列表多选导出
+      selectMode: false,
+      selectedNoteIds: [],
+      exportingSelected: false,
       // 通用
       loading: false,
       // 聊天回复「插入到笔记」：模型建议插到某一节之后时弹窗让用户选
@@ -970,6 +999,41 @@ export default {
     this.$nuxt.$emit('workspace:current-note-id', null)
   },
   methods: {
+    toggleSelectMode() {
+      this.selectMode = !this.selectMode
+      this.selectedNoteIds = []
+    },
+    onNoteListItemClick(note) {
+      if (this.selectMode) {
+        if (note.contentType === 'editorjs') this.toggleNoteSelected(note)
+        return
+      }
+      this.selectNote(note)
+    },
+    toggleNoteSelected(note) {
+      if (note.contentType !== 'editorjs') return
+      const i = this.selectedNoteIds.indexOf(note.id)
+      if (i >= 0) this.selectedNoteIds.splice(i, 1)
+      else this.selectedNoteIds.push(note.id)
+    },
+    async exportSelectedNotes() {
+      this.exportingSelected = true
+      try {
+        const { blob, noteCount, missingAssets } = await this.$noteService.exportNotes({
+          noteIds: this.selectedNoteIds,
+          exportedFrom: isDesktopRuntime() ? 'desktop' : 'web'
+        })
+        downloadBlob(blob, backupFileName())
+        this.$message.success(missingAssets > 0
+          ? this.$t('workspace.noteBackup.exportMissingAssets', { n: noteCount, m: missingAssets })
+          : this.$t('workspace.noteBackup.exportDone', { n: noteCount }))
+        this.toggleSelectMode()
+      } catch (e) {
+        this.$message.error(this.$t('workspace.noteBackup.exportFailed') + await errorMessageOf(e, ''))
+      } finally {
+        this.exportingSelected = false
+      }
+    },
     // 供 workspaceLayoutResize mixin 读取
     wsLayoutOptions() {
       return {
@@ -2796,6 +2860,33 @@ export default {
   &.active {
     background: rgba(102, 126, 234, 0.12);
   }
+  // 仅选择模式下用 flex 排列复选框和标题，不影响常规列表布局
+  &.is-selecting {
+    display: flex;
+    align-items: center;
+    .note-list-title {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+}
+
+.note-select-toggle {
+  margin-left: auto;
+  padding: 0;
+}
+
+.note-select-checkbox {
+  margin-right: 8px;
+}
+
+.note-select-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
 }
 
 // 一行只显示标题，超出截断；时间/标签折叠进 title 属性的 hover tooltip

@@ -168,6 +168,10 @@
         </el-col>
 
         <el-col :xs="24" :sm="24" :md="12">
+          <NoteBackupCard />
+        </el-col>
+
+        <el-col :xs="24" :sm="24" :md="12">
           <!-- 预留：大模型 / Notion 等集成 -->
           <el-card class="settings-card" shadow="never">
             <div slot="header" class="card-header">
