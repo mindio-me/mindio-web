@@ -41,7 +41,13 @@ public class NoteImportStagingStore {
         this.clock = clock;
     }
 
+    /** 每个用户同时只保留一份暂存：再次预检会释放该用户之前未提交的暂存，避免临时目录无上限累积 */
     public Staged stage(Long ownerId, Path dir, MindioPackageReader.ReadPackage pkg) {
+        byToken.values().removeIf(old -> {
+            if (!old.ownerId().equals(ownerId)) return false;
+            release(old);
+            return true;
+        });
         Staged s = new Staged(UUID.randomUUID().toString(), ownerId, dir, pkg, clock.instant().plus(TTL));
         byToken.put(s.token(), s);
         return s;

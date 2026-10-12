@@ -48,6 +48,24 @@ class NoteImportStagingStoreTest {
     }
 
     @Test
+    void stagingAgainForTheSameOwnerReleasesThePreviousOneOnly() throws Exception {
+        NoteImportStagingStore store = new NoteImportStagingStore(new MutableClock());
+        Path d1 = Files.createDirectories(tmp.resolve("o1a"));
+        Path d2 = Files.createDirectories(tmp.resolve("o1b"));
+        Path other = Files.createDirectories(tmp.resolve("o2"));
+        NoteImportStagingStore.Staged first = store.stage(1L, d1, emptyPkg());
+        NoteImportStagingStore.Staged otherOwner = store.stage(2L, other, emptyPkg());
+
+        NoteImportStagingStore.Staged second = store.stage(1L, d2, emptyPkg());
+
+        assertThat(d1).doesNotExist();
+        assertThatThrownBy(() -> store.take(first.token(), 1L)).isInstanceOf(BadRequestException.class);
+        assertThat(store.take(second.token(), 1L).dir()).isEqualTo(d2);
+        assertThat(other).exists();
+        assertThat(store.take(otherOwner.token(), 2L).dir()).isEqualTo(other);
+    }
+
+    @Test
     void expiredEntriesAreRejectedAndPurgedWithTheirFiles() throws Exception {
         MutableClock clock = new MutableClock();
         NoteImportStagingStore store = new NoteImportStagingStore(clock);
