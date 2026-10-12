@@ -11,10 +11,13 @@ import com.entropybits.worknotes.spring_boot.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -122,4 +125,21 @@ public interface NoteRepository extends JpaRepository<Note, Long> {
      * 和 appendBlockItem 等现有内部接口同一信任边界，这里不重复校验。
      */
     List<Note> findByProjectId(Long projectId);
+
+    List<Note> findByOwnerAndUidIn(User owner, Collection<String> uids);
+
+    List<Note> findByOwnerAndContentTypeOrderByIdAsc(User owner, String contentType);
+
+    /** 条件写入：已有 uid 时不改；批量 JPQL 不触发 @PreUpdate，导出不会刷新 modifiedAt */
+    @Modifying
+    @Query("UPDATE Note n SET n.uid = :uid WHERE n.id = :id AND n.uid IS NULL")
+    int assignUidIfAbsent(@Param("id") Long id, @Param("uid") String uid);
+
+    @Query("SELECT n.uid FROM Note n WHERE n.id = :id")
+    String findUidById(@Param("id") Long id);
+
+    /** 导入覆盖时把 modifiedAt 设为包里的值；实体 save 会被 @PreUpdate 改成当前时间，所以单独写 */
+    @Modifying
+    @Query("UPDATE Note n SET n.modifiedAt = :modifiedAt WHERE n.id = :id")
+    int overwriteModifiedAt(@Param("id") Long id, @Param("modifiedAt") LocalDateTime modifiedAt);
 }

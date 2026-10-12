@@ -27,7 +27,8 @@ import java.util.Set;
  * Note 实体 - 笔记表
  */
 @Entity
-@Table(name = "notes")
+@Table(name = "notes",
+        uniqueConstraints = @UniqueConstraint(name = "uk_notes_owner_uid", columnNames = {"owner_id", "uid"}))
 @Getter
 @Setter
 @ToString(exclude = "tags")
@@ -39,6 +40,13 @@ public class Note {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /**
+     * 跨安装识别同一篇笔记（导出/导入 .mindio 包用）。按需分配：只有导出过或由导入创建的笔记才有值，
+     * 整数 id 每个安装各自自增，不能用来跨机器对应。翻译、复制等新建笔记的路径不得继承这个值。
+     */
+    @Column(length = 36)
+    private String uid;
 
     @NotBlank(message = "标题不能为空")
     @Size(max = 200, message = "标题长度不能超过200个字符")
