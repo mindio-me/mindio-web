@@ -33,11 +33,13 @@ class BookmarkMergeServiceTest {
     @Mock SourceClipRepository clipRepository;
     @Mock TagRepository tagRepository;
     @Mock ClipTagLinkRepository clipTagLinkRepository;
+    @Mock ContentIndexingService contentIndexingService;
 
     private BookmarkMergeService service;
 
     private void setUp() {
-        service = new BookmarkMergeService(itemRepository, clipRepository, tagRepository, clipTagLinkRepository);
+        service = new BookmarkMergeService(itemRepository, clipRepository, tagRepository, clipTagLinkRepository,
+                contentIndexingService);
         when(clipRepository.save(any())).thenAnswer(inv -> {
             SourceClip c = inv.getArgument(0);
             if (c.getId() == null) c.setId(999L);
@@ -45,6 +47,22 @@ class BookmarkMergeServiceTest {
         });
         when(itemRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(clipTagLinkRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test
+    void merge_reindexesEveryCreatedClipSoAgentSearchCanFindThem() {
+        setUp();
+        User owner = User.builder().id(1L).build();
+        ImportJob job = ImportJob.builder().id(1L).owner(owner).build();
+        ImportItem item = ImportItem.builder().id(1L).job(job)
+                .rawTitle("Example").rawUrl("https://example.com/a")
+                .category(ImportItem.Category.IMPORTABLE)
+                .userDecision(ImportItem.UserDecision.CONFIRMED)
+                .build();
+
+        service.merge(job, List.of(item));
+
+        verify(contentIndexingService).reindexClip(999L);
     }
 
     @Test

@@ -13,6 +13,8 @@ import com.entropybits.worknotes.spring_boot.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,7 @@ public class BookmarkMergeService {
     private final SourceClipRepository clipRepository;
     private final TagRepository tagRepository;
     private final ClipTagLinkRepository clipTagLinkRepository;
+    private final ContentIndexingService contentIndexingService;
 
     @Transactional
     public void markDecision(ImportJob job, ImportItem.Category category, ImportItem.UserDecision decision) {
@@ -80,7 +83,28 @@ public class BookmarkMergeService {
             item.setResultClipId(clip.getId());
             itemRepository.save(item);
         }
+        reindexClipsAfterCommit(created.stream().map(SourceClip::getId).toList());
         return created;
+    }
+
+    /**
+     * 导入的书签之前从不进检索索引（只有 SourceClipService 的新建/编辑会触发 reindexClip），
+     * AI 助手的 search_workspace 因此搜不到任何导入的收藏。推迟到提交之后的理由同
+     * SourceClipService.reindexClipAfterCommit：reindexClip 是 @Async，在另一个事务里看不到
+     * 还没提交的新行。
+     */
+    private void reindexClipsAfterCommit(List<Long> clipIds) {
+        if (clipIds.isEmpty()) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    clipIds.forEach(contentIndexingService::reindexClip);
+                }
+            });
+        } else {
+            clipIds.forEach(contentIndexingService::reindexClip);
+        }
     }
 
     private String leafFolderName(String folderPath) {
