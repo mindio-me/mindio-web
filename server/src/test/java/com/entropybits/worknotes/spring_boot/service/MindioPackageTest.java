@@ -102,6 +102,24 @@ class MindioPackageTest {
     }
 
     @Test
+    void rejectsEntryNameThatCannotBeDecoded() throws Exception {
+        Path ok = rawZip("enc.mindio", "manifest.json", manifestJson(1));
+        byte[] bytes = Files.readAllBytes(ok);
+        byte[] name = "manifest.json".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        for (int i = 0; i + name.length <= bytes.length; i++) {
+            if (java.util.Arrays.equals(java.util.Arrays.copyOfRange(bytes, i, i + name.length), name)) {
+                bytes[i] = (byte) 0xC0; // 非法 UTF-8 起始字节
+                bytes[i + 1] = (byte) 0xC0;
+            }
+        }
+        Path bad = tmp.resolve("bad-name.mindio");
+        Files.write(bad, bytes);
+
+        assertThatThrownBy(() -> reader().read(bad, tmp.resolve("enc")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class);
+    }
+
+    @Test
     void rejectsZipSlipAndUnknownEntries() throws Exception {
         Path slip = rawZip("slip.mindio", "manifest.json", manifestJson(1), "assets/../../evil.txt", "x");
         assertThatThrownBy(() -> reader().read(slip, tmp.resolve("c")))

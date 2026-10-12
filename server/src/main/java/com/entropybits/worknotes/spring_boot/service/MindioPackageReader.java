@@ -103,7 +103,8 @@ public class MindioPackageReader {
             }
         } catch (InvalidPackageException e) {
             throw e;
-        } catch (ZipException e) {
+        } catch (ZipException | IllegalArgumentException e) {
+            // ZipInputStream 遇到无法解码的条目名时抛 IllegalArgumentException（不是 ZipException）
             throw new InvalidPackageException("不是有效的 mindio 备份文件（无法解压）");
         } catch (IOException e) {
             throw new InvalidPackageException("备份文件内容损坏：" + e.getMessage());
