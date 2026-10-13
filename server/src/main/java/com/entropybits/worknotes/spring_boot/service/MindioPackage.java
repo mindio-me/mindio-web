@@ -5,12 +5,18 @@
 package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.entity.Note;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * .mindio 笔记包的数据结构。包里只放笔记自身内容；本机 id、owner、标签、项目、language、isPublic
@@ -28,8 +34,24 @@ public final class MindioPackage {
 
     public record Section(String type, String content) {}
 
+    public record PackagedTranscription(String blockId, String stage, String utterances, String polished,
+                                        String summary, String createdAt, String completedAt) {}
+
     public record PackagedNote(String uid, String title, String summary, String createdAt, String modifiedAt,
-                               String contentType, String content, List<Section> sections) {}
+                               String contentType, String content, List<Section> sections,
+                               List<PackagedTranscription> transcriptions) {
+        @JsonCreator
+        public PackagedNote {
+            // 只把 null 规范化为空列表；元素为 null 的列表原样保留，交给读包校验拒绝
+            transcriptions = transcriptions == null ? List.of() : transcriptions;
+        }
+
+        /** 不带转写记录 */
+        public PackagedNote(String uid, String title, String summary, String createdAt, String modifiedAt,
+                            String contentType, String content, List<Section> sections) {
+            this(uid, title, summary, createdAt, modifiedAt, contentType, content, sections, List.of());
+        }
+    }
 
     private MindioPackage() {}
 
@@ -53,7 +75,29 @@ public final class MindioPackage {
     }
 
     public static PackagedNote fromNote(Note note, String uid, String content, List<Section> sections) {
+        return fromNote(note, uid, content, sections, List.of());
+    }
+
+    public static PackagedNote fromNote(Note note, String uid, String content, List<Section> sections,
+                                        List<PackagedTranscription> transcriptions) {
         return new PackagedNote(uid, note.getTitle(), note.getSummary(), toIso(note.getCreatedAt()),
-                toIso(note.getModifiedAt()), note.getContentType(), content, sections);
+                toIso(note.getModifiedAt()), note.getContentType(), content, sections, transcriptions);
+    }
+
+    /** 取 editorjs 正文 blocks[].id；JSON 不合法时返回空集 */
+    public static Set<String> blockIds(ObjectMapper om, String editorjsJson) {
+        Set<String> ids = new LinkedHashSet<>();
+        if (editorjsJson == null || editorjsJson.isBlank()) return ids;
+        try {
+            JsonNode root = om.readTree(editorjsJson);
+            if (root == null) return ids;
+            for (JsonNode block : root.path("blocks")) {
+                JsonNode id = block.get("id");
+                if (id != null && id.isTextual()) ids.add(id.asText());
+            }
+        } catch (JsonProcessingException e) {
+            return ids;
+        }
+        return ids;
     }
 }

@@ -201,4 +201,61 @@ class MindioPackageTest {
         assertThat(MindioPackage.toIso(null)).isNull();
         assertThat(MindioPackage.fromIso(null)).isNull();
     }
+
+    MindioPackage.PackagedTranscription tr(String blockId, String stage, String createdAt) {
+        return new MindioPackage.PackagedTranscription(blockId, stage, "[{\"t\":0,\"text\":\"hi\"}]", "polished",
+                "sum", createdAt, "2026-01-02T03:04:06Z");
+    }
+
+    MindioPackage.PackagedNote withTranscriptions(List<MindioPackage.PackagedTranscription> ts) {
+        MindioPackage.PackagedNote s = sample();
+        return new MindioPackage.PackagedNote(s.uid(), s.title(), s.summary(), s.createdAt(), s.modifiedAt(),
+                s.contentType(), s.content(), s.sections(), ts);
+    }
+
+    @Test
+    void roundTripsTranscriptionsAndDefaultsToEmpty() throws Exception {
+        MindioPackage.PackagedNote n = withTranscriptions(List.of(tr("b1", "FULL", "2026-01-02T03:04:05Z")));
+        Path zip = rawZip("t.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", om.writeValueAsString(n));
+
+        assertThat(reader().read(zip, tmp.resolve("t")).notes()).containsExactly(n);
+        assertThat(sample().transcriptions()).isEmpty();
+        // 没有 transcriptions 字段的 JSON 读出来也是空列表
+        String legacy = om.writeValueAsString(sample()).replace(",\"transcriptions\":[]", "");
+        Path zip2 = rawZip("legacy.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", legacy);
+        assertThat(reader().read(zip2, tmp.resolve("t2")).notes().get(0).transcriptions()).isEmpty();
+    }
+
+    @Test
+    void rejectsBadTranscriptions() throws Exception {
+        int i = 0;
+        for (MindioPackage.PackagedTranscription bad : java.util.Arrays.asList(
+                null, tr(null, "FULL", null), tr("b1", null, null), tr("b1", "NOPE", null), tr("b1", "FULL", "garbage"))) {
+            java.util.List<MindioPackage.PackagedTranscription> list = new java.util.ArrayList<>();
+            list.add(bad);
+            Path zip = rawZip("bad" + i + ".mindio", "manifest.json", manifestJson(1),
+                    "notes/" + UID + ".json", om.writeValueAsString(withTranscriptions(list)));
+            Path dir = tmp.resolve("bad" + i++);
+            assertThatThrownBy(() -> reader().read(zip, dir))
+                    .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                    .hasMessageContaining(UID);
+        }
+    }
+
+    @Test
+    void rejectsDuplicateTranscriptionBlockIds() throws Exception {
+        MindioPackage.PackagedNote n = withTranscriptions(List.of(tr("b1", "FULL", null), tr("b1", "SUMMARY", null)));
+        Path zip = rawZip("dup.mindio", "manifest.json", manifestJson(1), "notes/" + UID + ".json", om.writeValueAsString(n));
+        assertThatThrownBy(() -> reader().read(zip, tmp.resolve("d")))
+                .isInstanceOf(MindioPackageReader.InvalidPackageException.class)
+                .hasMessage("备份文件里有重复的转写记录：" + UID);
+    }
+
+    @Test
+    void blockIdsReadsEditorjsBlockIds() {
+        assertThat(MindioPackage.blockIds(om, "{\"blocks\":[{\"id\":\"a\",\"type\":\"p\"},{\"type\":\"x\"},{\"id\":\"b\"}]}"))
+                .containsExactlyInAnyOrder("a", "b");
+        assertThat(MindioPackage.blockIds(om, "not json")).isEmpty();
+        assertThat(MindioPackage.blockIds(om, null)).isEmpty();
+    }
 }
