@@ -6,6 +6,7 @@ package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.service.NoteExportService;
 import com.entropybits.worknotes.spring_boot.service.NoteImportService;
+import com.entropybits.worknotes.spring_boot.service.NoteService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.InputStreamResource;
@@ -14,6 +15,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +29,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
+import java.util.Map;
 
 /**
  * editor.js 笔记的 .mindio 备份导出/导入。详见 docs/superpowers/specs/2026-10-12-editorjs-note-export-import-design.md。
@@ -41,6 +45,7 @@ public class NoteBackupController {
 
     private final NoteExportService exportService;
     private final NoteImportService importService;
+    private final NoteService noteService;
 
     @PostMapping("/export")
     public ResponseEntity<InputStreamResource> export(@RequestBody ExportRequest request,
@@ -79,6 +84,12 @@ public class NoteBackupController {
                                                                  @AuthenticationPrincipal UserDetails userDetails) {
         return ResponseEntity.ok(importService.commit(userDetails.getUsername(), request.importToken(),
                 request.overwrite() == null ? List.of() : request.overwrite()));
+    }
+
+    @GetMapping("/by-uid/{uid}")
+    public ResponseEntity<Map<String, Long>> findByUid(@PathVariable String uid,
+                                                       @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(Map.of("id", noteService.findIdByUid(userDetails.getUsername(), uid)));
     }
 
     /**

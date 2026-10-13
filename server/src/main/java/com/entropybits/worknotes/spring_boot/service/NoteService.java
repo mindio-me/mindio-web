@@ -40,6 +40,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -328,6 +329,15 @@ public class NoteService {
         // 初始化懒加载集合后返回
         initializeLazyCollections(saved);
         return NoteResponse.fromEntity(saved);
+    }
+
+    /** .mindio 导入后的 uid 引用（/workspace/notes/uid/:uid）点击时用：按当前用户 + uid 找本机笔记 id */
+    @Transactional(readOnly = true)
+    public Long findIdByUid(String username, String uid) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("用户不存在"));
+        return noteRepository.findByOwnerAndUidIn(user, List.of(uid)).stream().findFirst().map(Note::getId)
+                .orElseThrow(() -> new ResourceNotFoundException("这篇笔记不在本机"));
     }
 
     // ========== 辅助方法 ==========
