@@ -760,16 +760,10 @@ export default {
   }
 
   .section-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-color);
     margin: 0 0 20px 0;
   }
 
   ::v-deep .el-form-item__label {
-    font-size: 14px;
-    font-weight: bold;
-    color: var(--text-secondary);
     padding-bottom: 8px;
   }
 
@@ -811,15 +805,11 @@ export default {
 }
 
 .section-tip {
-  font-size: 13px;
-  color: var(--text-muted);
   margin-top: -10px;
   margin-bottom: 14px;
 }
 
 .hint-text {
-  font-size: 12px;
-  color: var(--text-muted);
   margin-top: 6px;
 }
 
@@ -974,11 +964,6 @@ export default {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-color);
-}
-
-.security-desc {
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 .force-password-change-hint {

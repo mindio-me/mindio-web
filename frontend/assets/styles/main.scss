@@ -118,6 +118,69 @@ select {
   font-family: inherit;
 }
 
+// Settings typography also reaches child cards with their own Vue style scopes.
+.settings-page,
+.profile-page {
+  font-size: 14px;
+  color: var(--text-color);
+
+  .card-header,
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--text-color);
+  }
+
+  .section-tip {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin: 0 0 14px;
+  }
+
+  .hint-text,
+  .form-actions-tip,
+  .security-desc {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-secondary);
+  }
+
+  .el-form-item__label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .el-input__inner,
+  .el-textarea__inner {
+    font-size: 14px;
+  }
+
+  .el-collapse-item__header {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .el-alert__title,
+  .el-alert__description {
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .settings-card {
+    color: var(--text-color);
+    border-color: var(--border-color);
+
+    .el-card__header {
+      border-color: var(--border-color);
+    }
+  }
+}
+
 // 按钮、菜单项文字加粗到 600，参考 Twitter 偏粗的交互文字风格。
 // 注意：雅黑只有常规/粗体两档，500 在 Windows 中文下等同常规，600 起才会渲染成粗体
 .el-button,

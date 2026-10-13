@@ -374,18 +374,18 @@ export default {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-weight: bold;
 }
 
-.section-tip {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 0 0 14px 0;
+.settings-page ::v-deep .el-alert--info.is-light {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+
+  .el-alert__description {
+    color: var(--text-secondary);
+  }
 }
 
 .hint-text {
-  font-size: 12px;
-  color: var(--text-muted);
   margin-top: 6px;
 }
 
@@ -399,11 +399,6 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.form-actions-tip {
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
 .wechat-bind-code-box {
@@ -432,10 +427,6 @@ export default {
   padding: 6px 0;
   font-size: 13px;
   color: var(--text-muted);
-}
-
-::v-deep .el-form-item__label {
-  font-weight: bold;
 }
 
 @media screen and (max-width: 768px) {

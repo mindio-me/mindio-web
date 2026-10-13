@@ -204,6 +204,29 @@ export default {
 </script>
 
 <style scoped lang="scss">
+.ai-settings-card {
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  border-color: var(--border-color);
+
+  ::v-deep .el-card__header,
+  ::v-deep .el-collapse {
+    border-color: var(--border-color);
+  }
+
+  ::v-deep .el-collapse-item__header,
+  ::v-deep .el-collapse-item__wrap {
+    background: transparent;
+    color: var(--text-color);
+    border-color: var(--border-color);
+  }
+
+  ::v-deep .el-collapse-item__content {
+    color: var(--text-color);
+  }
+
+}
+
 .ai-settings-alert {
   margin-bottom: 12px;
 }
