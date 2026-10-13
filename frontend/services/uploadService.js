@@ -26,8 +26,13 @@ function replaceImageExtension(name, ext) {
     : `${baseName}.${ext}`
 }
 
-async function normalizeImageFile(file) {
-  if (!isHeicFile(file)) return file
+async function convertHeicToJpeg(file) {
+  // 桌面版在主进程里转：heic2any 依赖 eval，桌面版的 CSP 不允许
+  const desktop = process.client && window.mindioDesktop
+  if (desktop && typeof desktop.convertHeic === 'function') {
+    const jpeg = await desktop.convertHeic(new Uint8Array(await file.arrayBuffer()))
+    return new Blob([jpeg], { type: 'image/jpeg' })
+  }
 
   const mod = await import('heic2any')
   const heic2any = mod.default || mod
@@ -36,7 +41,13 @@ async function normalizeImageFile(file) {
     toType: 'image/jpeg',
     quality: 0.92
   })
-  const blob = Array.isArray(converted) ? converted[0] : converted
+  return Array.isArray(converted) ? converted[0] : converted
+}
+
+async function normalizeImageFile(file) {
+  if (!isHeicFile(file)) return file
+
+  const blob = await convertHeicToJpeg(file)
   return new File([blob], replaceImageExtension(file.name, 'jpg'), { type: 'image/jpeg' })
 }
 
