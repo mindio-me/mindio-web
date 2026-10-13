@@ -8,6 +8,8 @@
     :title="preview ? $t('workspace.noteBackup.conflictTitle') : $t('workspace.noteBackup.importOption')"
     width="640px"
     :close-on-click-modal="false"
+    :close-on-press-escape="!committing"
+    :show-close="!committing"
     @close="close"
   >
     <div v-loading="loading" :element-loading-text="$t('workspace.noteBackup.previewing')" class="import-body">
@@ -56,7 +58,7 @@
       </template>
     </div>
     <span slot="footer">
-      <el-button size="small" @click="close">{{ $t('common.cancel') }}</el-button>
+      <el-button size="small" :disabled="committing" @click="close">{{ $t('common.cancel') }}</el-button>
       <el-button type="primary" size="small" :loading="committing" :disabled="!preview" @click="commit">
         {{ $t('workspace.noteBackup.confirmImport') }}
       </el-button>
@@ -75,7 +77,9 @@ export default {
   name: 'NoteImportDialog',
   props: {
     value: { type: Boolean, default: false },
-    file: { type: typeof File !== 'undefined' ? File : Object, default: null }
+    file: { type: typeof File !== 'undefined' ? File : Object, default: null },
+    beforeCommit: { type: Function, default: null },
+    afterCommit: { type: Function, default: null }
   },
   data() {
     return { loading: false, committing: false, preview: null, choices: {}, runId: 0 }
@@ -124,15 +128,18 @@ export default {
       Object.keys(this.choices).forEach(uid => { this.choices[uid] = choice })
     },
     async commit() {
+      if (this.committing || !this.preview) return
       this.committing = true
       try {
         const overwrite = Object.keys(this.choices).filter(uid => this.choices[uid] === 'overwrite')
+        if (this.beforeCommit) await this.beforeCommit()
         const result = await this.$noteService.commitImport(this.preview.importToken, overwrite)
         this.$message.success(this.$t('workspace.noteBackup.importDone', result))
         if (this.preview && this.preview.unresolvedNoteRefs > 0) {
           this.$message.info(this.$t('workspace.noteBackup.unresolvedRefsWarn', { n: this.preview.unresolvedNoteRefs }))
         }
-        this.$emit('imported', result)
+        if (this.afterCommit) await this.afterCommit(result, overwrite)
+        this.$emit('imported', result, overwrite)
         this.close()
       } catch (e) {
         this.$message.error(this.$t('workspace.noteBackup.importFailed') + await errorMessageOf(e, ''))

@@ -359,6 +359,10 @@
                       <i class="el-icon-document-copy" style="margin-right:4px;"></i>
                       {{ $t('workspace.notes.viewOriginalMarkdown') }}
                     </el-dropdown-item>
+                    <el-dropdown-item v-if="isEditorjsNote" command="export-mindio" :disabled="exportingCurrent">
+                      <i :class="exportingCurrent ? 'el-icon-loading' : 'el-icon-download'"></i>
+                      {{ $t('workspace.noteBackup.exportCurrent') }}
+                    </el-dropdown-item>
                     <el-dropdown-item command="export-pdf">
                       <i class="el-icon-document" style="margin-right:4px;"></i>
                       {{ $t('workspace.notes.exportPdf') }}
@@ -578,7 +582,8 @@
     <NoteImportDialog
       v-model="noteImportDialogVisible"
       :file="noteImportFile"
-      @imported="handleMindioImported"
+      :before-commit="prepareMindioImport"
+      :after-commit="handleMindioImported"
     />
 
     <FeishuCredentialDialog
@@ -761,6 +766,7 @@ export default {
       selectMode: false,
       selectedNoteIds: [],
       exportingSelected: false,
+      exportingCurrent: false,
       // 通用
       loading: false,
       // 聊天回复「插入到笔记」：模型建议插到某一节之后时弹窗让用户选
@@ -1192,7 +1198,27 @@ export default {
       this.noteImportFile = null
       this.$nextTick(() => { this.noteImportFile = file })
     },
-    async handleMindioImported() {
+    async prepareMindioImport() {
+      await this.flushPendingSave({ force: true })
+      if (this.isSaving || this.hasUnsavedChanges) {
+        throw new Error(this.$t('workspace.noteBackup.saveBeforeTransferFailed'))
+      }
+    },
+    async handleMindioImported(result, overwrite = []) {
+      try {
+        if (result.overwritten > 0 && this.activeNote) {
+          const activeId = this.activeNote.id
+          for (const uid of overwrite) {
+            const found = await this.$noteService.findIdByUid(uid)
+            if (String(found.id) === String(activeId) && String(this.activeNoteId) === String(activeId)) {
+              await this.reloadFromServer()
+              break
+            }
+          }
+        }
+      } catch (e) {
+        this.$message.error(this.$t('workspace.notes.loadNoteDetailFailed'))
+      }
       this.page = 0
       await this.loadNotes()
     },
@@ -1727,13 +1753,17 @@ export default {
       }
     },
     /** 把还没落库的编辑先存掉：撤销/插入之前调用，让服务端的冲突检查和插入位置基于用户真实的最新内容 */
-    async flushPendingSave() {
+    async flushPendingSave({ force = false } = {}) {
       if (this.saveTimeout) {
         clearTimeout(this.saveTimeout)
         this.saveTimeout = null
       }
       await this.waitForSaveIdle()
-      if (this.hasUnsavedChanges && this.isEditorjsNote && this.editor) await this.saveToBackend()
+      if ((this.hasUnsavedChanges || force) && this.isEditorjsNote && this.editor) {
+        // Export/import must capture edits even before EditorJS's delayed onChange notification.
+        this.hasUnsavedChanges = true
+        await this.saveToBackend()
+      }
     },
     /**
      * 丢掉编辑器状态、按库里重新载入。先停掉自动保存：否则载入期间到点的保存定时器会把编辑器里
@@ -2096,9 +2126,39 @@ export default {
       else if (command === 'publish-wechat') this.openWechatPublish(note)
       else if (command === 'translate-english') this.openTranslationDialog(note)
       else if (command === 'export-pdf') this.exportNoteToPdf(note)
+      else if (command === 'export-mindio') this.exportCurrentNote(note)
       else if (command === 'publish-linkedin') this.openLinkedinShareDialog(note)
       else if (command === 'convert-to-editorjs') this.convertNoteToEditorjs(note)
       else if (command === 'view-original-markdown') this.openOriginalMarkdown(note)
+    },
+    async exportCurrentNote(note) {
+      if (!note || note.contentType !== 'editorjs' || this.exportingCurrent) return
+      const noteId = note.id
+      this.exportingCurrent = true
+      try {
+        await this.flushPendingSave({ force: true })
+        if (this.isSaving || this.hasUnsavedChanges) {
+          throw new Error(this.$t('workspace.noteBackup.saveBeforeTransferFailed'))
+        }
+        if (!this.activeNote || String(this.activeNote.id) !== String(noteId)) {
+          throw new Error(this.$t('workspace.noteBackup.noteChangedBeforeExport'))
+        }
+        const title = (this.activeNote.title || '').trim() || this.$t('workspace.notes.untitledNote')
+        let filename = title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 150).replace(/[. ]+$/g, '') || 'note'
+        if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(filename)) filename = `_${filename}`
+        const { blob, noteCount, missingAssets } = await this.$noteService.exportNotes({
+          noteIds: [noteId],
+          exportedFrom: isDesktopRuntime() ? 'desktop' : 'web'
+        })
+        downloadBlob(blob, `${filename}.mindio`)
+        this.$message.success(missingAssets > 0
+          ? this.$t('workspace.noteBackup.exportMissingAssets', { n: noteCount, m: missingAssets })
+          : this.$t('workspace.noteBackup.exportDone', { n: noteCount }))
+      } catch (e) {
+        this.$message.error(this.$t('workspace.noteBackup.exportFailed') + await errorMessageOf(e, ''))
+      } finally {
+        this.exportingCurrent = false
+      }
     },
     openLinkedinShareDialog(note) {
       if (!note) return
