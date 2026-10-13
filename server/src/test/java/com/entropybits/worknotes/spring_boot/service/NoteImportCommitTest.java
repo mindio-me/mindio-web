@@ -58,6 +58,7 @@ class NoteImportCommitTest {
     @Mock UploadService uploadService;
     @Mock ContentIndexingService contentIndexingService;
     @Mock UploadPathConfig uploadPathConfig;
+    @Mock com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository audioTranscriptionRepository;
     @TempDir Path uploads;
     @TempDir Path src;
 
@@ -320,7 +321,8 @@ class NoteImportCommitTest {
                 .sectionTypes(new ArrayList<>(List.of("image")))
                 .sectionContents(new ArrayList<>(List.of("{\"file\":{\"url\":\"/api/uploads/file/a.png\"}}"))).build();
         when(noteRepository.findAllById(List.of(5L))).thenReturn(List.of(original));
-        NoteExportService exporter = new NoteExportService(noteRepository, userRepository, uploadPathConfig, om, "");
+        NoteExportService exporter = new NoteExportService(noteRepository, userRepository, audioTranscriptionRepository,
+                uploadPathConfig, om, "");
         Path pkgFile = exporter.export("alice", List.of(5L), false, "", "web").file();
 
         when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenReturn(List.of());

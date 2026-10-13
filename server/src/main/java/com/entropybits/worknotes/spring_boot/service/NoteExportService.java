@@ -5,10 +5,12 @@
 package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,8 +26,10 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -39,15 +43,18 @@ public class NoteExportService {
 
     private final NoteRepository noteRepository;
     private final UserRepository userRepository;
+    private final AudioTranscriptionRepository audioTranscriptionRepository;
     private final UploadPathConfig uploadPathConfig;
     private final ObjectMapper objectMapper;
     private final String uploadUrlPrefix;
 
     public NoteExportService(NoteRepository noteRepository, UserRepository userRepository,
+                             AudioTranscriptionRepository audioTranscriptionRepository,
                              UploadPathConfig uploadPathConfig, ObjectMapper objectMapper,
                              @Value("${worknotes.upload.url-prefix:}") String uploadUrlPrefix) {
         this.noteRepository = noteRepository;
         this.userRepository = userRepository;
+        this.audioTranscriptionRepository = audioTranscriptionRepository;
         this.uploadPathConfig = uploadPathConfig;
         this.objectMapper = objectMapper;
         this.uploadUrlPrefix = uploadUrlPrefix;
@@ -71,17 +78,21 @@ public class NoteExportService {
         }
         List<MindioPackage.MissingAsset> missing = new ArrayList<>();
         Map<Path, String> assetNames = new HashMap<>();
+        NoteRefRewriter refs = new NoteRefRewriter(objectMapper, List.of(requestOrigin == null ? "" : requestOrigin));
+        Map<Long, String> uids = new HashMap<>();
         try (OutputStream out = Files.newOutputStream(file);
              MindioPackageWriter writer = new MindioPackageWriter(out, objectMapper)) {
+            Map<Long, String> idToUid = referencedUids(user, notes, refs, uids);
             for (Note note : notes) {
-                String uid = ensureUid(note);
-                String content = packText(note.getContent(), uid, rewriter, writer, assetNames, missing);
+                String uid = ensureUid(note, uids);
+                String content = packText(refs.toPackage(note.getContent(), null, idToUid), uid, rewriter, writer,
+                        assetNames, missing);
                 List<MindioPackage.Section> sections = new ArrayList<>();
                 for (MindioPackage.Section s : MindioPackage.sectionsOf(note)) {
-                    sections.add(new MindioPackage.Section(s.type(),
-                            packText(s.content(), uid, rewriter, writer, assetNames, missing)));
+                    sections.add(new MindioPackage.Section(s.type(), packText(refs.toPackage(s.content(), s.type(),
+                            idToUid), uid, rewriter, writer, assetNames, missing)));
                 }
-                writer.writeNote(MindioPackage.fromNote(note, uid, content, sections));
+                writer.writeNote(MindioPackage.fromNote(note, uid, content, sections, transcriptionsOf(note)));
             }
             writer.writeManifest(new MindioPackage.Manifest(MindioPackage.FORMAT, MindioPackage.FORMAT_VERSION,
                     Instant.now().toString(), exportedFrom == null ? "web" : exportedFrom, notes.size(), missing));
@@ -107,8 +118,36 @@ public class NoteExportService {
         return found.stream().filter(n -> "editorjs".equals(n.getContentType())).toList();
     }
 
-    private String ensureUid(Note note) {
+    /** 被导出笔记引用的、属于当前用户的笔记：确保有 uid，返回 id → uid。别人的或不存在的笔记不在结果里 */
+    private Map<Long, String> referencedUids(User user, List<Note> notes, NoteRefRewriter refs, Map<Long, String> cache) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (Note n : notes) {
+            ids.addAll(refs.collectNoteIds(n.getContent(), null));
+            for (MindioPackage.Section s : MindioPackage.sectionsOf(n)) ids.addAll(refs.collectNoteIds(s.content(), s.type()));
+        }
+        Map<Long, String> idToUid = new HashMap<>();
+        if (ids.isEmpty()) return idToUid;
+        for (Note target : noteRepository.findAllById(ids)) {
+            if (target.getOwner().getId().equals(user.getId())) idToUid.put(target.getId(), ensureUid(target, cache));
+        }
+        return idToUid;
+    }
+
+    /** 只导出已完成、且对应块还在正文里的转写记录（spec 8.2） */
+    private List<MindioPackage.PackagedTranscription> transcriptionsOf(Note note) {
+        Set<String> blockIds = MindioPackage.blockIds(objectMapper, note.getContent());
+        return audioTranscriptionRepository.findByNoteId(note.getId()).stream()
+                .filter(t -> t.getStatus() == AudioTranscription.Status.DONE && blockIds.contains(t.getBlockId()))
+                .map(t -> new MindioPackage.PackagedTranscription(t.getBlockId(), t.getStage().name(),
+                        t.getUtterances(), t.getPolished(), t.getSummary(),
+                        MindioPackage.toIso(t.getCreatedAt()), MindioPackage.toIso(t.getCompletedAt())))
+                .toList();
+    }
+
+    private String ensureUid(Note note, Map<Long, String> cache) {
         if (note.getUid() != null) return note.getUid();
+        String cached = cache.get(note.getId());
+        if (cached != null) return cached;
         String candidate = UUID.randomUUID().toString();
         // 不调用 note.setUid：托管实体一旦变脏，提交时会被 flush 并触发 @PreUpdate 刷新 modifiedAt
         // 赢得竞争时返回本次分配的值；输掉时读取胜者的 uid。REPEATABLE READ 下胜者的 uid 可能读不到
@@ -116,6 +155,7 @@ public class NoteExportService {
         String uid = noteRepository.assignUidIfAbsent(note.getId(), candidate) == 1
                 ? candidate : noteRepository.findUidById(note.getId());
         if (uid == null) throw new BadRequestException("笔记在导出过程中被修改，请重试");
+        cache.put(note.getId(), uid);
         return uid;
     }
 

@@ -5,10 +5,12 @@
 package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -43,6 +45,7 @@ class NoteExportServiceTest {
     @Mock NoteRepository noteRepository;
     @Mock UserRepository userRepository;
     @Mock UploadPathConfig uploadPathConfig;
+    @Mock AudioTranscriptionRepository audioTranscriptionRepository;
     @TempDir Path uploads;
     @TempDir Path out;
 
@@ -57,7 +60,8 @@ class NoteExportServiceTest {
     void setUp() throws Exception {
         lenient().when(uploadPathConfig.getUploadPath()).thenReturn(uploads.toString());
         lenient().when(userRepository.findByUsername("alice")).thenReturn(Optional.of(alice));
-        service = new NoteExportService(noteRepository, userRepository, uploadPathConfig, om, "");
+        service = new NoteExportService(noteRepository, userRepository, audioTranscriptionRepository,
+                uploadPathConfig, om, "");
         Files.createDirectories(uploads.resolve("file"));
         Files.writeString(uploads.resolve("file/a.png"), "img-a");
     }
@@ -185,6 +189,62 @@ class NoteExportServiceTest {
                 .thenReturn(List.of(note(5L, alice, "11111111-1111-1111-1111-111111111111", "{}")));
 
         assertThat(run(null, true).noteCount()).isEqualTo(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void rewritesOwnNoteRefsToUidsAndLeavesOthersAlone() throws Exception {
+        String content = "{\"blocks\":[{\"id\":\"r1\",\"type\":\"references\",\"data\":{\"items\":["
+                + "{\"kind\":\"note\",\"title\":\"B\",\"noteId\":7},{\"kind\":\"note\",\"title\":\"X\",\"noteId\":9}]}},"
+                + "{\"id\":\"p1\",\"type\":\"paragraph\",\"data\":{\"text\":\"/workspace/notes/7 /workspace/notes/404\"}}]}";
+        Note a = note(5L, alice, "11111111-1111-1111-1111-111111111111", content);
+        a.setSectionTypes(new ArrayList<>());
+        a.setSectionContents(new ArrayList<>());
+        Note b = note(7L, alice, null, "{}");
+        Note bobs = note(9L, bob, null, "{}");
+        when(noteRepository.findAllById(org.mockito.ArgumentMatchers.<Iterable<Long>>any())).thenAnswer(inv -> {
+            java.util.Set<Long> asked = new java.util.HashSet<>();
+            ((Iterable<Long>) inv.getArgument(0)).forEach(asked::add);
+            if (asked.equals(java.util.Set.of(5L))) return List.of(a);
+            if (asked.equals(java.util.Set.of(7L, 9L, 404L))) return List.of(b, bobs);
+            return List.of();
+        });
+        when(noteRepository.assignUidIfAbsent(eq(7L), anyString())).thenReturn(1);
+
+        MindioPackageReader.ReadPackage pkg = read(run(List.of(5L), false).file());
+
+        String out = pkg.notes().get(0).content();
+        assertThat(out).contains("\"noteUid\"").contains("\"noteId\":9")
+                .contains("/workspace/notes/uid/").contains("/workspace/notes/404");
+        verify(noteRepository, never()).assignUidIfAbsent(eq(9L), anyString());
+    }
+
+    @Test
+    void exportsOnlyFinishedTranscriptionsOfBlocksStillInTheNote() {
+        Note n = note(5L, alice, "11111111-1111-1111-1111-111111111111",
+                "{\"blocks\":[{\"id\":\"rec1\",\"type\":\"audioRecord\",\"data\":{}}]}");
+        n.setSectionTypes(new ArrayList<>());
+        n.setSectionContents(new ArrayList<>());
+        when(noteRepository.findAllById(List.of(5L))).thenReturn(List.of(n));
+        when(audioTranscriptionRepository.findByNoteId(5L)).thenReturn(List.of(
+                transcription("rec1", AudioTranscription.Status.DONE),
+                transcription("gone", AudioTranscription.Status.DONE),
+                transcription("rec1", AudioTranscription.Status.PROCESSING)));
+
+        MindioPackageReader.ReadPackage pkg = read(run(List.of(5L), false).file());
+
+        assertThat(pkg.notes().get(0).transcriptions()).singleElement().satisfies(t -> {
+            assertThat(t.blockId()).isEqualTo("rec1");
+            assertThat(t.stage()).isEqualTo("FULL");
+            assertThat(t.utterances()).isEqualTo("[u]");
+            assertThat(t.createdAt()).isEqualTo("2026-01-02T03:04:05Z");
+        });
+    }
+
+    AudioTranscription transcription(String blockId, AudioTranscription.Status status) {
+        return AudioTranscription.builder().noteId(5L).blockId(blockId).status(status)
+                .triggerType(AudioTranscription.TriggerType.AUTO).stage(AudioTranscription.Stage.FULL)
+                .utterances("[u]").polished("p").summary("s").createdAt(t).completedAt(t).build();
     }
 
     @Test
