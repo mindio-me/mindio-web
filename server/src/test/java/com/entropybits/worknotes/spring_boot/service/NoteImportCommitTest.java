@@ -6,6 +6,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
 import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.Project;
 import com.entropybits.worknotes.spring_boot.entity.Tag;
@@ -84,7 +85,7 @@ class NoteImportCommitTest {
         lenient().when(uploadService.isAcceptableUpload(anyString(), anyLong()))
                 .thenAnswer(inv -> !((String) inv.getArgument(0)).endsWith(".bin"));
         service = new NoteImportService(noteRepository, userRepository, revisionService, uploadService,
-                contentIndexingService, store, uploadPathConfig, om, "", 500);
+                contentIndexingService, audioTranscriptionRepository, store, uploadPathConfig, om, "", 500);
         TransactionSynchronizationManager.initSynchronization();
         Files.writeString(src.resolve("a.png"), "img-a");
         hash = NoteAssetRewriter.sha256Hex(src.resolve("a.png"));
@@ -339,5 +340,78 @@ class NoteImportCommitTest {
         assertThat(saved.getValue().getOwner()).isSameAs(bob);
         assertThat(saved.getValue().getContent()).isEqualTo(original.getContent());
         assertThat(saved.getValue().getSectionContents()).isEqualTo(original.getSectionContents());
+    }
+
+    @Test
+    void resolvesRefsBetweenNotesImportedTogetherAndKeepsPackageModifiedAt() throws Exception {
+        String a = "{\"blocks\":[{\"id\":\"r\",\"type\":\"references\",\"data\":{\"items\":["
+                + "{\"kind\":\"note\",\"title\":\"B\",\"noteUid\":\"" + UID2 + "\"}]}},"
+                + "{\"id\":\"p\",\"type\":\"paragraph\",\"data\":{\"text\":\"/workspace/notes/uid/" + UID2
+                + " /workspace/notes/uid/99999999-9999-9999-9999-999999999999\"}}]}";
+        MindioPackage.PackagedNote na = new MindioPackage.PackagedNote(UID1, "A", null, "2026-01-01T00:00:00Z",
+                "2026-03-01T00:00:00Z", "editorjs", a, List.of());
+        MindioPackage.PackagedNote nb = new MindioPackage.PackagedNote(UID2, "B", null, "2026-01-01T00:00:00Z",
+                "2026-03-02T00:00:00Z", "editorjs", "{}", List.of());
+        String token = preview("alice", na, nb);
+        List<Note> saved = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            if (n.getId() == null) n.setId(UID1.equals(n.getUid()) ? 101L : 102L);
+            saved.add(n);
+            return n;
+        }).when(noteRepository).saveAndFlush(any());
+        when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenAnswer(inv -> {
+            java.util.Collection<String> asked = inv.getArgument(1);
+            return saved.stream().filter(n -> asked.contains(n.getUid())).distinct().toList();
+        });
+
+        service.commit("alice", token, Set.of());
+
+        Note savedA = saved.stream().filter(n -> n.getId() == 101L).reduce((x, y) -> y).orElseThrow();
+        assertThat(savedA.getContent()).contains("\"noteId\":102").doesNotContain("\"noteUid\"")
+                .contains("/workspace/notes/102 ")
+                .contains("/workspace/notes/uid/99999999-9999-9999-9999-999999999999");
+        verify(noteRepository).overwriteModifiedAt(101L, LocalDateTime.of(2026, 3, 1, 0, 0));
+        verify(noteRepository).overwriteModifiedAt(102L, LocalDateTime.of(2026, 3, 2, 0, 0));
+        // 第二轮保存（解析引用）发生在 overwriteModifiedAt 之前
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(noteRepository);
+        order.verify(noteRepository, org.mockito.Mockito.times(3)).saveAndFlush(any());
+        order.verify(noteRepository).overwriteModifiedAt(eq(101L), any());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void writesTranscriptionsForNewNotesAndReplacesThemOnOverwrite() throws Exception {
+        MindioPackage.PackagedTranscription t = new MindioPackage.PackagedTranscription("rec1", "FULL", "[u]", "p",
+                "s", "2026-01-02T03:04:05Z", null);
+        MindioPackage.PackagedNote n = pn(UID1, "一");
+        MindioPackage.PackagedNote withT = new MindioPackage.PackagedNote(n.uid(), n.title(), n.summary(),
+                n.createdAt(), n.modifiedAt(), n.contentType(), n.content(), n.sections(), List.of(t));
+        when(uploadService.findOwnedImageUrlByContentHash(1L, hash)).thenReturn(Optional.of("/api/uploads/file/e.png"));
+
+        // 新建
+        service.commit("alice", preview("alice", withT), Set.of());
+        ArgumentCaptor<Iterable<AudioTranscription>> rows = ArgumentCaptor.forClass(Iterable.class);
+        verify(audioTranscriptionRepository).saveAll(rows.capture());
+        AudioTranscription row = rows.getValue().iterator().next();
+        assertThat(row.getNoteId()).isEqualTo(100L);
+        assertThat(row.getBlockId()).isEqualTo("rec1");
+        assertThat(row.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(row.getTriggerType()).isEqualTo(AudioTranscription.TriggerType.MANUAL);
+        assertThat(row.getStage()).isEqualTo(AudioTranscription.Stage.FULL);
+        assertThat(row.getAttempts()).isZero();
+        assertThat(row.getCreatedAt()).isEqualTo(LocalDateTime.of(2026, 1, 2, 3, 4, 5));
+        assertThat(row.getCompletedAt()).isNotNull();
+        verify(audioTranscriptionRepository, never()).deleteByNoteId(any());
+
+        // 覆盖：先删本机的再写入
+        Note local = Note.builder().id(9L).owner(alice).uid(UID1).title("本机").contentType("editorjs").content("{}")
+                .sectionTypes(new ArrayList<>()).sectionContents(new ArrayList<>()).build();
+        String token = preview("alice", withT);
+        when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenReturn(List.of(local));
+        service.commit("alice", token, Set.of(UID1));
+        org.mockito.InOrder order = org.mockito.Mockito.inOrder(audioTranscriptionRepository);
+        order.verify(audioTranscriptionRepository).deleteByNoteId(9L);
+        order.verify(audioTranscriptionRepository).saveAll(any());
     }
 }

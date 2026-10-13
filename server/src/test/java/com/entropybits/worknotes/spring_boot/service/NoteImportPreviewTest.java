@@ -43,6 +43,7 @@ class NoteImportPreviewTest {
     @Mock NoteRevisionService revisionService;
     @Mock UploadService uploadService;
     @Mock ContentIndexingService contentIndexingService;
+    @Mock com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository audioTranscriptionRepository;
     @Mock UploadPathConfig uploadPathConfig;
     @TempDir Path uploads;
 
@@ -61,7 +62,7 @@ class NoteImportPreviewTest {
         lenient().when(uploadService.isAcceptableUpload(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyLong()))
                 .thenAnswer(inv -> !((String) inv.getArgument(0)).endsWith(".bin"));
         service = new NoteImportService(noteRepository, userRepository, revisionService, uploadService,
-                contentIndexingService, store, uploadPathConfig, om, "", 500);
+                contentIndexingService, audioTranscriptionRepository, store, uploadPathConfig, om, "", 500);
     }
 
     static MockMultipartFile packageFile(ObjectMapper om, Path assetSource, List<MindioPackage.PackagedNote> notes) throws Exception {
@@ -127,5 +128,25 @@ class NoteImportPreviewTest {
         MockMultipartFile junk = new MockMultipartFile("file", "x.mindio", "application/octet-stream", "junk".getBytes());
         assertThatThrownBy(() -> service.preview("alice", junk))
                 .isInstanceOf(MindioPackageReader.InvalidPackageException.class);
+    }
+
+    @Test
+    void countsReferencedNotesFoundNeitherInPackageNorLocally() throws Exception {
+        String u3 = "33333333-3333-3333-3333-333333333333";
+        String u4 = "44444444-4444-4444-4444-444444444444";
+        String content = "{\"blocks\":[{\"id\":\"r\",\"type\":\"references\",\"data\":{\"items\":["
+                + "{\"kind\":\"note\",\"noteUid\":\"" + UID2 + "\"},{\"kind\":\"note\",\"noteUid\":\"" + u3 + "\"}]}},"
+                + "{\"id\":\"p\",\"type\":\"paragraph\",\"data\":{\"text\":\"/workspace/notes/uid/" + u4 + "\"}}]}";
+        Note localU3 = Note.builder().id(30L).owner(alice).uid(u3).title("t").build();
+        when(noteRepository.findByOwnerAndUidIn(any(), anyCollection())).thenAnswer(inv -> {
+            java.util.Collection<String> asked = inv.getArgument(1);
+            return asked.contains(u3) ? List.of(localU3) : List.of();
+        });
+
+        NoteImportService.Preview p = service.preview("alice", packageFile(om, null, List.of(
+                pn(UID1, "A", content), pn(UID2, "B", "{}"))));
+
+        // UID2 在包里，u3 本机有，只有 u4 找不到
+        assertThat(p.unresolvedNoteRefs()).isEqualTo(1);
     }
 }

@@ -6,10 +6,12 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.config.UploadPathConfig;
 import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
+import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.repository.UserRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -52,7 +54,7 @@ public class NoteImportService {
                                String packageTitle, String packageModifiedAt) {}
 
     public record Preview(String importToken, List<NewItem> newNotes, List<ConflictItem> conflicts,
-                          List<String> missingAssets) {}
+                          List<String> missingAssets, int unresolvedNoteRefs) {}
 
     private static final int MAX_ENTRIES = 20_000;
 
@@ -61,6 +63,7 @@ public class NoteImportService {
     private final NoteRevisionService revisionService;
     private final UploadService uploadService;
     private final ContentIndexingService contentIndexingService;
+    private final AudioTranscriptionRepository audioTranscriptionRepository;
     private final NoteImportStagingStore stagingStore;
     private final UploadPathConfig uploadPathConfig;
     private final ObjectMapper objectMapper;
@@ -69,7 +72,8 @@ public class NoteImportService {
 
     public NoteImportService(NoteRepository noteRepository, UserRepository userRepository,
                              NoteRevisionService revisionService, UploadService uploadService,
-                             ContentIndexingService contentIndexingService, NoteImportStagingStore stagingStore,
+                             ContentIndexingService contentIndexingService,
+                             AudioTranscriptionRepository audioTranscriptionRepository, NoteImportStagingStore stagingStore,
                              UploadPathConfig uploadPathConfig, ObjectMapper objectMapper,
                              @Value("${worknotes.upload.url-prefix:}") String uploadUrlPrefix,
                              @Value("${worknotes.upload.max-file-size-mb:500}") int maxFileSizeMb) {
@@ -78,6 +82,7 @@ public class NoteImportService {
         this.revisionService = revisionService;
         this.uploadService = uploadService;
         this.contentIndexingService = contentIndexingService;
+        this.audioTranscriptionRepository = audioTranscriptionRepository;
         this.stagingStore = stagingStore;
         this.uploadPathConfig = uploadPathConfig;
         this.objectMapper = objectMapper;
@@ -125,8 +130,9 @@ public class NoteImportService {
                     }
                 }
             }
+            int unresolvedNoteRefs = countUnresolvedRefs(user, pkg, Set.copyOf(uids));
             NoteImportStagingStore.Staged staged = stagingStore.stage(user.getId(), dir, pkg);
-            return new Preview(staged.token(), newNotes, conflicts, new ArrayList<>(missing));
+            return new Preview(staged.token(), newNotes, conflicts, new ArrayList<>(missing), unresolvedNoteRefs);
         } catch (IOException e) {
             deleteQuietly(dir);
             throw new UncheckedIOException(e);
@@ -180,6 +186,8 @@ public class NoteImportService {
         Set<String> unusable = new HashSet<>();
         String turnId = "import-" + importToken;
 
+        record Written(Note note, LocalDateTime modifiedAt) {}
+        List<Written> written = new ArrayList<>();
         int created = 0, overwritten = 0, kept = 0;
         for (MindioPackage.PackagedNote n : pkg.notes()) {
             Note local = existing.get(n.uid());
@@ -204,6 +212,8 @@ public class NoteImportService {
                         .createdAt(MindioPackage.fromIso(n.createdAt())).modifiedAt(modifiedAt)
                         .sectionTypes(sectionTypes).sectionContents(sectionContents).build();
                 noteRepository.saveAndFlush(note);
+                audioTranscriptionRepository.saveAll(transcriptionsFor(note.getId(), n));
+                written.add(new Written(note, modifiedAt));
                 reindexIds.add(note.getId());
                 created++;
             } else {
@@ -216,12 +226,99 @@ public class NoteImportService {
                 local.setSectionTypes(sectionTypes);
                 local.setSectionContents(sectionContents);
                 noteRepository.saveAndFlush(local);
-                if (modifiedAt != null) noteRepository.overwriteModifiedAt(local.getId(), modifiedAt);
+                audioTranscriptionRepository.deleteByNoteId(local.getId());
+                audioTranscriptionRepository.saveAll(transcriptionsFor(local.getId(), n));
+                written.add(new Written(local, modifiedAt));
                 reindexIds.add(local.getId());
                 overwritten++;
             }
         }
+        resolveNoteRefs(user, written.stream().map(Written::note).toList());
+        for (Written w : written) {
+            if (w.modifiedAt() != null) noteRepository.overwriteModifiedAt(w.note().getId(), w.modifiedAt());
+        }
         return new CommitResult(created, overwritten, kept);
+    }
+
+    /** 包里引用到、但包里和本机都没有的笔记数（spec 8.1），只作提示 */
+    private int countUnresolvedRefs(User user, MindioPackageReader.ReadPackage pkg, Set<String> packageUids) {
+        NoteRefRewriter refs = new NoteRefRewriter(objectMapper, List.of());
+        Set<String> referenced = new LinkedHashSet<>();
+        for (MindioPackage.PackagedNote n : pkg.notes()) {
+            referenced.addAll(refs.collectNoteUids(n.content(), null));
+            if (n.sections() != null) {
+                for (MindioPackage.Section s : n.sections()) referenced.addAll(refs.collectNoteUids(s.content(), s.type()));
+            }
+        }
+        referenced.removeAll(packageUids);
+        if (referenced.isEmpty()) return 0;
+        Set<String> local = noteRepository.findByOwnerAndUidIn(user, referenced).stream()
+                .map(Note::getUid).collect(Collectors.toSet());
+        return (int) referenced.stream().filter(u -> !local.contains(u)).count();
+    }
+
+    /**
+     * 所有笔记写完后统一解析包里的 uid 引用（spec 8.1）：同一个包里互相引用的笔记这时都已有本机 id。
+     * 改写会再保存一次，@PreUpdate 会刷新 modifiedAt，所以调用方在这之后统一用包里的值覆盖。
+     */
+    private void resolveNoteRefs(User user, List<Note> notes) {
+        NoteRefRewriter refs = new NoteRefRewriter(objectMapper, List.of());
+        Set<String> wanted = new LinkedHashSet<>();
+        for (Note n : notes) {
+            wanted.addAll(refs.collectNoteUids(n.getContent(), null));
+            List<String> types = n.getSectionTypes();
+            List<String> contents = n.getSectionContents();
+            for (int i = 0; i < Math.min(types.size(), contents.size()); i++) {
+                wanted.addAll(refs.collectNoteUids(contents.get(i), types.get(i)));
+            }
+        }
+        if (wanted.isEmpty()) return;
+        Map<String, Long> uidToId = noteRepository.findByOwnerAndUidIn(user, wanted).stream()
+                .collect(Collectors.toMap(Note::getUid, Note::getId, (x, y) -> x));
+        if (uidToId.isEmpty()) return;
+        for (Note n : notes) {
+            boolean changed = false;
+            String content = refs.fromPackage(n.getContent(), null, uidToId);
+            if (!java.util.Objects.equals(content, n.getContent())) {
+                n.setContent(content);
+                changed = true;
+            }
+            List<String> types = n.getSectionTypes();
+            List<String> contents = new ArrayList<>(n.getSectionContents());
+            boolean sectionsChanged = false;
+            for (int i = 0; i < Math.min(types.size(), contents.size()); i++) {
+                String s = refs.fromPackage(contents.get(i), types.get(i), uidToId);
+                if (!java.util.Objects.equals(s, contents.get(i))) {
+                    contents.set(i, s);
+                    sectionsChanged = true;
+                }
+            }
+            if (sectionsChanged) {
+                n.setSectionContents(contents);
+                changed = true;
+            }
+            if (changed) noteRepository.saveAndFlush(n);
+        }
+    }
+
+    private List<AudioTranscription> transcriptionsFor(Long noteId, MindioPackage.PackagedNote n) {
+        LocalDateTime now = LocalDateTime.now();
+        List<AudioTranscription> rows = new ArrayList<>();
+        for (MindioPackage.PackagedTranscription t : n.transcriptions()) {
+            LocalDateTime createdAt = MindioPackage.fromIso(t.createdAt());
+            LocalDateTime completedAt = MindioPackage.fromIso(t.completedAt());
+            rows.add(AudioTranscription.builder()
+                    .noteId(noteId).blockId(t.blockId())
+                    .status(AudioTranscription.Status.DONE)
+                    .triggerType(AudioTranscription.TriggerType.MANUAL)
+                    .stage(AudioTranscription.Stage.valueOf(t.stage()))
+                    .attempts(0)
+                    .utterances(t.utterances()).polished(t.polished()).summary(t.summary())
+                    .createdAt(createdAt != null ? createdAt : now)
+                    .completedAt(completedAt != null ? completedAt : now)
+                    .build());
+        }
+        return rows;
     }
 
     /** 每个资源在一次导入里只落盘一次；图片优先复用本机已有的同哈希文件 */
