@@ -326,6 +326,9 @@
                   <i v-if="getProjectIcon(activeNote.projectId)" :class="getProjectIcon(activeNote.projectId)" style="margin-right: 4px;"></i>
                   {{ activeNote.projectName }}
                 </el-tag>
+                <el-button size="mini" icon="el-icon-upload2" :title="$t('workspace.notes.import')" @click="showImportNoteDialog">
+                  {{ $t('workspace.notes.import') }}
+                </el-button>
                 <el-badge :value="clipCount" :hidden="clipCount === 0">
                   <el-button size="mini" icon="el-icon-paperclip" :title="$t('workspace.notes.references')" @click="goToClips" />
                 </el-badge>
@@ -568,10 +571,8 @@
       @translated="onTranslated"
     />
 
-    <!-- 创建笔记对话框 -->
-    <CreateNoteDialog
-      v-model="createNoteDialogVisible"
-      @select-blank="handleCreateBlankNote"
+    <ImportNoteDialog
+      v-model="importNoteDialogVisible"
       @select-feishu="handleImportFeishu"
       @select-markdown="handleImportMarkdown"
       @select-mindio="handleImportMindio"
@@ -726,6 +727,7 @@ export default {
   mixins: [workspaceLayoutResize, workspaceAiDock, editorjsHost],
   components: {
     WechatPublishDialog: () => import('~/components/WechatPublishDialog.vue'),
+    ImportNoteDialog: () => import('~/components/ImportNoteDialog.vue'),
     NoteImportDialog: () => import('~/components/NoteImportDialog.vue'),
     TranslationDialog: () => import('~/components/TranslationDialog.vue'),
     LinkedinShareDialog: () => import('~/components/LinkedinShareDialog.vue')
@@ -800,8 +802,8 @@ export default {
       rightPanelCollapsed: false,
       isFullscreen: false,
 
-      // 创建笔记对话框
-      createNoteDialogVisible: false,
+      // 导入笔记对话框
+      importNoteDialogVisible: false,
 
       // 飞书凭证对话框
       feishuCredentialDialogVisible: false,
@@ -1183,7 +1185,10 @@ export default {
       this.handleProjectFilter()
     },
     showCreateNoteDialog() {
-      this.createNoteDialogVisible = true
+      this.handleCreateBlankNote()
+    },
+    showImportNoteDialog() {
+      this.importNoteDialogVisible = true
     },
     handleImportMindio({ file }) {
       // 重新赋值同一个 File 对象时 watch 不会触发，所以先清空
