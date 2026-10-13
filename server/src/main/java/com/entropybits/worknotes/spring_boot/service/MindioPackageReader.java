@@ -139,7 +139,7 @@ public class MindioPackageReader {
         }
         Set<String> seenBlocks = new HashSet<>();
         for (MindioPackage.PackagedTranscription t : n.transcriptions()) {
-            if (t == null || t.blockId() == null || !isStage(t.stage())) {
+            if (t == null || t.blockId() == null || t.blockId().length() > 64 || !isStage(t.stage())) {
                 throw new InvalidPackageException("备份文件里有格式不完整的转写记录：" + uidFromName);
             }
             if (!seenBlocks.add(t.blockId())) {

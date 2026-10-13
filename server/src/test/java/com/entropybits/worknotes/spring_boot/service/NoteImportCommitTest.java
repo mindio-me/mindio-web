@@ -412,6 +412,7 @@ class NoteImportCommitTest {
         service.commit("alice", token, Set.of(UID1));
         org.mockito.InOrder order = org.mockito.Mockito.inOrder(audioTranscriptionRepository);
         order.verify(audioTranscriptionRepository).deleteByNoteId(9L);
+        order.verify(audioTranscriptionRepository).flush();
         order.verify(audioTranscriptionRepository).saveAll(any());
     }
 }

@@ -227,6 +227,9 @@ public class NoteImportService {
                 local.setSectionContents(sectionContents);
                 noteRepository.saveAndFlush(local);
                 audioTranscriptionRepository.deleteByNoteId(local.getId());
+                // 派生删除只是排队 em.remove，而 IDENTITY 主键的 INSERT 会立即执行；不先 flush，
+                // 同 (note_id, block_id) 的新行会先于删除落库而撞唯一约束
+                audioTranscriptionRepository.flush();
                 audioTranscriptionRepository.saveAll(transcriptionsFor(local.getId(), n));
                 written.add(new Written(local, modifiedAt));
                 reindexIds.add(local.getId());

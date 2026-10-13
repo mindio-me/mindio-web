@@ -40,4 +40,29 @@ class AudioTranscriptionRepositoryTest {
         repository.deleteByNoteId(1L);
         assertThat(repository.findByNoteId(1L)).isEmpty();
     }
+
+    private AudioTranscription row(long noteId, String blockId, String polished) {
+        return AudioTranscription.builder()
+                .noteId(noteId).blockId(blockId)
+                .status(AudioTranscription.Status.DONE)
+                .triggerType(AudioTranscription.TriggerType.MANUAL)
+                .stage(AudioTranscription.Stage.FULL)
+                .polished(polished)
+                .build();
+    }
+
+    /** 导入覆盖时的顺序：派生删除只排队，必须 flush 后再写同 (note_id, block_id) 的新行，否则撞唯一约束。 */
+    @Test
+    void deleteThenFlushThenReinsertSameBlockInOneTransaction() {
+        repository.save(row(9L, "rec1", "old"));
+        repository.flush();
+
+        repository.deleteByNoteId(9L);
+        repository.flush();
+        repository.saveAll(java.util.List.of(row(9L, "rec1", "new")));
+        repository.flush();
+
+        assertThat(repository.findByNoteId(9L)).hasSize(1)
+                .allSatisfy(r -> assertThat(r.getPolished()).isEqualTo("new"));
+    }
 }

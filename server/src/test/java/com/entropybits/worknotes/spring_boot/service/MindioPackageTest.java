@@ -230,7 +230,7 @@ class MindioPackageTest {
     void rejectsBadTranscriptions() throws Exception {
         int i = 0;
         for (MindioPackage.PackagedTranscription bad : java.util.Arrays.asList(
-                null, tr(null, "FULL", null), tr("b1", null, null), tr("b1", "NOPE", null), tr("b1", "FULL", "garbage"))) {
+                null, tr(null, "FULL", null), tr("b1", null, null), tr("b1", "NOPE", null), tr("b1", "FULL", "garbage"), tr("x".repeat(65), "FULL", null))) {
             java.util.List<MindioPackage.PackagedTranscription> list = new java.util.ArrayList<>();
             list.add(bad);
             Path zip = rawZip("bad" + i + ".mindio", "manifest.json", manifestJson(1),
