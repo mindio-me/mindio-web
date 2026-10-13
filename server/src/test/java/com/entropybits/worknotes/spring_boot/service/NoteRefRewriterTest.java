@@ -86,6 +86,20 @@ class NoteRefRewriterTest {
     }
 
     @Test
+    void truncatedJsonContainingKindSkipsStructuredPartButRewritesTextLinks() {
+        String broken = "{\"blocks\":[{\"type\":\"references\",\"data\":{\"items\":[{\"kind\":\"note\",\"noteId\":7 /workspace/notes/8";
+        assertThat(rw.collectNoteIds(broken, null)).containsExactly(8L);
+        String out = rw.toPackage(broken, null, Map.of(7L, U7, 8L, U8));
+        assertThat(out).contains("noteId\":7").contains("/workspace/notes/uid/" + U8).doesNotContain("/workspace/notes/8");
+    }
+
+    @Test
+    void outOfRangeNumericNoteIdIsNotCollected() {
+        String section = "{\"items\":[{\"kind\":\"note\",\"title\":\"B\",\"noteId\":123456789012345678901234567890}]}";
+        assertThat(rw.collectNoteIds(section, "references")).isEmpty();
+    }
+
+    @Test
     void nullAndBlankAreSafe() {
         assertThat(rw.collectNoteIds(null, null)).isEmpty();
         assertThat(rw.toPackage("", null, Map.of(1L, U7))).isEmpty();

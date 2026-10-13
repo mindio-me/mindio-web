@@ -115,7 +115,7 @@ public class NoteRefRewriter {
     private static Long numericNoteId(ObjectNode item) {
         JsonNode id = item.get("noteId");
         if (id == null) return null;
-        if (id.isIntegralNumber()) return id.asLong();
+        if (id.isIntegralNumber() && id.canConvertToLong()) return id.asLong();
         if (id.isTextual() && id.asText().matches("\\d{1,18}")) return Long.valueOf(id.asText());
         return null;
     }
