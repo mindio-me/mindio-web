@@ -326,12 +326,10 @@
                   <i v-if="getProjectIcon(activeNote.projectId)" :class="getProjectIcon(activeNote.projectId)" style="margin-right: 4px;"></i>
                   {{ activeNote.projectName }}
                 </el-tag>
-                <el-button size="mini" icon="el-icon-upload2" :title="$t('workspace.notes.import')" @click="showImportNoteDialog">
-                  {{ $t('workspace.notes.import') }}
-                </el-button>
-                <el-badge :value="clipCount" :hidden="clipCount === 0">
+                <el-button size="mini" icon="el-icon-download" :title="$t('workspace.notes.import')" @click="showImportNoteDialog"/>
+                <!-- <el-badge :value="clipCount" :hidden="clipCount === 0">
                   <el-button size="mini" icon="el-icon-paperclip" :title="$t('workspace.notes.references')" @click="goToClips" />
-                </el-badge>
+                </el-badge> -->
                 <el-button v-if="!isEditorjsNote" size="mini" icon="el-icon-edit" :title="$t('workspace.notes.openInEditor')" @click="openInEditor" />
                 <el-button v-if="!isFullscreen" size="mini" icon="el-icon-full-screen" :title="$t('workspace.notes.fullscreen')" @click="isFullscreen = true" />
                 <el-button v-if="isFullscreen" size="mini" type="warning" icon="el-icon-close" :title="$t('workspace.notes.exitFullscreen')" @click="isFullscreen = false" />

@@ -36,7 +36,7 @@
 
         <div class="option-card" @click="handleSelect('mindio')">
           <div class="option-icon">
-            <i class="el-icon-upload2"></i>
+            <i class="el-icon-download"></i>
           </div>
           <div class="option-content">
             <h3 class="option-title">{{ $t('workspace.noteBackup.importOption') }}</h3>
