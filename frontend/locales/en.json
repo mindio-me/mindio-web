@@ -217,7 +217,7 @@
       "private": "Private",
       "makePublic": "Make public",
       "makePrivate": "Make private",
-      "selectProject": "Select project (optional)",
+      "selectProject": "Select project",
       "references": "References",
       "import": "Import",
       "fullscreen": "Fullscreen",

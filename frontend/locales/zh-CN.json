@@ -217,7 +217,7 @@
       "private": "未公开",
       "makePublic": "公开",
       "makePrivate": "关闭",
-      "selectProject": "选择项目（可选）",
+      "selectProject": "选择项目",
       "references": "参考素材",
       "import": "导入",
       "fullscreen": "全屏",
