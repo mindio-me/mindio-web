@@ -42,24 +42,39 @@
           </div>
         </div>
 
-        <el-divider />
+        <!-- <el-divider style="color: #3c3c3c;"/> -->
 
-        <div class="rail-section">
+        <div class="rail-section tag-filter-section">
           <div class="rail-section-title">{{ $t('workspace.clips.filterByTag') }}</div>
           <div class="tag-tile-list">
-            <span
+            <el-tag
               v-if="untaggedCount > 0"
-              class="tag-tile tag-tile-untagged"
-              :class="{ 'is-active': filterUntagged }"
+              class="tag-tile"
+              size="mini"
+              effect="plain"
+              :type="filterUntagged ? 'primary' : 'info'"
+              role="button"
+              tabindex="0"
+              :aria-pressed="filterUntagged ? 'true' : 'false'"
               @click="toggleUntaggedFilter"
-            >{{ $t('workspace.clips.untagged') }}<span class="tag-tile-count">{{ untaggedCount }}</span></span>
-            <span
+              @keydown.enter.native.prevent="toggleUntaggedFilter"
+              @keydown.space.native.prevent="toggleUntaggedFilter"
+            >{{ $t('workspace.clips.untagged') }}<span class="tag-tile-count">{{ untaggedCount }}</span></el-tag>
+            <el-tag
               v-for="tag in allClipTags"
               :key="tag.id"
               class="tag-tile"
-              :class="{ 'is-active': filterTagIds.includes(tag.id) }"
+              size="mini"
+              effect="plain"
+              :type="filterTagIds.includes(tag.id) ? 'primary' : 'info'"
+              :title="tag.name"
+              role="button"
+              tabindex="0"
+              :aria-pressed="filterTagIds.includes(tag.id) ? 'true' : 'false'"
               @click="toggleFilterTag(tag.id)"
-            >{{ tag.name }}<span class="tag-tile-count">{{ tag.clipCount || 0 }}</span></span>
+              @keydown.enter.native.prevent="toggleFilterTag(tag.id)"
+              @keydown.space.native.prevent="toggleFilterTag(tag.id)"
+            >{{ tag.name }}<span class="tag-tile-count">{{ tag.clipCount || 0 }}</span></el-tag>
             <span v-if="allClipTags.length === 0" class="tag-tile-empty">{{ $t('workspace.clips.noTagsYet') }}</span>
           </div>
         </div>
@@ -847,23 +862,26 @@ export default {
 }
 .recent-meta { font-size: 12px; color: #909399; margin-top: 2px; }
 
-.tag-tile-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-filter-section .rail-section-title {
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+.tag-tile-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .tag-tile {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 14px;
-  border: 1px solid var(--border-color, #dcdfe6);
-  color: #606266;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
   user-select: none;
-  transition: all .15s;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-action);
+    outline-offset: -2px;
+  }
 }
-.tag-tile:hover { border-color: var(--color-nav); color: var(--color-nav); }
-.tag-tile.is-active { background: var(--color-nav); border-color: var(--color-nav); color: #fff; }
 .tag-tile-count { margin-left: 5px; font-size: 11px; opacity: .65; }
 .tag-tile-empty { font-size: 12px; color: #c0c4cc; }
-.tag-tile-untagged { border-style: dashed; }
-.tag-tile-untagged.is-active { background: #909399; border-color: #909399; }
 
 .rail-toggle { display: none; }
 
