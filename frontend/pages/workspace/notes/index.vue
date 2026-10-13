@@ -300,7 +300,7 @@
                   :placeholder="$t('workspace.notes.selectProject')"
                   clearable
                   size="mini"
-                  style="width: 100px; margin-right: 8px;"
+                  style="width: 100px;"
                   @change="onProjectChange"
                 >
                   <el-option
@@ -321,7 +321,6 @@
                   size="mini"
                   type="info"
                   effect="plain"
-                  style="margin-right: 8px;"
                 >
                   <i v-if="getProjectIcon(activeNote.projectId)" :class="getProjectIcon(activeNote.projectId)" style="margin-right: 4px;"></i>
                   {{ activeNote.projectName }}
@@ -3066,6 +3065,10 @@ export default {
   display: flex;
   align-items: center;
   gap: 8px;
+
+  > .el-button {
+    margin-left: 0;
+  }
 
   ::v-deep .el-input__inner::placeholder {
     color: #606266;
