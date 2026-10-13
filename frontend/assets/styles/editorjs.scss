@@ -405,6 +405,19 @@
 
 /* Dark mode overrides */
 .theme-dark .editorjs-workspace-container {
+  .image-tool--empty .cdx-button {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-color: var(--input-border);
+
+    &:hover,
+    &:focus-visible {
+      background: var(--bg-tertiary);
+      color: var(--text-color);
+      border-color: var(--input-border-hover);
+    }
+  }
+
   .cdx-marker { background: rgba(245, 235, 111, 0.25); }
   .inline-code { color: #f472b6; background: var(--bg-tertiary, #1a2332); }
 
