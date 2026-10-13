@@ -22,6 +22,13 @@
           show-icon
           :title="$t('workspace.noteBackup.missingAssetsWarn', { n: preview.missingAssets.length })"
         />
+        <el-alert
+          v-if="preview.unresolvedNoteRefs > 0"
+          type="info"
+          :closable="false"
+          show-icon
+          :title="$t('workspace.noteBackup.unresolvedRefsWarn', { n: preview.unresolvedNoteRefs })"
+        />
         <div class="import-bulk">
           <el-button size="mini" @click="setAll('keep')">{{ $t('workspace.noteBackup.keepAll') }}</el-button>
           <el-button size="mini" @click="setAll('overwrite')">{{ $t('workspace.noteBackup.overwriteAll') }}</el-button>
@@ -122,6 +129,9 @@ export default {
         const overwrite = Object.keys(this.choices).filter(uid => this.choices[uid] === 'overwrite')
         const result = await this.$noteService.commitImport(this.preview.importToken, overwrite)
         this.$message.success(this.$t('workspace.noteBackup.importDone', result))
+        if (this.preview && this.preview.unresolvedNoteRefs > 0) {
+          this.$message.info(this.$t('workspace.noteBackup.unresolvedRefsWarn', { n: this.preview.unresolvedNoteRefs }))
+        }
         this.$emit('imported', result)
         this.close()
       } catch (e) {

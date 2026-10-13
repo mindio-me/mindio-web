@@ -410,7 +410,11 @@
       "modifiedAt": "Modified {t}",
       "missingAssetsWarn": "{n} files are missing from the backup; some images may not display",
       "confirmImport": "Import",
-      "importDone": "Imported: {created} created, {overwritten} overwritten, {kept} kept"
+      "importDone": "Imported: {created} created, {overwritten} overwritten, {kept} kept",
+      "unresolvedRefsWarn": "{n} referenced notes are not on this machine yet. Those references will start working once you import them.",
+      "refNotFoundTitle": "This note isn't on this machine",
+      "refNotFoundDesc": "Another note references it, but it hasn't been imported here yet. Import a backup that contains it and this link will open.",
+      "backToNotes": "Back to notes"
     },
     "linkedinShare": {
       "title": "Publish to LinkedIn",

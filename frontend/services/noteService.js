@@ -89,6 +89,13 @@ class NoteService extends ApiService {
     return this.post('/v1/notes/import/commit', { importToken, overwrite }, { suppressErrorToast: true })
   }
 
+  /**
+   * 按 uid 找本机笔记 id（导入后的 uid 引用点击时用）；找不到时后端回 404
+   */
+  findIdByUid(uid) {
+    return this.get(`/v1/notes/by-uid/${encodeURIComponent(uid)}`, { suppressErrorToast: true })
+  }
+
   suggestInsertPosition(noteId, content, cursorBlockId) {
     return this.post(`/v1/notes/${noteId}/insert-position`, { content, cursorBlockId })
   }

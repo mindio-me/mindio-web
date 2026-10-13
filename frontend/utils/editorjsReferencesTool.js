@@ -43,7 +43,9 @@ export default class ReferencesTool {
       const li = createEl('li', 'cdx-references__item')
       const link = createEl('a', 'cdx-references__link', {
         textContent: `${KIND_ICON[item.kind] || '🔗'} ${item.title || '(未命名)'}`,
-        href: item.kind === 'note' ? `/workspace/notes/${item.noteId}` : (item.url || '#'),
+        href: item.kind === 'note'
+          ? (item.noteId != null ? `/workspace/notes/${item.noteId}` : `/workspace/notes/uid/${item.noteUid}`)
+          : (item.url || '#'),
         target: item.kind === 'note' ? '_self' : '_blank',
         rel: 'noopener noreferrer'
       })
