@@ -82,6 +82,34 @@ body {
   // scrollbar-gutter: stable; // 预留滚动条空间，防止出现/消失时引发水平抖动
 }
 
+// Workspace 滚动区域统一沿用侧栏的细款、透明轨道样式。
+.workspace-content {
+  &,
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    &::-webkit-scrollbar-track,
+    &::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: var(--border-color);
+      border-radius: 3px;
+
+      &:hover {
+        background: var(--text-muted);
+      }
+    }
+  }
+}
+
 // 表单控件默认不继承页面字体（浏览器 UA 样式），统一继承全局字体栈
 button,
 input,
