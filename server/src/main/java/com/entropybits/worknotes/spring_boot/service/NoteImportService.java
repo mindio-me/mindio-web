@@ -304,6 +304,7 @@ public class NoteImportService {
         }
     }
 
+    // AudioTranscription times are server-local (LocalDateTime.now() in @PrePersist), so the Z written on export is nominal; values round-trip unchanged and only updatedAt is shown.
     private List<AudioTranscription> transcriptionsFor(Long noteId, MindioPackage.PackagedNote n) {
         LocalDateTime now = LocalDateTime.now();
         List<AudioTranscription> rows = new ArrayList<>();

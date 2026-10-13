@@ -134,6 +134,7 @@ public class NoteExportService {
     }
 
     /** 只导出已完成、且对应块还在正文里的转写记录（spec 8.2） */
+    // AudioTranscription times are server-local (LocalDateTime.now() in @PrePersist), so the Z from toIso is nominal; values round-trip unchanged and only updatedAt is shown.
     private List<MindioPackage.PackagedTranscription> transcriptionsOf(Note note) {
         Set<String> blockIds = MindioPackage.blockIds(objectMapper, note.getContent());
         return audioTranscriptionRepository.findByNoteId(note.getId()).stream()
