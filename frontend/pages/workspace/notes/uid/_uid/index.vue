@@ -16,6 +16,17 @@
         </el-button>
       </template>
     </el-result>
+    <el-result
+      v-else-if="failed"
+      icon="warning"
+      :title="$t('workspace.noteBackup.refLookupFailed')"
+    >
+      <template slot="extra">
+        <el-button type="primary" size="small" @click="lookup">
+          {{ $t('workspace.noteBackup.retry') }}
+        </el-button>
+      </template>
+    </el-result>
     <div v-else v-loading="true" class="note-uid-page__loading"></div>
   </div>
 </template>
@@ -30,14 +41,27 @@ export default {
   layout: 'workspace',
   middleware: ['auth'],
   data() {
-    return { notFound: false }
+    return { notFound: false, failed: false }
   },
-  async mounted() {
-    try {
-      const { id } = await this.$noteService.findIdByUid(this.$route.params.uid)
-      this.$router.replace(`/workspace/notes/${id}`)
-    } catch (e) {
-      this.notFound = true
+  mounted() {
+    this.lookup()
+  },
+  methods: {
+    async lookup() {
+      this.notFound = false
+      this.failed = false
+      try {
+        const { id } = await this.$noteService.findIdByUid(this.$route.params.uid)
+        // 导出时保留了路径后缀（如 /edit），跳转时带上
+        const suffix = /\/edit\/?$/.test(this.$route.path) ? '/edit' : ''
+        this.$router.replace(`/workspace/notes/${id}${suffix}`)
+      } catch (e) {
+        if (e && e.response && e.response.status === 404) {
+          this.notFound = true
+        } else {
+          this.failed = true
+        }
+      }
     }
   }
 }

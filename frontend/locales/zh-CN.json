@@ -414,6 +414,8 @@
       "unresolvedRefsWarn": "有 {n} 篇被引用的笔记不在本机，相关引用暂时打不开；以后导入这些笔记后会自动恢复",
       "refNotFoundTitle": "这篇笔记不在本机",
       "refNotFoundDesc": "它被其他笔记引用，但还没有导入到这台电脑。导入包含它的备份后，这个链接就能打开。",
+      "refLookupFailed": "暂时无法打开这篇笔记，请稍后重试",
+      "retry": "重试",
       "backToNotes": "返回笔记列表"
     },
     "linkedinShare": {
