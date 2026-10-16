@@ -269,7 +269,7 @@ class GlobalChatServiceTest {
     void sendMessageStream_passesCurrentNoteContext() throws Exception {
         Note currentNote = Note.builder().id(9L).owner(user).title("我的笔记").build();
         when(noteRepository.findById(9L)).thenReturn(Optional.of(currentNote));
-        when(chunkingService.chunkNote(currentNote)).thenReturn(List.of("正文内容"));
+        when(chunkingService.chunkNoteForReading(currentNote)).thenReturn(List.of("正文内容"));
         doAnswer(inv -> {
             AgentServiceClient.StreamListener listener = inv.getArgument(8);
             listener.onDone("好的", List.of());

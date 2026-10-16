@@ -32,8 +32,8 @@ class ProjectNoteContextServiceTest {
         Note note1 = Note.builder().id(1L).title("开发日志").contentType("editorjs").content("{}").build();
         Note note2 = Note.builder().id(2L).title("复盘笔记").contentType("markdown").content("# 正文").build();
         when(noteRepository.findByProjectId(9L)).thenReturn(List.of(note1, note2));
-        when(chunkingService.chunkNote(note1)).thenReturn(List.of("开发日志", "第一段", "第二段"));
-        when(chunkingService.chunkNote(note2)).thenReturn(List.of("复盘笔记", "复盘正文"));
+        when(chunkingService.chunkNoteForReading(note1)).thenReturn(List.of("开发日志", "第一段", "第二段"));
+        when(chunkingService.chunkNoteForReading(note2)).thenReturn(List.of("复盘笔记", "复盘正文"));
 
         List<ProjectNoteSummaryResponse> result = service().getNoteSummaries(9L);
 
@@ -57,7 +57,7 @@ class ProjectNoteContextServiceTest {
     void getNoteSummaries_truncatesBodyTextLongerThan1500Chars() {
         Note note = Note.builder().id(1L).title("长笔记").contentType("markdown").content("正文").build();
         when(noteRepository.findByProjectId(9L)).thenReturn(List.of(note));
-        when(chunkingService.chunkNote(note)).thenReturn(List.of("x".repeat(2000)));
+        when(chunkingService.chunkNoteForReading(note)).thenReturn(List.of("x".repeat(2000)));
 
         List<ProjectNoteSummaryResponse> result = service().getNoteSummaries(9L);
 

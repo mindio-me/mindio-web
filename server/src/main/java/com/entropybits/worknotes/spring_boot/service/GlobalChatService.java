@@ -514,7 +514,7 @@ public class GlobalChatService {
     private static final int CURRENT_NOTE_BODY_CHAR_CAP = 4000;
 
     private String currentNoteBodyText(Note note) {
-        String text = String.join("\n", chunkingService.chunkNote(note));
+        String text = String.join("\n", chunkingService.chunkNoteForReading(note));
         return text.length() > CURRENT_NOTE_BODY_CHAR_CAP
                 ? text.substring(0, CURRENT_NOTE_BODY_CHAR_CAP) + "…（内容过长，已截断）"
                 : text;

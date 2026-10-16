@@ -110,7 +110,7 @@ class AgentDocumentServiceTest {
         Note n = Note.builder().id(10L).title("设计").owner(alice).build();
         when(noteRepository.findById(10L)).thenReturn(Optional.of(n));
         String longParagraph = "长".repeat(9000);
-        when(chunkingService.chunkNote(n)).thenReturn(List.of("设计", longParagraph));
+        when(chunkingService.chunkNoteForReading(n)).thenReturn(List.of("设计", longParagraph));
 
         AgentDocumentContent result = service.readNote("alice", 10L);
 
@@ -250,7 +250,7 @@ class AgentDocumentServiceTest {
         Note n = Note.builder().id(10L).title("t").owner(alice).contentType("markdown")
                 .content("![](/uploads/1.png) ![](/uploads/2.png)").build();
         when(noteRepository.findById(10L)).thenReturn(Optional.of(n));
-        when(chunkingService.chunkNote(n)).thenReturn(List.of("t", "正文"));
+        when(chunkingService.chunkNoteForReading(n)).thenReturn(List.of("t", "正文"));
 
         assertThat(service.readNote("alice", 10L).imageCount()).isEqualTo(2);
     }

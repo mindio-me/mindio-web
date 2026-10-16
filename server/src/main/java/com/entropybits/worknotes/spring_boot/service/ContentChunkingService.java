@@ -33,15 +33,30 @@ public class ContentChunkingService {
     private final ObjectMapper objectMapper;
     private final LocalFileExtractionService extractionService;
     private final AudioTranscriptionRepository audioTranscriptionRepository;
+    private final TranscriptTextFormatter transcriptFormatter;
 
     public ContentChunkingService(ObjectMapper objectMapper, LocalFileExtractionService extractionService,
                                   AudioTranscriptionRepository audioTranscriptionRepository) {
         this.objectMapper = objectMapper;
         this.extractionService = extractionService;
         this.audioTranscriptionRepository = audioTranscriptionRepository;
+        this.transcriptFormatter = new TranscriptTextFormatter(objectMapper);
     }
 
+    /** 进向量检索用：录音转写只带说话人名字，不带时间戳 */
     public List<String> chunkNote(Note note) {
+        return chunkNote(note, false);
+    }
+
+    /**
+     * 给 AI 助手读全文用（读笔记工具、当前笔记、项目笔记上下文）：录音转写带场景、要点、待办，
+     * 原文每行带 [mm:ss 说话人]，AI 才答得了"谁说了什么""第几分钟讲到"
+     */
+    public List<String> chunkNoteForReading(Note note) {
+        return chunkNote(note, true);
+    }
+
+    private List<String> chunkNote(Note note, boolean forReading) {
         String contentType = note.getContentType();
         if (contentType == null) {
             contentType = "richtext"; // Default to richtext for null content type
@@ -57,62 +72,19 @@ public class ContentChunkingService {
                 .toList();
         List<String> combined = new ArrayList<>(units);
         combined.addAll(imageOcrUnits);
-        combined.addAll(transcriptionUnits(note));
+        combined.addAll(transcriptionUnits(note, forReading));
         return prependTitleChunk(note.getTitle(), mergeAndSplit(combined));
     }
 
-    /** 录音转写结果（不在笔记正文里）也进检索：概述 + 优化版，没有优化版就用逐句原文 */
-    private List<String> transcriptionUnits(Note note) {
+    /** 录音转写结果不在笔记正文里，单独拼进来；只取已完成的记录 */
+    private List<String> transcriptionUnits(Note note, boolean forReading) {
         if (note.getId() == null) return List.of();
         List<String> units = new ArrayList<>();
         for (AudioTranscription t : audioTranscriptionRepository.findByNoteId(note.getId())) {
             if (t.getStatus() != AudioTranscription.Status.DONE) continue;
-            try {
-                if (t.getSummary() != null) {
-                    String overview = objectMapper.readTree(t.getSummary()).path("overview").asText("");
-                    if (!overview.isBlank()) units.add(replaceSpeakerRefs(overview, t.getSpeakerNames()));
-                }
-                String source = t.getPolished() != null ? t.getPolished() : t.getUtterances();
-                if (source != null) {
-                    StringBuilder sb = new StringBuilder();
-                    objectMapper.readTree(source).forEach(p -> {
-                        String text = p.path("text").asText("");
-                        // 失败分段的占位文字（"[第 N 段转写失败]"）不进检索
-                        if (!text.startsWith("[第 ")) sb.append(text).append('\n');
-                    });
-                    if (!sb.isEmpty()) units.addAll(splitParagraphs(sb.toString()));
-                }
-            } catch (Exception e) {
-                // 某条记录的 JSON 坏了不影响笔记本身的索引
-            }
+            units.addAll(forReading ? transcriptFormatter.readingUnits(t) : transcriptFormatter.indexUnits(t));
         }
         return units;
-    }
-
-    private static final java.util.regex.Pattern SPEAKER_REF = java.util.regex.Pattern.compile("\\{\\{S(\\d+)\\}\\}");
-
-    /** 总结里的 {{S1}} 换成说话人名字，没改过名的写"说话人 1"（与前端 speakerText 一致） */
-    private String replaceSpeakerRefs(String text, String speakerNamesJson) {
-        com.fasterxml.jackson.databind.JsonNode names = null;
-        if (speakerNamesJson != null) {
-            try {
-                names = objectMapper.readTree(speakerNamesJson);
-            } catch (Exception ignored) {
-                // 名字 JSON 坏了就当没改过名
-            }
-        }
-        java.util.regex.Matcher m = SPEAKER_REF.matcher(text);
-        StringBuilder sb = new StringBuilder();
-        while (m.find()) {
-            String name = names == null ? "" : names.path(m.group(1)).asText("");
-            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(name.isEmpty() ? "说话人 " + m.group(1) : name));
-        }
-        m.appendTail(sb);
-        return sb.toString();
-    }
-
-    private static List<String> splitParagraphs(String text) {
-        return Arrays.stream(text.split("\n")).map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
     public List<String> chunkClip(SourceClip clip) {

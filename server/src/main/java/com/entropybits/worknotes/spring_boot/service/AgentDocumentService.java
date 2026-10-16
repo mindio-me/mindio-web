@@ -125,7 +125,7 @@ public class AgentDocumentService {
     public AgentDocumentContent readNote(String username, Long noteId) {
         Note note = loadOwnedNote(username, noteId);
         return new AgentDocumentContent("note", note.getId(), note.getTitle(),
-                bodyText(note.getTitle(), chunkingService.chunkNote(note)), noteImages(note).size());
+                bodyText(note.getTitle(), chunkingService.chunkNoteForReading(note)), noteImages(note).size());
     }
 
     @Transactional(readOnly = true)

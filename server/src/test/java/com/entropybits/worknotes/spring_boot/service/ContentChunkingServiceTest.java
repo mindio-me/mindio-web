@@ -85,6 +85,22 @@ class ContentChunkingServiceTest {
     }
 
     @Test
+    void chunkNoteForReading_usesTimestampedSpeakerTurnsWhileIndexDoesNot() {
+        Note note = editorjsNote(9L, "t", "{\"blocks\":[]}");
+        when(audioTranscriptionRepository.findByNoteId(9L)).thenReturn(List.of(
+                AudioTranscription.builder().noteId(9L).blockId("a").status(AudioTranscription.Status.DONE)
+                        .speakerNames("{\"1\":\"张总\"}")
+                        .utterances("[{\"start\":0,\"end\":1,\"text\":\"定预算。\",\"speaker\":1},"
+                                + "{\"start\":61000,\"end\":62000,\"text\":\"我来排期。\",\"speaker\":2}]").build()));
+
+        String reading = String.join("\n", service.chunkNoteForReading(note));
+        String index = String.join("\n", service.chunkNote(note));
+
+        assertThat(reading).contains("[00:00 张总] 定预算。").contains("[01:01 说话人 2] 我来排期。");
+        assertThat(index).contains("张总：定预算。").contains("说话人 2：我来排期。").doesNotContain("[00:00");
+    }
+
+    @Test
     void chunkNote_markdownSplitsOnBlankLines() {
         Note note = Note.builder()
                 .contentType("markdown")

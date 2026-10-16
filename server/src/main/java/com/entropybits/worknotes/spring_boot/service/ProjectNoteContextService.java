@@ -42,7 +42,7 @@ public class ProjectNoteContextService {
     }
 
     private ProjectNoteSummaryResponse toSummary(Note note) {
-        String bodyText = String.join("\n", chunkingService.chunkNote(note));
+        String bodyText = String.join("\n", chunkingService.chunkNoteForReading(note));
         if (bodyText.length() > NOTE_BODY_CHAR_CAP) {
             bodyText = bodyText.substring(0, NOTE_BODY_CHAR_CAP) + "…（内容过长，已截断）";
         }
