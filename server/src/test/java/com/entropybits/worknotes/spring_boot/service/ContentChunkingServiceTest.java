@@ -71,6 +71,20 @@ class ContentChunkingServiceTest {
     }
 
     @Test
+    void chunkNote_replacesSpeakerReferencesWithNames() {
+        Note note = editorjsNote(8L, "t", "{\"blocks\":[]}");
+        when(audioTranscriptionRepository.findByNoteId(8L)).thenReturn(List.of(
+                AudioTranscription.builder().noteId(8L).blockId("a").status(AudioTranscription.Status.DONE)
+                        .summary("{\"overview\":\"{{S1}}提出招聘计划，{{S2}}同意\"}")
+                        .speakerNames("{\"1\":\"张总\"}")
+                        .utterances("[{\"start\":0,\"end\":1,\"text\":\"原文。\"}]").build()));
+
+        String all = String.join("\n", service.chunkNote(note));
+
+        assertThat(all).contains("张总提出招聘计划，说话人 2同意").doesNotContain("{{S");
+    }
+
+    @Test
     void chunkNote_markdownSplitsOnBlankLines() {
         Note note = Note.builder()
                 .contentType("markdown")

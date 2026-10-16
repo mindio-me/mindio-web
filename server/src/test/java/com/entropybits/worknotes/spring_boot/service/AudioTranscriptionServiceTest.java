@@ -322,4 +322,41 @@ class AudioTranscriptionServiceTest {
         done(UTTS);
         assertThatThrownBy(() -> service.saveUtterances(1L, "b", null)).isInstanceOf(BadRequestException.class);
     }
+
+    @Test
+    void patch_speakerNamesRejectedWhileInFlight() throws Exception {
+        block("audioRecord", 60);
+        for (AudioTranscription.Status s : java.util.List.of(AudioTranscription.Status.PENDING, AudioTranscription.Status.PROCESSING)) {
+            AudioTranscription t = existing(s, UTTS);
+            assertThatThrownBy(() -> service.patch(1L, "b", java.util.Map.of("1", "张总"), null))
+                    .isInstanceOf(com.entropybits.worknotes.spring_boot.exception.ConflictException.class);
+            assertThat(t.getSpeakerNames()).isNull();
+        }
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void saveUtterances_clearsPolishedBeforeReindex() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done(UTTS);
+        t.setPolished("[{\"start\":0,\"text\":\"旧优化版\"}]");
+        java.util.concurrent.atomic.AtomicReference<String> polishedAtReindex = new java.util.concurrent.atomic.AtomicReference<>("unset");
+        org.mockito.Mockito.doAnswer(inv -> { polishedAtReindex.set(t.getPolished()); return null; })
+                .when(indexing).reindexNote(1L);
+
+        service.saveUtterances(1L, "b", java.util.List.of(new AudioTranscriptionService.UtteranceEdit(0, "甲改")));
+
+        verify(indexing).reindexNote(1L);
+        assertThat(polishedAtReindex.get()).isNull();
+    }
+
+    @Test
+    void saveUtterances_rejectsEditThatLooksLikeFailedPlaceholder() throws Exception {
+        block("audioRecord", 60);
+        done(UTTS);
+        assertThatThrownBy(() -> service.saveUtterances(1L, "b",
+                java.util.List.of(new AudioTranscriptionService.UtteranceEdit(0, " [第 1 段转写失败]"))))
+                .isInstanceOf(BadRequestException.class);
+        verify(repository, never()).save(any());
+    }
 }

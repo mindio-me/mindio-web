@@ -295,4 +295,29 @@ class AudioTranscriptionJobTest {
 
         assertThat(record.getScene()).isEqualTo(AudioTranscription.Scene.MEMO);
     }
+
+    @Test
+    void summaryStage_withFailedPlaceholders_keepsPartialSegmentsAfterResummarize() {
+        record.setStage(AudioTranscription.Stage.SUMMARY);
+        record.setUtterances("[{\"start\":0,\"end\":0,\"text\":\"[第 2 段转写失败]\"},"
+                + "{\"start\":5,\"end\":9,\"text\":\"乙\"},{\"start\":9,\"end\":9,\"text\":\"[第 3 段转写失败]\"}]");
+
+        job.processOne(9L);
+
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(record.getSummary()).contains("概述");
+        assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.PARTIAL_SEGMENTS);
+        assertThat(record.getErrorMessage()).isEqualTo("第 2 段、第 3 段转写失败，可以重新转写");
+    }
+
+    @Test
+    void summaryStage_withPlaceholdersButSummaryFailed_staysSummaryFailed() {
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenThrow(new AgentCallException("SUMMARY_FAILED", "坏 JSON"));
+        record.setStage(AudioTranscription.Stage.SUMMARY);
+        record.setUtterances("[{\"start\":0,\"end\":0,\"text\":\"[第 1 段转写失败]\"},{\"start\":5,\"end\":9,\"text\":\"乙\"}]");
+
+        job.processOne(9L);
+
+        assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.SUMMARY_FAILED);
+    }
 }

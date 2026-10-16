@@ -105,6 +105,7 @@ public class AudioTranscriptionJob {
                 return;
             }
             summarize(t, utterances, readMarks(block.data()), block.data().path("systemAudio").asBoolean(false));
+            markPartialSegments(t, utterances);
             finish(t);
         } catch (AgentUnavailableException e) {
             int attempts = t.getAttempts() + 1;
@@ -207,6 +208,26 @@ public class AudioTranscriptionJob {
             t.setErrorKind(ErrorKind.SUMMARY_FAILED);
             t.setErrorMessage("整理失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 只重新整理（改场景 / 改原文后）时 trigger 会清掉 errorKind，但失败占位句还在：
+     * 不补回 PARTIAL_SEGMENTS 的话"重新转写"入口就没了，而编辑又因占位句被禁用
+     */
+    private static void markPartialSegments(AudioTranscription t, List<Map<String, Object>> utterances) {
+        if (t.getErrorKind() != null) return;
+        List<String> failed = new ArrayList<>();
+        for (Map<String, Object> u : utterances) {
+            String text = String.valueOf(u.get("text"));
+            if (!text.startsWith("[第 ")) continue;
+            int end = text.indexOf(" 段");
+            failed.add(end > 0 ? text.substring(1, end + 2) : null);
+        }
+        if (failed.isEmpty()) return;
+        t.setErrorKind(ErrorKind.PARTIAL_SEGMENTS);
+        t.setErrorMessage(failed.contains(null)
+                ? "部分片段转写失败，可以重新转写"
+                : String.join("、", failed) + "转写失败，可以重新转写");
     }
 
     private static Scene parseScene(Object value) {

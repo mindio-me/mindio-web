@@ -70,7 +70,7 @@ public class ContentChunkingService {
             try {
                 if (t.getSummary() != null) {
                     String overview = objectMapper.readTree(t.getSummary()).path("overview").asText("");
-                    if (!overview.isBlank()) units.add(overview);
+                    if (!overview.isBlank()) units.add(replaceSpeakerRefs(overview, t.getSpeakerNames()));
                 }
                 String source = t.getPolished() != null ? t.getPolished() : t.getUtterances();
                 if (source != null) {
@@ -87,6 +87,28 @@ public class ContentChunkingService {
             }
         }
         return units;
+    }
+
+    private static final java.util.regex.Pattern SPEAKER_REF = java.util.regex.Pattern.compile("\\{\\{S(\\d+)\\}\\}");
+
+    /** 总结里的 {{S1}} 换成说话人名字，没改过名的写"说话人 1"（与前端 speakerText 一致） */
+    private String replaceSpeakerRefs(String text, String speakerNamesJson) {
+        com.fasterxml.jackson.databind.JsonNode names = null;
+        if (speakerNamesJson != null) {
+            try {
+                names = objectMapper.readTree(speakerNamesJson);
+            } catch (Exception ignored) {
+                // 名字 JSON 坏了就当没改过名
+            }
+        }
+        java.util.regex.Matcher m = SPEAKER_REF.matcher(text);
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) {
+            String name = names == null ? "" : names.path(m.group(1)).asText("");
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(name.isEmpty() ? "说话人 " + m.group(1) : name));
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private static List<String> splitParagraphs(String text) {

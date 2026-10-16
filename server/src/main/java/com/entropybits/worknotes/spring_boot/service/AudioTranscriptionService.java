@@ -139,10 +139,16 @@ public class AudioTranscriptionService {
             if (e.index() < 0 || e.index() >= arr.size() || !seen.add(e.index())) {
                 throw new BadRequestException("句子序号不对: " + e.index());
             }
+            // 以"[第 "开头会被当成转写失败的占位句，之后整段都不能再编辑
+            if (e.text() != null && e.text().trim().startsWith("[第 ")) {
+                throw new BadRequestException("句子不能以“[第 ”开头");
+            }
         }
         edits.forEach(e -> ((ObjectNode) arr.get(e.index())).put("text", e.text() == null ? "" : e.text().trim()));
         t.setUtterances(arr.toString());
         t.setEditedAt(LocalDateTime.now());
+        // 索引优先用优化版：旧优化版不清掉的话，下面重建索引进去的还是改之前的文字（SUMMARY 重新整理本来也会清）
+        t.setPolished(null);
         repository.save(t);
         try {
             contentIndexingService.reindexNote(noteId);
@@ -163,6 +169,10 @@ public class AudioTranscriptionService {
         }
         if (scene != null && t.getStatus() != Status.DONE) {
             throw new ConflictException("录音正在处理，稍后再改场景");
+        }
+        // 处理中的 Job 握着整条记录，整理完会整体保存，这时改的名字会被悄悄冲掉
+        if (speakerNames != null && isInFlight(t)) {
+            throw new ConflictException("录音正在处理，稍后再改名字");
         }
         if (speakerNames != null) {
             t.setSpeakerNames(namesJson);
