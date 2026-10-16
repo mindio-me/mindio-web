@@ -125,7 +125,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       triggerError = '触发失败，请稍后重试'
       render()
     }
-    if (btn) btn.disabled = false
+    if (btn && !editing) btn.disabled = false
     notifyChanged(noteId, blockId)
   }
   const button = (label, stage) => {
@@ -177,14 +177,17 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       }
       return line
     }
+    // 到这里一定是 DONE：原文里还有失败占位句就始终给出"重新转写"（只重新整理过时 errorKind 可能被清掉）
+    const placeholders = hasFailedPlaceholder(r.utterances)
     if (r.errorKind === 'SUMMARY_FAILED') {
       line.classList.add('error')
       line.appendChild(el('span', null, r.errorMessage || '整理失败'))
       if (!readOnly) line.appendChild(button('重新整理', 'SUMMARY'))
+      if (!readOnly && placeholders) line.appendChild(button('重新转写', 'FULL'))
       return line
     }
-    if (r.errorKind === 'PARTIAL_SEGMENTS' || r.errorKind === 'NO_SPEECH') {
-      line.appendChild(el('span', null, r.errorMessage))
+    if (r.errorKind === 'PARTIAL_SEGMENTS' || r.errorKind === 'NO_SPEECH' || placeholders) {
+      line.appendChild(el('span', null, r.errorMessage || '部分片段转写失败，可以重新转写'))
       if (!readOnly) line.appendChild(button('重新转写', 'FULL'))
       return line
     }
@@ -196,7 +199,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     const bar = el('div', 'atp-bar')
     if (!readOnly) {
       const sceneLabel = el('label', null, '场景：')
-      const select = el('select')
+      const select = el('select', 'atp-scene')
       if (!r.scene) select.appendChild(el('option', null, '未判断')).value = ''
       SCENES.forEach(([v, label]) => {
         const o = el('option', null, label)
@@ -204,8 +207,10 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         if (r.scene === v) o.selected = true
         select.appendChild(o)
       })
-      select.disabled = isBusy()
+      // 只有完整完成（DONE）的记录能换场景重新整理；编辑中由 lockForEditing 禁用
+      select.disabled = r.status !== 'DONE'
       select.addEventListener('change', async () => {
+        if (editing) return
         const v = select.value
         try {
           await MessageBox.confirm('将按新场景重新整理，约需 1–2 分钟', '切换场景', { type: 'info' })
@@ -218,6 +223,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         } catch (e) {
           console.warn('切换场景失败:', e)
           triggerError = '切换场景失败，请稍后重试'
+          render() // 记录没变时订阅回调不会重绘，这里自己把错误显示出来并复原下拉框
         }
         notifyChanged(noteId, blockId)
       })
@@ -249,10 +255,12 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   function speakerChip(n) {
     const chip = el('span', 'atp-spk', speakerName(n))
     chip.style.background = SPEAKER_COLORS[(n - 1) % SPEAKER_COLORS.length]
-    if (readOnly) return chip
+    // 处理中改名会被后台整理完成时的整条保存冲掉（后端也会 409），编辑原文时也不让改
+    if (readOnly || isBusy()) return chip
     chip.title = '点击改名'
     chip.addEventListener('click', (e) => {
       e.stopPropagation()
+      if (editing || isBusy()) return
       const input = el('input', 'atp-spk-input')
       input.value = names()[n] || ''
       input.placeholder = `说话人 ${n}`
@@ -385,7 +393,12 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         ;[['polished', 'AI优化版'], ['raw', '原文']].forEach(([mode, label]) => {
           const b = el('button', transcriptMode === mode ? 'on' : '', label)
           b.type = 'button'
-          b.addEventListener('click', (e) => { e.preventDefault(); transcriptMode = mode; render() })
+          b.addEventListener('click', (e) => {
+            e.preventDefault()
+            if (editing) return
+            transcriptMode = mode
+            render()
+          })
           seg.appendChild(b)
         })
         head.appendChild(seg)
@@ -419,8 +432,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       if (!readOnly && !usePolished) {
         const editBtn = el('button', 'atp-btn', '编辑')
         editBtn.type = 'button'
-        const blocked = isBusy() || hasFailedPlaceholder(utts)
-        editBtn.disabled = blocked
+        editBtn.disabled = r.status !== 'DONE' || hasFailedPlaceholder(utts)
         if (hasFailedPlaceholder(utts)) editBtn.title = '有转写失败的片段，请先重新转写'
         editBtn.addEventListener('click', () => startEditing(tools, box, utts))
         tools.appendChild(editBtn)
@@ -428,16 +440,21 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     })
   }
 
+  // 编辑中 render() 不重建面板：会触发重绘或后端改动的控件（原文/优化版切换、场景、状态行按钮）先禁用，退出编辑时 render 复原
+  function lockForEditing() {
+    root.querySelectorAll('.atp-seg button, select.atp-scene, .atp-status .atp-btn').forEach((c) => { c.disabled = true })
+  }
+
   function startEditing(tools, box, utts) {
     tools.textContent = ''
-    const finish = (cleanup) => {
+    const finish = () => {
       editing = null
       setUnsavedEdit(editKey, false)
-      if (cleanup) cleanup()
       render()
     }
     playback.bind({ utterances: utts, lines: [], box: null }) // 原文行被换成输入框：只保留跳过静音
     editing = mountEditor(box, utts, { fmt, onDirty: (dirty) => setUnsavedEdit(editKey, dirty) })
+    lockForEditing()
     const doneBtn = el('button', 'atp-btn primary', '完成')
     const cancelBtn = el('button', 'atp-btn', '取消')
     doneBtn.type = cancelBtn.type = 'button'
@@ -485,6 +502,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   }
 
   function render() {
+    if (editing) return // 重建会冲掉编辑框、让 editing 永远不归零；退出编辑（finish）时再 render
     root.textContent = ''
     const status = renderStatus()
     if (status) root.appendChild(status)
@@ -503,6 +521,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   render()
   let seenConnected = false
   let unsubscribe = null
+  let lastJson = null
   const stop = () => {
     if (unsubscribe) unsubscribe()
     unsubscribe = null
@@ -513,6 +532,10 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       if (root.isConnected) seenConnected = true
       else if (seenConnected) { stop(); playback.destroy(); setUnsavedEdit(editKey, false); return }
       record = r
+      // 同一笔记里别的录音在处理时每 5 秒都会回调：记录没变就不重绘，免得滚动位置、搜索框焦点、改名输入框被冲掉
+      const json = JSON.stringify(r)
+      if (json === lastJson) return
+      lastJson = json
       if (editing) return // 编辑中只更新数据，不冲掉输入框；退出编辑时再 render
       render()
     })
