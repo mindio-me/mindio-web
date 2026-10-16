@@ -35,6 +35,12 @@ public class AudioTranscription {
         FILE_MISSING, ASR_FAILED, AGENT_UNAVAILABLE, UNKNOWN
     }
 
+    /** 录音场景，决定总结模板；见 docs/superpowers/specs/2026-10-16-recording-phase2-design.md */
+    public enum Scene { MEETING, LECTURE, INTERVIEW, MEMO, SYSTEM_AUDIO }
+
+    /** AUTO = 模型判断；USER = 用户改过，重新整理 / 重新转写都保留 */
+    public enum SceneSource { AUTO, USER }
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -76,6 +82,21 @@ public class AudioTranscription {
 
     @Column(columnDefinition = "LONGTEXT")
     private String summary;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private Scene scene;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "scene_source", length = 10)
+    private SceneSource sceneSource;
+
+    /** 说话人改名 {"1":"张总"}，JSON 字符串 */
+    @Column(name = "speaker_names", columnDefinition = "LONGTEXT")
+    private String speakerNames;
+
+    @Column(name = "edited_at")
+    private LocalDateTime editedAt;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

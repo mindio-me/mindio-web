@@ -65,4 +65,19 @@ class AudioTranscriptionRepositoryTest {
         assertThat(repository.findByNoteId(9L)).hasSize(1)
                 .allSatisfy(r -> assertThat(r.getPolished()).isEqualTo("new"));
     }
+
+    @Test
+    void persistsPhase2Fields() {
+        AudioTranscription t = repository.save(AudioTranscription.builder()
+                .noteId(1L).blockId("b2").status(AudioTranscription.Status.DONE)
+                .triggerType(AudioTranscription.TriggerType.MANUAL).stage(AudioTranscription.Stage.FULL)
+                .scene(AudioTranscription.Scene.MEETING).sceneSource(AudioTranscription.SceneSource.USER)
+                .speakerNames("{\"1\":\"张总\"}").editedAt(java.time.LocalDateTime.of(2026, 10, 16, 9, 0))
+                .build());
+        AudioTranscription loaded = repository.findById(t.getId()).orElseThrow();
+        assertThat(loaded.getScene()).isEqualTo(AudioTranscription.Scene.MEETING);
+        assertThat(loaded.getSceneSource()).isEqualTo(AudioTranscription.SceneSource.USER);
+        assertThat(loaded.getSpeakerNames()).isEqualTo("{\"1\":\"张总\"}");
+        assertThat(loaded.getEditedAt()).isEqualTo(java.time.LocalDateTime.of(2026, 10, 16, 9, 0));
+    }
 }

@@ -66,6 +66,23 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 处理状态冲突异常
+     */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflictException(
+            ConflictException ex,
+            HttpServletRequest request
+    ) {
+        ErrorResponse error = new ErrorResponse(
+                HttpStatus.CONFLICT.value(),
+                "Conflict",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    /**
      * 处理未授权异常
      */
     @ExceptionHandler({UnauthorizedException.class, BadCredentialsException.class})

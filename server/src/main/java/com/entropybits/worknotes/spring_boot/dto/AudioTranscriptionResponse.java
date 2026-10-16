@@ -12,14 +12,18 @@ import java.time.LocalDateTime;
 
 public record AudioTranscriptionResponse(
         String blockId, String status, String stage, String errorKind, String errorMessage,
-        JsonNode utterances, JsonNode polished, JsonNode summary, LocalDateTime updatedAt) {
+        JsonNode utterances, JsonNode polished, JsonNode summary, LocalDateTime updatedAt,
+        String scene, String sceneSource, JsonNode speakerNames, LocalDateTime editedAt) {
 
     public static AudioTranscriptionResponse from(AudioTranscription t, ObjectMapper om) {
         return new AudioTranscriptionResponse(
                 t.getBlockId(), t.getStatus().name(), t.getStage().name(),
                 t.getErrorKind() == null ? null : t.getErrorKind().name(), t.getErrorMessage(),
                 parse(om, t.getUtterances()), parse(om, t.getPolished()), parse(om, t.getSummary()),
-                t.getUpdatedAt());
+                t.getUpdatedAt(),
+                t.getScene() == null ? null : t.getScene().name(),
+                t.getSceneSource() == null ? null : t.getSceneSource().name(),
+                parse(om, t.getSpeakerNames()), t.getEditedAt());
     }
 
     private static JsonNode parse(ObjectMapper om, String json) {
