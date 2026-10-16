@@ -5,8 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import pytest
 
 from app.audio_notes import (
-    chunk_indices, extract_json, fallback_polished, fmt_ts, format_indexed,
-    mark_windows, parse_polished, resolve_summary,
+    SCENES, chunk_indices, extract_json, fallback_polished, fmt_ts, format_indexed,
+    has_multiple_speakers, mark_windows, normalize_scene, parse_polished, resolve_summary,
 )
 
 U = [
@@ -106,3 +106,26 @@ def test_resolve_summary_drops_out_of_range_indices():
     assert result["quotes"] == []
     assert result["highlights"] == []
     assert result["keyPoints"] == [] and result["todos"] == []
+
+
+def test_normalize_scene_accepts_known_values_case_insensitively():
+    assert normalize_scene("meeting") == "MEETING"
+    assert normalize_scene(" SYSTEM_AUDIO ") == "SYSTEM_AUDIO"
+    assert set(SCENES) == {"MEETING", "LECTURE", "INTERVIEW", "MEMO", "SYSTEM_AUDIO"}
+
+
+@pytest.mark.parametrize("value", [None, "", "PARTY", 3])
+def test_normalize_scene_falls_back_to_memo(value):
+    assert normalize_scene(value) == "MEMO"
+
+
+def test_has_multiple_speakers():
+    assert not has_multiple_speakers([{"text": "a"}, {"text": "b", "speaker": 1}])
+    assert not has_multiple_speakers([{"text": "a", "speaker": 1}, {"text": "b", "speaker": 1}])
+    assert has_multiple_speakers([{"text": "a", "speaker": 1}, {"text": "b", "speaker": 2}])
+
+
+def test_format_indexed_adds_speaker_only_when_requested():
+    utts = [{"start": 0, "end": 1, "text": "甲", "speaker": 1}, {"start": 61000, "end": 1, "text": "乙", "speaker": None}]
+    assert format_indexed(utts) == "[#0 00:00] 甲\n[#1 01:01] 乙"
+    assert format_indexed(utts, with_speaker=True) == "[#0 00:00 说话人1] 甲\n[#1 01:01] 乙"

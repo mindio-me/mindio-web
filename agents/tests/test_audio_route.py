@@ -150,3 +150,63 @@ async def test_asr_transcribe_keeps_speaker(monkeypatch):
     _patch(monkeypatch, FakeJava(), FakeAsr([{"start": 0, "end": 1000, "text": "你好", "speaker": 2}]))
     resp = await asr_transcribe(AsrTranscribeRequest(noteId=1, blockId="b", segment=None, offsetMs=500))
     assert resp.utterances == [{"start": 500, "end": 1500, "text": "你好", "speaker": 2}]
+
+
+TWO_SPEAKERS = [
+    {"start": 0, "end": 4000, "text": "我们定一下方案。", "speaker": 1},
+    {"start": 5000, "end": 9000, "text": "好的我来做。", "speaker": 2},
+]
+
+
+async def test_audio_summarize_detects_scene_when_not_given(monkeypatch):
+    model = ScriptedModel('{"overview": "x", "scene": "lecture"}', "[#0] 甲")
+    monkeypatch.setattr(audio_route, "resolve_chat_model", lambda provider: model)
+    resp = await audio_summarize(AudioSummarizeRequest(utterances=UTTS, marks=[]))
+    assert resp.scene == "LECTURE"
+    summary_prompt = next(p for p in model.prompts if audio_route.SUMMARY_TAG in p)
+    assert audio_route.SCENE_DETECT in summary_prompt
+
+
+async def test_audio_summarize_invalid_detected_scene_falls_back_to_memo(monkeypatch):
+    model = ScriptedModel('{"overview": "x", "scene": "PARTY"}', "[#0] 甲")
+    monkeypatch.setattr(audio_route, "resolve_chat_model", lambda provider: model)
+    resp = await audio_summarize(AudioSummarizeRequest(utterances=UTTS, marks=[]))
+    assert resp.scene == "MEMO"
+
+
+async def test_audio_summarize_uses_given_scene_template(monkeypatch):
+    model = ScriptedModel('{"overview": "x", "scene": "LECTURE"}', "[#0] 甲")
+    monkeypatch.setattr(audio_route, "resolve_chat_model", lambda provider: model)
+    resp = await audio_summarize(AudioSummarizeRequest(utterances=UTTS, marks=[], scene="MEETING"))
+    assert resp.scene == "MEETING"
+    summary_prompt = next(p for p in model.prompts if audio_route.SUMMARY_TAG in p)
+    assert audio_route.SCENE_GUIDES["MEETING"] in summary_prompt
+    assert audio_route.SCENE_DETECT not in summary_prompt
+
+
+async def test_audio_summarize_system_audio_skips_detection(monkeypatch):
+    model = ScriptedModel('{"overview": "x", "scene": "MEETING"}', "[#0] 甲")
+    monkeypatch.setattr(audio_route, "resolve_chat_model", lambda provider: model)
+    resp = await audio_summarize(AudioSummarizeRequest(utterances=UTTS, marks=[], systemAudio=True))
+    assert resp.scene == "SYSTEM_AUDIO"
+    summary_prompt = next(p for p in model.prompts if audio_route.SUMMARY_TAG in p)
+    assert audio_route.SCENE_GUIDES["SYSTEM_AUDIO"] in summary_prompt
+
+
+async def test_audio_summarize_prefixes_speakers_only_when_multiple(monkeypatch):
+    model = ScriptedModel('{"overview": "x"}', "[#0] 甲")
+    monkeypatch.setattr(audio_route, "resolve_chat_model", lambda provider: model)
+    await audio_summarize(AudioSummarizeRequest(utterances=TWO_SPEAKERS, marks=[]))
+    summary_prompt = next(p for p in model.prompts if audio_route.SUMMARY_TAG in p)
+    assert "[#1 00:05 说话人2] 好的我来做。" in summary_prompt
+    assert audio_route.SPEAKER_HINT in summary_prompt
+    polish_prompt = next(p for p in model.prompts if audio_route.POLISH_TAG in p)
+    assert "说话人2" not in polish_prompt  # 优化 prompt 不带说话人前缀
+
+    single = [dict(u, speaker=1) for u in TWO_SPEAKERS]
+    model2 = ScriptedModel('{"overview": "x"}', "[#0] 甲")
+    monkeypatch.setattr(audio_route, "resolve_chat_model", lambda provider: model2)
+    await audio_summarize(AudioSummarizeRequest(utterances=single, marks=[]))
+    summary_prompt2 = next(p for p in model2.prompts if audio_route.SUMMARY_TAG in p)
+    assert "说话人1]" not in summary_prompt2
+    assert audio_route.SPEAKER_HINT not in summary_prompt2

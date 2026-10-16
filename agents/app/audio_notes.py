@@ -25,9 +25,28 @@ def fmt_ts(ms: int) -> str:
     return f"{h}:{m:02d}:{sec:02d}" if h else f"{m:02d}:{sec:02d}"
 
 
-def format_indexed(utterances: list[dict], indices: list[int] | None = None) -> str:
+SCENES = ("MEETING", "LECTURE", "INTERVIEW", "MEMO", "SYSTEM_AUDIO")
+DEFAULT_SCENE = "MEMO"
+
+
+def normalize_scene(value) -> str:
+    s = str(value or "").strip().upper()
+    return s if s in SCENES else DEFAULT_SCENE
+
+
+def has_multiple_speakers(utterances: list[dict]) -> bool:
+    return len({u.get("speaker") for u in utterances if u.get("speaker") is not None}) > 1
+
+
+def format_indexed(utterances: list[dict], indices: list[int] | None = None, with_speaker: bool = False) -> str:
     idx = range(len(utterances)) if indices is None else indices
-    return "\n".join(f"[#{i} {fmt_ts(utterances[i]['start'])}] {utterances[i]['text']}" for i in idx)
+
+    def head(i: int) -> str:
+        sp = utterances[i].get("speaker")
+        tag = f" 说话人{sp}" if with_speaker and sp is not None else ""
+        return f"[#{i} {fmt_ts(utterances[i]['start'])}{tag}]"
+
+    return "\n".join(f"{head(i)} {utterances[i]['text']}" for i in idx)
 
 
 def chunk_indices(utterances: list[dict], max_chars: int = POLISH_CHUNK_CHARS) -> list[list[int]]:

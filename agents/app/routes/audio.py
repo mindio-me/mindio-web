@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from app.asr_client import AsrClientError, AsrNotConfiguredError, VolcengineAsrClient
 from app.audio_notes import (
     chunk_indices, extract_json, fallback_polished, fmt_ts, format_indexed,
-    mark_windows, parse_polished, resolve_summary,
+    has_multiple_speakers, mark_windows, normalize_scene, parse_polished, resolve_summary,
 )
 from app.config import use_settings
 from app.effective_settings import load_effective_settings
@@ -52,6 +52,20 @@ POLISH_PROMPT = POLISH_TAG + """
 只输出整理后的段落，不要任何解释。
 """
 
+SCENE_GUIDES = {
+    "MEETING": "这是一场会议：keyPoints 按议题组织，突出决议和分歧点；todos 写清分工（谁做什么）。",
+    "LECTURE": "这是一堂课或讲座：keyPoints 突出知识点、定义和例子；chapters 体现课程结构；todos 写课后作业或复习要点。",
+    "INTERVIEW": "这是一次访谈：keyPoints 按问答脉络组织，突出受访者的观点；quotes 优先选受访者原话。",
+    "MEMO": "这是一段随手记录的想法：keyPoints 简短列出要点，chapters 可以为空数组。",
+    "SYSTEM_AUDIO": "这是录制的电脑播放内容（网课、视频等）：按课程或视频内容整理，接近讲座，不要假定有多人讨论。",
+}
+SCENE_DETECT = (
+    '先判断录音场景，在 JSON 里加一个 "scene" 字段，只能取 MEETING（会议）/ LECTURE（课堂、讲座）/ '
+    "INTERVIEW（访谈）/ MEMO（随手想法或其他），再按对应场景的侧重点整理：\n"
+    + "\n".join(f"- {k}：{SCENE_GUIDES[k]}" for k in ("MEETING", "LECTURE", "INTERVIEW", "MEMO"))
+)
+SPEAKER_HINT = "每行里的「说话人N」是语音识别区分出的说话人编号。总结里提到某位说话人时写成 {{SN}}（例如 {{S1}}），不要自己给说话人起名字。"
+
 
 class AsrTranscribeRequest(BaseModel):
     noteId: int
@@ -68,16 +82,20 @@ class Utterance(BaseModel):
     start: int
     end: int
     text: str
+    speaker: int | None = None
 
 
 class AudioSummarizeRequest(BaseModel):
     utterances: list[Utterance]
     marks: list[int] = []
+    scene: str | None = None
+    systemAudio: bool = False
 
 
 class AudioSummarizeResponse(BaseModel):
     polished: list[dict]
     summary: dict
+    scene: str
 
 
 def _error(status: int, code: str, message: str) -> HTTPException:
@@ -124,8 +142,12 @@ async def asr_transcribe(request: AsrTranscribeRequest) -> AsrTranscribeResponse
     return AsrTranscribeResponse(utterances=shifted)
 
 
-def _summary_prompt(utterances: list[dict], windows: list[dict]) -> str:
-    prompt = SUMMARY_PROMPT + "\n" + format_indexed(utterances)
+def _summary_prompt(utterances: list[dict], windows: list[dict], scene: str | None) -> str:
+    multi = has_multiple_speakers(utterances)
+    prompt = SUMMARY_PROMPT + "\n" + (SCENE_GUIDES[scene] if scene else SCENE_DETECT) + "\n"
+    if multi:
+        prompt += SPEAKER_HINT + "\n"
+    prompt += "\n" + format_indexed(utterances, with_speaker=multi)
     if windows:
         lines = [f"标记 {k}（{fmt_ts(w['markAt'])}）：句子 #{w['indices'][0]} 到 #{w['indices'][-1]}"
                  for k, w in enumerate(windows)]
@@ -150,10 +172,14 @@ async def audio_summarize(request: AudioSummarizeRequest) -> AudioSummarizeRespo
     utterances = [u.model_dump() for u in request.utterances]
     windows = mark_windows(utterances, request.marks)
     sem = asyncio.Semaphore(POLISH_CONCURRENCY)
+    scene = normalize_scene(request.scene) if request.scene else ("SYSTEM_AUDIO" if request.systemAudio else None)
+    detected = {}
 
     async def summarize() -> dict:
-        response = await model.ainvoke([HumanMessage(_summary_prompt(utterances, windows))])
-        return resolve_summary(extract_json(extract_text_content(response.content)), utterances, windows)
+        response = await model.ainvoke([HumanMessage(_summary_prompt(utterances, windows, scene))])
+        raw = extract_json(extract_text_content(response.content))
+        detected["scene"] = scene or normalize_scene(raw.get("scene"))
+        return resolve_summary(raw, utterances, windows)
 
     polish_tasks = [_polish_chunk(model, utterances, chunk, sem) for chunk in chunk_indices(utterances)]
     results = await asyncio.gather(summarize(), *polish_tasks, return_exceptions=True)
@@ -161,4 +187,4 @@ async def audio_summarize(request: AudioSummarizeRequest) -> AudioSummarizeRespo
     if isinstance(summary, BaseException):
         raise _error(502, "SUMMARY_FAILED", f"整理失败：{summary}")
     polished = [p for part in results[1:] for p in part]
-    return AudioSummarizeResponse(polished=polished, summary=summary)
+    return AudioSummarizeResponse(polished=polished, summary=summary, scene=detected["scene"])
