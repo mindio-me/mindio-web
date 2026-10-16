@@ -8,6 +8,7 @@ import { subscribe, notifyChanged } from './audioTranscriptionStore'
 import { el } from './transcriptDom'
 import { createPlayback, SPEED_OPTIONS } from './transcriptPlayback'
 import { speakerText } from './transcriptEditor'
+import { findMatches, mountSearchBox } from './transcriptSearch'
 
 // 音频块下方的"转写面板"：摘要优先、原文折叠、所有时间戳可点击跳转。
 // Editor.js 工具是原生 DOM，这里也用原生 DOM（<details> 折叠），样式向 Element UI 靠拢。
@@ -47,6 +48,12 @@ function injectStyles() {
 .atp-line.playing { background: #ecf5ff; }
 .atp-spk { display: inline-block; font-size: 11.5px; padding: 0 6px; border-radius: 3px; margin-right: 6px; cursor: pointer; color: #fff; }
 .atp-spk-input { font-size: 12px; width: 7em; margin-right: 6px; }
+.atp-tools { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.atp-search { display: inline-flex; align-items: center; gap: 4px; }
+.atp-search input { font-size: 12px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 1px 6px; width: 12em; }
+.atp-search-count { color: #909399; font-size: 12px; min-width: 3em; }
+.atp-line mark { background: #fdf6ec; color: inherit; padding: 0; }
+.atp-line mark.current { background: #f5c26b; }
 `
   document.head.appendChild(el)
 }
@@ -85,6 +92,9 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   const multiSpeaker = (utts) => new Set(utts.map((u) => u.speaker).filter((s) => s != null)).size > 1
   let transcriptMode = 'polished'
   const openState = { keyPoints: true }
+  let searchQuery = ''
+  let searchIndex = 0
+  let searchBox = null
 
   const seek = (ms) => {
     if (!audio) return
@@ -308,12 +318,49 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     return frag
   }
 
+  function appendHighlighted(line, text, lineHits, allHits) {
+    let pos = 0
+    lineHits.forEach((h) => {
+      if (h.from > pos) line.appendChild(document.createTextNode(text.slice(pos, h.from)))
+      line.appendChild(el('mark', allHits.indexOf(h) === searchIndex ? 'current' : null, text.slice(h.from, h.to)))
+      pos = h.to
+    })
+    if (pos < text.length) line.appendChild(document.createTextNode(text.slice(pos)))
+  }
+
+  // 逐行渲染原文 / 优化版（含搜索高亮）；只重绘行容器，不动搜索框，输入不失焦
+  function fillLines(box, items, usePolished, utts) {
+    const windows = ((record && record.summary && record.summary.highlights) || []).map((h) => [h.start, h.end])
+    const inMark = (u) => windows.some(([s, e]) => u.end >= s && u.start <= e)
+    const showSpeakers = multiSpeaker(utts)
+    // 优化版段落取段首那句的说话人：段落 start 等于某句 start
+    const speakerAt = (item) => {
+      if (!usePolished) return item.speaker
+      const u = utts.find((x) => x.start === item.start)
+      return u ? u.speaker : null
+    }
+    const hits = findMatches(items.map((u) => u.text), searchQuery)
+    const lines = []
+    let lastSpeaker = null
+    items.forEach((u, idx) => {
+      const line = el('div', 'atp-line' + (!usePolished && inMark(u) ? ' marked' : ''))
+      line.appendChild(ts(u.start))
+      const sp = showSpeakers ? speakerAt(u) : null
+      if (sp != null && sp !== lastSpeaker) line.appendChild(speakerChip(sp))
+      if (sp != null) lastSpeaker = sp
+      appendHighlighted(line, u.text, hits.filter((h) => h.line === idx), hits)
+      box.appendChild(line)
+      lines.push({ start: u.start, el: line })
+    })
+    playback.bind({ utterances: utts, lines, box })
+    if (searchBox) searchBox.setCounter(searchIndex, hits.length)
+    return { lines, hits }
+  }
+
   function renderTranscript(r) {
     const utts = r.utterances || []
     const polished = r.polished || []
     if (!utts.length && !polished.length) return null
-    const windows = ((r.summary && r.summary.highlights) || []).map((h) => [h.start, h.end])
-    const inMark = (u) => windows.some(([s, e]) => u.end >= s && u.start <= e)
     return section('transcript', '原文', utts.length || polished.length, (d) => {
       const head = d.querySelector('summary')
       head.textContent = '原文'
@@ -329,28 +376,30 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       }
       const usePolished = polished.length && (transcriptMode === 'polished' || !utts.length)
       const items = usePolished ? polished : utts
-      const showSpeakers = multiSpeaker(utts)
-      // 优化版段落取段首那句的说话人：段落 start 等于某句 start
-      const speakerAt = (item) => {
-        if (!usePolished) return item.speaker
-        const u = utts.find((x) => x.start === item.start)
-        return u ? u.speaker : null
-      }
+      const tools = el('div', 'atp-tools')
+      d.appendChild(tools)
       const box = el('div', 'atp-lines')
-      const lines = []
-      let lastSpeaker = null
-      items.forEach((u) => {
-        const line = el('div', 'atp-line' + (!usePolished && inMark(u) ? ' marked' : ''))
-        line.appendChild(ts(u.start))
-        const sp = showSpeakers ? speakerAt(u) : null
-        if (sp != null && sp !== lastSpeaker) line.appendChild(speakerChip(sp))
-        if (sp != null) lastSpeaker = sp
-        line.appendChild(document.createTextNode(u.text))
-        box.appendChild(line)
-        lines.push({ start: u.start, el: line })
-      })
       d.appendChild(box)
-      playback.bind({ utterances: utts, lines, box })
+      const redraw = () => {
+        box.textContent = ''
+        return fillLines(box, items, usePolished, utts)
+      }
+      searchBox = mountSearchBox(tools, {
+        query: searchQuery,
+        onQuery: (q) => { searchQuery = q; searchIndex = 0; redraw() },
+        onStep: (dir) => {
+          const { hits } = redraw()
+          if (!hits.length) return
+          searchIndex = (searchIndex + dir + hits.length) % hits.length
+          const { lines } = redraw()
+          const target = lines[hits[searchIndex].line]
+          if (target) {
+            box.scrollTop = Math.max(0, target.el.offsetTop - box.clientHeight / 3)
+            if (audio) audio.currentTime = target.start / 1000 // 跳到该句开头，不自动播放
+          }
+        }
+      })
+      redraw()
     })
   }
 
