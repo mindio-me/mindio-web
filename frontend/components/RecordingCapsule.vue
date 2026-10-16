@@ -196,11 +196,11 @@ export default {
      * 录音没能正常收尾（onstop 没触发，内存里的数据拿不到了），但本地副本里有已经录到的部分：
      * 从本地副本拼回来，走和正常停止一样的保存流程
      */
-    async onOrphaned({ stashId, durationSeconds, origin, marks }) {
+    async onOrphaned({ stashId, durationSeconds, origin, marks, systemAudio }) {
       const blob = await recordingStash.loadBlob(stashId)
       if (!blob) return
       const segments = await recordingStash.loadSegments(stashId)
-      this.adoptStopResult({ blob, durationSeconds, origin, interrupted: true, segments, marks: marks || [], stash: Promise.resolve(stashId) })
+      this.adoptStopResult({ blob, durationSeconds, origin, interrupted: true, segments, marks: marks || [], systemAudio: !!systemAudio, stash: Promise.resolve(stashId) })
     },
     /** 找本地副本里"没人管"的录音，一次恢复一段；手上已经有一段待保存、或正在录音时先不管 */
     async recoverOrphans() {
@@ -228,6 +228,7 @@ export default {
             url: session.url || null, // 上次已经传上去了就不用再传
             segments,
             marks: session.marks || [],
+            systemAudio: !!session.systemAudio,
             stash: Promise.resolve(session.id)
           })
           return
@@ -276,6 +277,7 @@ export default {
       }
       const data = { url: result.url, duration: result.durationSeconds }
       if (Array.isArray(result.marks) && result.marks.length) data.marks = result.marks
+      if (result.systemAudio) data.systemAudio = true
       // 分段只有齐全才有用，缺了哪段就整段转写（2 小时/100MB 以内都没问题）
       if (segments.length > 1 && segments.every((s) => s.url)) {
         data.segments = segments.map((s) => ({ url: s.url, start: s.start, duration: s.duration }))

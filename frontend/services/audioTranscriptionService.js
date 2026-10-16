@@ -17,6 +17,16 @@ class AudioTranscriptionService extends ApiService {
     const res = await this.post(`/v1/notes/${noteId}/audio-transcriptions/${encodeURIComponent(blockId)}?${params}`)
     return res || null
   }
+
+  /** 改错：只提交改过的句子 [{ index, text }]；记录不是 DONE 时后端回 409 */
+  saveUtterances(noteId, blockId, edits) {
+    return this.put(`/v1/notes/${noteId}/audio-transcriptions/${encodeURIComponent(blockId)}/utterances`, edits)
+  }
+
+  /** body: { speakerNames?, scene? }；改场景会自动重新整理 */
+  update(noteId, blockId, body) {
+    return this.patch(`/v1/notes/${noteId}/audio-transcriptions/${encodeURIComponent(blockId)}`, body)
+  }
 }
 
 export default AudioTranscriptionService

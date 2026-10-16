@@ -16,6 +16,7 @@ const state = Vue.observable({
   // 录完了但还没存成功、正等着用户在右下角面板里选保存位置的那段录音，是从哪个录音块发起的。
   // 录音块靠它显示"保存失败，录音还在右下角"，而不是一直停在"录音中"或误报"没能正常完成"
   pendingBlockId: null,
+  systemAudioUsed: false, // 本次录音电脑声音是否接通过（决定总结场景是否为"内录"）
   marks: [] // 本次录音打过的标记，毫秒，按实际录到的时长计，不含暂停
 })
 
@@ -217,12 +218,12 @@ function setPendingBlock(blockId) {
 }
 
 /** 录音没能通过 onstop 正常收尾（内存里的数据拿不到了），把本地副本交出去让界面恢复 */
-function emitOrphaned(stash, durationSeconds, origin, marks) {
+function emitOrphaned(stash, durationSeconds, origin, marks, systemAudio) {
   if (!stash) return
   stash.then((id) => {
     if (!id) return
     recordingStash.markStopped(id, durationSeconds).then(() => {
-      emit('orphaned', { stashId: id, durationSeconds, origin, marks: marks || [] })
+      emit('orphaned', { stashId: id, durationSeconds, origin, marks: marks || [], systemAudio: !!systemAudio })
     })
   })
 }
@@ -294,12 +295,13 @@ async function start(origin) {
     pendingErrorPayload = null
     const segments = await collectSegments()
     const marks = state.marks.slice()
+    const systemAudio = state.systemAudioUsed
     cleanup()
     stash.then((id) => recordingStash.markStopped(id, durationSeconds))
     if (interrupted && errorPayload) emit('error', errorPayload)
     // stash: 本地副本的 id（Promise）。保存成功或确认放弃后由调用方删掉它
     // segments: 30 分钟以上的录音才有，专供转写；已经在录音过程中传上去的带着 url
-    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash, segments, marks }
+    const result = { blob, durationSeconds, origin: stopOrigin, interrupted, stash, segments, marks, systemAudio }
     emit('stop', result)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
@@ -329,6 +331,7 @@ async function start(origin) {
   state.status = 'recording'
   state.elapsedSeconds = 0
   state.marks = []
+  state.systemAudioUsed = false
   startSegment(stash, 0)
 
   timerId = setInterval(() => {
@@ -369,9 +372,10 @@ function forceStop() {
     const durationSeconds = state.elapsedSeconds
     const origin = state.origin
     const marks = state.marks.slice()
+    const systemAudio = state.systemAudioUsed
     cleanup()
     if (errorPayload) emit('error', errorPayload)
-    emitOrphaned(stash, durationSeconds, origin, marks)
+    emitOrphaned(stash, durationSeconds, origin, marks, systemAudio)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
       pendingStopResolve = null
@@ -395,10 +399,11 @@ function forceStop() {
     const durationSeconds = state.elapsedSeconds
     const origin = state.origin
     const marks = state.marks.slice()
+    const systemAudio = state.systemAudioUsed
     cleanup()
     emit('error', errorPayload)
     // 内存里的数据拿不到了，但本地副本里有已经录到的部分
-    emitOrphaned(stash, durationSeconds, origin, marks)
+    emitOrphaned(stash, durationSeconds, origin, marks, systemAudio)
     if (pendingStopResolve) {
       const resolve = pendingStopResolve
       pendingStopResolve = null
@@ -563,6 +568,8 @@ async function setSystemAudio(enabled) {
     }
   })
   state.systemAudio = 'on'
+  state.systemAudioUsed = true
+  if (currentStash) currentStash.then((id) => recordingStash.update(id, { systemAudio: true }))
   writeSystemAudioPref(true)
 }
 
@@ -701,6 +708,7 @@ function cleanup() {
   state.status = 'idle'
   state.elapsedSeconds = 0
   state.marks = []
+  state.systemAudioUsed = false
   state.level = 0
   state.origin = null
 }

@@ -89,7 +89,9 @@ export default {
       const transcriptionService = audioTranscriptions
         ? {
             list: (noteId) => audioTranscriptions.list(noteId),
-            trigger: (...args) => audioTranscriptions.trigger(...args)
+            trigger: (...args) => audioTranscriptions.trigger(...args),
+            saveUtterances: (...args) => audioTranscriptions.saveUtterances(...args),
+            update: (...args) => audioTranscriptions.update(...args)
           }
         : null
       const ph = options.placeholders
