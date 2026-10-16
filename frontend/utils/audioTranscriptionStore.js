@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { MessageBox } from 'element-ui'
+
 // 转写面板之间、以及录音胶囊 / 聊天面板通知面板"这个块的转写状态变了"的极简事件总线。
 // 同时负责按笔记拉取转写记录（同一笔记的多个订阅共用一次请求），有 PENDING / PROCESSING 时轮询。
 const changeListeners = new Set()
@@ -89,4 +91,42 @@ onChanged((noteId) => {
   if (notes.has(noteId)) refresh(noteId)
 })
 
-export default { notifyChanged, onChanged, subscribe }
+// 原文编辑中有未保存的改动：笔记页切换 / 路由离开前确认；网页版另挂 beforeunload。
+// 桌面版（Electron）不挂 beforeunload：Electron 会静默阻止关窗且不弹任何提示。
+const unsavedEdits = new Set()
+
+function onBeforeUnload(e) {
+  e.preventDefault()
+  e.returnValue = ''
+}
+
+function syncBeforeUnload() {
+  if (typeof window === 'undefined' || window.mindioDesktop) return
+  if (unsavedEdits.size) window.addEventListener('beforeunload', onBeforeUnload)
+  else window.removeEventListener('beforeunload', onBeforeUnload)
+}
+
+export function setUnsavedEdit(key, dirty) {
+  if (dirty) unsavedEdits.add(key)
+  else unsavedEdits.delete(key)
+  syncBeforeUnload()
+}
+
+export function hasUnsavedEdits() {
+  return unsavedEdits.size > 0
+}
+
+/** 有未保存的原文修改时弹确认；用户选择离开返回 true */
+export async function confirmDiscardEdits() {
+  if (!hasUnsavedEdits()) return true
+  try {
+    await MessageBox.confirm('录音原文还有未保存的修改，离开后会丢失。', '放弃修改？', {
+      type: 'warning', confirmButtonText: '放弃修改', cancelButtonText: '继续编辑'
+    })
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+export default { notifyChanged, onChanged, subscribe, setUnsavedEdit, hasUnsavedEdits, confirmDiscardEdits }

@@ -715,6 +715,7 @@ import { renderMarkdown as renderMd } from '~/utils/markdown'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 import workspaceAiDock from '~/mixins/workspaceAiDock'
 import editorjsHost from '~/mixins/editorjsHost'
+import { confirmDiscardEdits } from '~/utils/audioTranscriptionStore'
 import { downloadBlob, backupFileName, isDesktopRuntime, errorMessageOf } from '~/utils/note-backup'
 
 // 左侧笔记列表每批加载的数量（无限滚动的批大小），asyncData 首屏预取和后续
@@ -1396,6 +1397,7 @@ export default {
     },
     async selectNote(note) {
       if (!note || !note.id || note.id === this.activeNoteId) return
+      if (!(await confirmDiscardEdits())) return
       if (this.hasUnsavedChanges && this.editor) await this.saveToBackend()
       // openNoteFromCalendar() は呼び出し前に showMonthCalendar=false をセット済みなので
       // この分岐は月历チップクリック時には実行されず、ブレッドクラムは維持される

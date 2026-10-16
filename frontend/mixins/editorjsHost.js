@@ -5,6 +5,7 @@
 
 import { createEditorImageResizer } from '~/utils/editorjsImageResize'
 import { clipboardMayContainImage, getClipboardImagePayload, uploadClipboardImage } from '~/utils/clipboardImage'
+import { confirmDiscardEdits } from '~/utils/audioTranscriptionStore'
 import { tweetSyndicationToken } from '~/utils/videoEmbedResolver'
 
 export default {
@@ -14,6 +15,9 @@ export default {
       editorUndo: null,
       imageResizer: null
     }
+  },
+  async beforeRouteLeave(to, from, next) {
+    next(await confirmDiscardEdits())
   },
   methods: {
     /**

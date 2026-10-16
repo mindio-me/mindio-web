@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { el } from './transcriptDom'
+
 // 原文改错（"编辑 / 完成"模式）与说话人显示。只能改原文的文字，时间和说话人不可改。
 // 详见 docs/superpowers/specs/2026-10-16-recording-phase2-design.md。
 
@@ -27,4 +29,22 @@ export function speakerText(text, names) {
     const name = names && names[n]
     return name ? String(name) : `说话人 ${n}`
   })
+}
+
+/** 把原文行换成可编辑文本（时间戳只读），返回读取当前文字的方法 */
+export function mountEditor(box, utts, { onDirty, fmt }) {
+  box.textContent = ''
+  const inputs = utts.map((u) => {
+    const line = el('div', 'atp-line atp-edit-line')
+    line.appendChild(el('span', 'atp-ts-static', fmt(u.start)))
+    const input = el('textarea', 'atp-edit-input')
+    input.value = u.text
+    input.rows = 1
+    input.addEventListener('input', () => onDirty(diffEdits(utts, inputs.map((i) => i.value)).length > 0))
+    line.appendChild(input)
+    box.appendChild(line)
+    return input
+  })
+  if (inputs[0]) inputs[0].focus()
+  return { texts: () => inputs.map((i) => i.value) }
 }

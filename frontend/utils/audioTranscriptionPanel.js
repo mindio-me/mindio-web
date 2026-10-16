@@ -4,10 +4,10 @@
  */
 
 import { MessageBox } from 'element-ui'
-import { subscribe, notifyChanged } from './audioTranscriptionStore'
+import { subscribe, notifyChanged, setUnsavedEdit } from './audioTranscriptionStore'
 import { el } from './transcriptDom'
 import { createPlayback, SPEED_OPTIONS } from './transcriptPlayback'
-import { speakerText } from './transcriptEditor'
+import { speakerText, diffEdits, hasFailedPlaceholder, mountEditor } from './transcriptEditor'
 import { findMatches, mountSearchBox } from './transcriptSearch'
 
 // 音频块下方的"转写面板"：摘要优先、原文折叠、所有时间戳可点击跳转。
@@ -54,6 +54,10 @@ function injectStyles() {
 .atp-search-count { color: #909399; font-size: 12px; min-width: 3em; }
 .atp-line mark { background: #fdf6ec; color: inherit; padding: 0; }
 .atp-line mark.current { background: #f5c26b; }
+.atp-edit-line { display: flex; align-items: flex-start; gap: 6px; }
+.atp-ts-static { color: #909399; font-variant-numeric: tabular-nums; padding-top: 3px; }
+.atp-edit-input { flex: 1; font: inherit; border: 1px solid #dcdfe6; border-radius: 4px; padding: 2px 6px; resize: vertical; }
+.atp-btn.primary { background: #409eff; border-color: #409eff; color: #fff; }
 `
   document.head.appendChild(el)
 }
@@ -95,6 +99,8 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   let searchQuery = ''
   let searchIndex = 0
   let searchBox = null
+  let editing = null // { texts() }
+  const editKey = noteId + ':' + blockId
 
   const seek = (ms) => {
     if (!audio) return
@@ -125,7 +131,16 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   const button = (label, stage) => {
     const b = el('button', 'atp-btn', label)
     b.type = 'button'
-    b.addEventListener('click', () => trigger(stage, b))
+    b.addEventListener('click', async () => {
+      if (stage === 'FULL' && record && record.editedAt) {
+        try {
+          await MessageBox.confirm('重新转写会覆盖你对原文的修改，确定继续？', '重新转写', { type: 'warning' })
+        } catch (e) {
+          return
+        }
+      }
+      trigger(stage, b)
+    })
     return b
   }
   const section = (key, title, count, fill) => {
@@ -401,7 +416,60 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         }
       })
       redraw()
+      if (!readOnly && !usePolished) {
+        const editBtn = el('button', 'atp-btn', '编辑')
+        editBtn.type = 'button'
+        const blocked = isBusy() || hasFailedPlaceholder(utts)
+        editBtn.disabled = blocked
+        if (hasFailedPlaceholder(utts)) editBtn.title = '有转写失败的片段，请先重新转写'
+        editBtn.addEventListener('click', () => startEditing(tools, box, utts))
+        tools.appendChild(editBtn)
+      }
     })
+  }
+
+  function startEditing(tools, box, utts) {
+    tools.textContent = ''
+    const finish = (cleanup) => {
+      editing = null
+      setUnsavedEdit(editKey, false)
+      if (cleanup) cleanup()
+      render()
+    }
+    playback.bind({ utterances: utts, lines: [], box: null }) // 原文行被换成输入框：只保留跳过静音
+    editing = mountEditor(box, utts, { fmt, onDirty: (dirty) => setUnsavedEdit(editKey, dirty) })
+    const doneBtn = el('button', 'atp-btn primary', '完成')
+    const cancelBtn = el('button', 'atp-btn', '取消')
+    doneBtn.type = cancelBtn.type = 'button'
+    const hint = el('span', 'atp-status')
+    doneBtn.addEventListener('click', async () => {
+      const edits = diffEdits(utts, editing.texts())
+      if (!edits.length) return finish()
+      doneBtn.disabled = true
+      try {
+        record = await service.saveUtterances(noteId, blockId, edits)
+        finish()
+        notifyChanged(noteId, blockId)
+      } catch (e) {
+        doneBtn.disabled = false
+        const conflict = e && e.response && e.response.status === 409
+        hint.textContent = conflict ? '录音正在处理，修改未保存' : '保存失败，请稍后重试'
+        hint.classList.add('error')
+      }
+    })
+    cancelBtn.addEventListener('click', async () => {
+      if (diffEdits(utts, editing.texts()).length) {
+        try {
+          await MessageBox.confirm('放弃对原文的修改？', '取消编辑', { type: 'warning' })
+        } catch (e) {
+          return
+        }
+      }
+      finish()
+    })
+    tools.appendChild(doneBtn)
+    tools.appendChild(cancelBtn)
+    tools.appendChild(hint)
   }
 
   function renderLegacy() {
@@ -443,8 +511,9 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     unsubscribe = subscribe(noteId, blockId, service, (r) => {
       // Editor.js 重渲染 / 替换块时不一定调用 destroy()：根节点曾挂载、现已脱离文档就自行退订
       if (root.isConnected) seenConnected = true
-      else if (seenConnected) { stop(); playback.destroy(); return }
+      else if (seenConnected) { stop(); playback.destroy(); setUnsavedEdit(editKey, false); return }
       record = r
+      if (editing) return // 编辑中只更新数据，不冲掉输入框；退出编辑时再 render
       render()
     })
   }
@@ -453,6 +522,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     destroy() {
       stop()
       playback.destroy()
+      setUnsavedEdit(editKey, false)
       root.remove()
     }
   }
