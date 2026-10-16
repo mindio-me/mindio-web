@@ -126,6 +126,7 @@ public class AudioTranscriptionService {
 
     /** 用户改错：只覆盖对应句的 text，保存后立即重建索引，再按 SUMMARY 重新整理 */
     public AudioTranscription saveUtterances(Long noteId, String blockId, List<UtteranceEdit> edits) {
+        if (edits == null) throw new BadRequestException("没有要保存的修改");
         AudioTranscription t = requireDone(noteId, blockId);
         ArrayNode arr = readUtterances(t);
         for (JsonNode u : arr) {
@@ -156,24 +157,54 @@ public class AudioTranscriptionService {
     public AudioTranscription patch(Long noteId, String blockId, Map<String, String> speakerNames, Scene scene) {
         AudioTranscription t = repository.findByNoteIdAndBlockId(noteId, blockId)
                 .orElseThrow(() -> new ResourceNotFoundException("这段录音还没有转写记录"));
+        String namesJson = null;
         if (speakerNames != null) {
-            try {
-                t.setSpeakerNames(objectMapper.writeValueAsString(speakerNames));
-            } catch (Exception e) {
-                throw new BadRequestException("说话人名字格式不对");
-            }
-            t = repository.save(t);
+            namesJson = cleanSpeakerNames(speakerNames);
+        }
+        if (scene != null && t.getStatus() != Status.DONE) {
+            throw new ConflictException("录音正在处理，稍后再改场景");
+        }
+        if (speakerNames != null) {
+            t.setSpeakerNames(namesJson);
         }
         if (scene != null) {
-            if (t.getStatus() != Status.DONE) {
-                throw new ConflictException("录音正在处理，稍后再改场景");
-            }
             t.setScene(scene);
             t.setSceneSource(SceneSource.USER);
-            repository.save(t);
+        }
+        if (speakerNames == null && scene == null) {
+            return t;
+        }
+        t = repository.save(t);
+        if (scene != null) {
             return trigger(noteId, blockId, TriggerType.MANUAL, Stage.SUMMARY).orElseThrow();
         }
         return t;
+    }
+
+    /** 说话人编号只能是 1-99，最多 20 个，名字去空白后至多 50 字，空名字丢弃；全空则返回 null */
+    private String cleanSpeakerNames(Map<String, String> raw) {
+        if (raw.size() > 20) {
+            throw new BadRequestException("说话人名字太多");
+        }
+        Map<String, String> cleaned = new java.util.LinkedHashMap<>();
+        for (Map.Entry<String, String> e : raw.entrySet()) {
+            if (e.getKey() == null || !e.getKey().matches("[1-9][0-9]?")) {
+                throw new BadRequestException("说话人编号不对: " + e.getKey());
+            }
+            String name = e.getValue() == null ? "" : e.getValue().trim();
+            if (name.length() > 50) {
+                throw new BadRequestException("说话人名字不能超过 50 个字");
+            }
+            if (!name.isEmpty()) {
+                cleaned.put(e.getKey(), name);
+            }
+        }
+        if (cleaned.isEmpty()) return null;
+        try {
+            return objectMapper.writeValueAsString(cleaned);
+        } catch (Exception e) {
+            throw new BadRequestException("说话人名字格式不对");
+        }
     }
 
     private AudioTranscription requireDone(Long noteId, String blockId) {

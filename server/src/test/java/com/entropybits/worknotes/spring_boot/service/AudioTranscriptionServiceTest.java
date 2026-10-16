@@ -285,4 +285,41 @@ class AudioTranscriptionServiceTest {
         assertThat(saved.getStage()).isEqualTo(AudioTranscription.Stage.SUMMARY);
         assertThat(saved.getUtterances()).isEqualTo(UTTS);
     }
+
+    @Test
+    void patch_namesAndSceneOnProcessingRecordWritesNothing() throws Exception {
+        block("audioRecord", 60);
+        existing(AudioTranscription.Status.PROCESSING, UTTS);
+        assertThatThrownBy(() -> service.patch(1L, "b", java.util.Map.of("1", "张总"), AudioTranscription.Scene.MEETING))
+                .isInstanceOf(com.entropybits.worknotes.spring_boot.exception.ConflictException.class);
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void patch_rejectsBadSpeakerNames() throws Exception {
+        block("audioRecord", 60);
+        done(UTTS);
+        assertThatThrownBy(() -> service.patch(1L, "b", java.util.Map.of("abc", "x"), null))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.patch(1L, "b", java.util.Map.of("1", "x".repeat(51)), null))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void patch_dropsBlankNamesAndTrims() throws Exception {
+        block("audioRecord", 60);
+        done(UTTS);
+        java.util.Map<String, String> in = new java.util.LinkedHashMap<>();
+        in.put("1", "  ");
+        in.put("2", " 李 ");
+        AudioTranscription saved = service.patch(1L, "b", in, null);
+        assertThat(om.readTree(saved.getSpeakerNames()).toString()).isEqualTo("{\"2\":\"李\"}");
+    }
+
+    @Test
+    void saveUtterances_nullEditsIsBadRequest() throws Exception {
+        block("audioRecord", 60);
+        done(UTTS);
+        assertThatThrownBy(() -> service.saveUtterances(1L, "b", null)).isInstanceOf(BadRequestException.class);
+    }
 }
