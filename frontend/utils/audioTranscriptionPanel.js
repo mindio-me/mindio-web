@@ -340,6 +340,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       return u ? u.speaker : null
     }
     const hits = findMatches(items.map((u) => u.text), searchQuery)
+    if (searchIndex >= hits.length) searchIndex = 0
     const lines = []
     let lastSpeaker = null
     items.forEach((u, idx) => {
@@ -388,10 +389,10 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         query: searchQuery,
         onQuery: (q) => { searchQuery = q; searchIndex = 0; redraw() },
         onStep: (dir) => {
-          const { hits } = redraw()
-          if (!hits.length) return
-          searchIndex = (searchIndex + dir + hits.length) % hits.length
-          const { lines } = redraw()
+          const total = findMatches(items.map((u) => u.text), searchQuery).length
+          if (!total) return
+          searchIndex = (searchIndex + dir + total) % total
+          const { lines, hits } = redraw()
           const target = lines[hits[searchIndex].line]
           if (target) {
             box.scrollTop = Math.max(0, target.el.offsetTop - box.clientHeight / 3)
