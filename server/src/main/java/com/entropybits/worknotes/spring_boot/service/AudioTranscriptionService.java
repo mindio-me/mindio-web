@@ -7,27 +7,40 @@ package com.entropybits.worknotes.spring_boot.service;
 import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingsService;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.ErrorKind;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Scene;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.SceneSource;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Stage;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Status;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.TriggerType;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
+import com.entropybits.worknotes.spring_boot.exception.ConflictException;
 import com.entropybits.worknotes.spring_boot.exception.ForbiddenException;
 import com.entropybits.worknotes.spring_boot.exception.ResourceNotFoundException;
 import com.entropybits.worknotes.spring_boot.repository.AudioTranscriptionRepository;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 录音转写的登记入口：决定一次触发要不要登记 / 重置任务，真正的处理在 AudioTranscriptionJob。
  * 规则见 docs/superpowers/specs/2026-10-10-recording-auto-notes-design.md "触发接口" 一节。
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AudioTranscriptionService {
 
@@ -37,6 +50,8 @@ public class AudioTranscriptionService {
     private final MediaBlockService mediaBlockService;
     private final AiSettingsService aiSettingsService;
     private final NoteRepository noteRepository;
+    private final ContentIndexingService contentIndexingService;
+    private final ObjectMapper objectMapper;
 
     public Optional<AudioTranscription> trigger(Long noteId, String blockId, TriggerType trigger, Stage stage) {
         MediaBlockService.BlockData block = mediaBlockService.getBlockData(noteId, blockId);
@@ -77,6 +92,13 @@ public class AudioTranscriptionService {
         record.setSummary(null);
         if (stage == Stage.FULL) {
             record.setUtterances(null);
+            // 重新转写后说话人编号可能变、用户改过的原文会被覆盖：一并清掉；用户选过的场景保留
+            record.setEditedAt(null);
+            record.setSpeakerNames(null);
+            if (record.getSceneSource() != SceneSource.USER) {
+                record.setScene(null);
+                record.setSceneSource(null);
+            }
         }
         return Optional.of(repository.save(record));
     }
@@ -89,11 +111,88 @@ public class AudioTranscriptionService {
         Optional<AudioTranscription> existing = repository.findByNoteIdAndBlockId(noteId, blockId);
         if (existing.isPresent() && existing.get().getStatus() == Status.DONE) {
             ErrorKind kind = existing.get().getErrorKind();
-            if (kind != ErrorKind.PARTIAL_SEGMENTS && kind != ErrorKind.NO_SPEECH && kind != ErrorKind.SUMMARY_FAILED) {
+            if (kind == ErrorKind.SUMMARY_FAILED) {
+                // 逐句原文已经付过 ASR 的钱：只重新整理
+                return trigger(noteId, blockId, TriggerType.MANUAL, Stage.SUMMARY).orElseThrow();
+            }
+            if (kind != ErrorKind.PARTIAL_SEGMENTS && kind != ErrorKind.NO_SPEECH) {
                 return existing.get();
             }
         }
         return trigger(noteId, blockId, TriggerType.MANUAL, Stage.FULL).orElseThrow();
+    }
+
+    public record UtteranceEdit(int index, String text) {}
+
+    /** 用户改错：只覆盖对应句的 text，保存后立即重建索引，再按 SUMMARY 重新整理 */
+    public AudioTranscription saveUtterances(Long noteId, String blockId, List<UtteranceEdit> edits) {
+        AudioTranscription t = requireDone(noteId, blockId);
+        ArrayNode arr = readUtterances(t);
+        for (JsonNode u : arr) {
+            if (u.path("text").asText("").startsWith("[第 ")) {
+                throw new ConflictException("这段录音有转写失败的片段，请先重新转写");
+            }
+        }
+        Set<Integer> seen = new HashSet<>();
+        for (UtteranceEdit e : edits) {
+            if (e.index() < 0 || e.index() >= arr.size() || !seen.add(e.index())) {
+                throw new BadRequestException("句子序号不对: " + e.index());
+            }
+        }
+        edits.forEach(e -> ((ObjectNode) arr.get(e.index())).put("text", e.text() == null ? "" : e.text().trim()));
+        t.setUtterances(arr.toString());
+        t.setEditedAt(LocalDateTime.now());
+        repository.save(t);
+        try {
+            contentIndexingService.reindexNote(noteId);
+        } catch (Exception ex) {
+            // 索引失败不影响保存；整理完成后 Job 还会再索引一次
+            log.warn("原文修改已保存但重新索引失败 noteId={}", noteId, ex);
+        }
+        return trigger(noteId, blockId, TriggerType.MANUAL, Stage.SUMMARY).orElseThrow();
+    }
+
+    /** 改说话人名字（不重新整理）/ 改场景（按新模板重新整理） */
+    public AudioTranscription patch(Long noteId, String blockId, Map<String, String> speakerNames, Scene scene) {
+        AudioTranscription t = repository.findByNoteIdAndBlockId(noteId, blockId)
+                .orElseThrow(() -> new ResourceNotFoundException("这段录音还没有转写记录"));
+        if (speakerNames != null) {
+            try {
+                t.setSpeakerNames(objectMapper.writeValueAsString(speakerNames));
+            } catch (Exception e) {
+                throw new BadRequestException("说话人名字格式不对");
+            }
+            t = repository.save(t);
+        }
+        if (scene != null) {
+            if (t.getStatus() != Status.DONE) {
+                throw new ConflictException("录音正在处理，稍后再改场景");
+            }
+            t.setScene(scene);
+            t.setSceneSource(SceneSource.USER);
+            repository.save(t);
+            return trigger(noteId, blockId, TriggerType.MANUAL, Stage.SUMMARY).orElseThrow();
+        }
+        return t;
+    }
+
+    private AudioTranscription requireDone(Long noteId, String blockId) {
+        AudioTranscription t = repository.findByNoteIdAndBlockId(noteId, blockId)
+                .orElseThrow(() -> new ResourceNotFoundException("这段录音还没有转写记录"));
+        if (t.getStatus() != Status.DONE || t.getUtterances() == null) {
+            throw new ConflictException("录音正在处理，修改未保存");
+        }
+        return t;
+    }
+
+    private ArrayNode readUtterances(AudioTranscription t) {
+        try {
+            JsonNode node = objectMapper.readTree(t.getUtterances());
+            if (node instanceof ArrayNode arr) return arr;
+        } catch (Exception ignored) {
+            // 落到下面统一报错
+        }
+        throw new ConflictException("转写原文数据损坏，请重新转写");
     }
 
     public List<AudioTranscription> listForNote(Long noteId) {

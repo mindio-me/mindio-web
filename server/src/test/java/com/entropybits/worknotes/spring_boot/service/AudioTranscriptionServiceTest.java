@@ -35,12 +35,13 @@ class AudioTranscriptionServiceTest {
     @Mock MediaBlockService mediaBlockService;
     @Mock AiSettingsService aiSettingsService;
     @Mock NoteRepository noteRepository;
+    @Mock ContentIndexingService indexing;
     AudioTranscriptionService service;
     final ObjectMapper om = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        service = new AudioTranscriptionService(repository, mediaBlockService, aiSettingsService, noteRepository);
+        service = new AudioTranscriptionService(repository, mediaBlockService, aiSettingsService, noteRepository, indexing, om);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(aiSettingsService.autoTranscribeEnabled()).thenReturn(true);
         when(repository.findByNoteIdAndBlockId(any(), any())).thenReturn(Optional.empty());
@@ -151,5 +152,137 @@ class AudioTranscriptionServiceTest {
         block("paragraph", 0);
         assertThatThrownBy(() -> service.trigger(1L, "b", AudioTranscription.TriggerType.MANUAL, AudioTranscription.Stage.FULL))
                 .isInstanceOf(BadRequestException.class);
+    }
+
+    private static final String UTTS = "[{\"start\":0,\"end\":1000,\"text\":\"甲\",\"speaker\":1},"
+            + "{\"start\":1200,\"end\":2000,\"text\":\"乙\",\"speaker\":2}]";
+
+    private AudioTranscription done(String utterances) {
+        AudioTranscription t = existing(AudioTranscription.Status.DONE, utterances);
+        t.setErrorKind(null);
+        return t;
+    }
+
+    @Test
+    void saveUtterances_replacesOnlyTextThenQueuesSummaryAndReindexes() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done(UTTS);
+
+        AudioTranscription saved = service.saveUtterances(1L, "b",
+                java.util.List.of(new AudioTranscriptionService.UtteranceEdit(1, " 乙改 ")));
+
+        var arr = om.readTree(saved.getUtterances());
+        assertThat(arr.get(0).get("text").asText()).isEqualTo("甲");
+        assertThat(arr.get(1).get("text").asText()).isEqualTo("乙改");
+        assertThat(arr.get(1).get("start").asLong()).isEqualTo(1200);
+        assertThat(arr.get(1).get("speaker").asInt()).isEqualTo(2);
+        assertThat(saved.getEditedAt()).isNotNull();
+        assertThat(saved.getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
+        assertThat(saved.getStage()).isEqualTo(AudioTranscription.Stage.SUMMARY);
+        verify(indexing).reindexNote(1L);
+    }
+
+    @Test
+    void saveUtterances_rejectsWhenNotDone() throws Exception {
+        block("audioRecord", 60);
+        existing(AudioTranscription.Status.PROCESSING, UTTS);
+        assertThatThrownBy(() -> service.saveUtterances(1L, "b",
+                java.util.List.of(new AudioTranscriptionService.UtteranceEdit(0, "x"))))
+                .isInstanceOf(com.entropybits.worknotes.spring_boot.exception.ConflictException.class);
+    }
+
+    @Test
+    void saveUtterances_rejectsFailedSegmentPlaceholder() throws Exception {
+        block("audioRecord", 60);
+        done("[{\"start\":0,\"end\":0,\"text\":\"[第 1 段转写失败]\"},{\"start\":5,\"end\":9,\"text\":\"乙\"}]");
+        assertThatThrownBy(() -> service.saveUtterances(1L, "b",
+                java.util.List.of(new AudioTranscriptionService.UtteranceEdit(1, "x"))))
+                .isInstanceOf(com.entropybits.worknotes.spring_boot.exception.ConflictException.class);
+    }
+
+    @Test
+    void saveUtterances_rejectsOutOfRangeOrDuplicateIndex() throws Exception {
+        block("audioRecord", 60);
+        done(UTTS);
+        assertThatThrownBy(() -> service.saveUtterances(1L, "b",
+                java.util.List.of(new AudioTranscriptionService.UtteranceEdit(2, "x"))))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> service.saveUtterances(1L, "b", java.util.List.of(
+                new AudioTranscriptionService.UtteranceEdit(0, "x"), new AudioTranscriptionService.UtteranceEdit(0, "y"))))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void patch_renameDoesNotRequeue() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done(UTTS);
+        AudioTranscription saved = service.patch(1L, "b", java.util.Map.of("1", "张总"), null);
+        assertThat(om.readTree(saved.getSpeakerNames()).get("1").asText()).isEqualTo("张总");
+        assertThat(saved.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+    }
+
+    @Test
+    void patch_sceneRequeuesSummaryAsUserScene() throws Exception {
+        block("audioRecord", 60);
+        done(UTTS);
+        AudioTranscription saved = service.patch(1L, "b", null, AudioTranscription.Scene.LECTURE);
+        assertThat(saved.getScene()).isEqualTo(AudioTranscription.Scene.LECTURE);
+        assertThat(saved.getSceneSource()).isEqualTo(AudioTranscription.SceneSource.USER);
+        assertThat(saved.getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
+        assertThat(saved.getStage()).isEqualTo(AudioTranscription.Stage.SUMMARY);
+    }
+
+    @Test
+    void patch_sceneWorksOnPhase1RecordWithoutScene() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done("[{\"start\":0,\"end\":1000,\"text\":\"甲\"}]");
+        t.setScene(null);
+        AudioTranscription saved = service.patch(1L, "b", null, AudioTranscription.Scene.MEETING);
+        assertThat(saved.getScene()).isEqualTo(AudioTranscription.Scene.MEETING);
+        assertThat(saved.getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
+    }
+
+    @Test
+    void patch_sceneRejectedWhileProcessing() throws Exception {
+        block("audioRecord", 60);
+        existing(AudioTranscription.Status.PROCESSING, UTTS);
+        assertThatThrownBy(() -> service.patch(1L, "b", null, AudioTranscription.Scene.MEETING))
+                .isInstanceOf(com.entropybits.worknotes.spring_boot.exception.ConflictException.class);
+    }
+
+    @Test
+    void manualFull_clearsEditsAndSpeakerNamesAndAutoScene() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done(UTTS);
+        t.setEditedAt(java.time.LocalDateTime.now());
+        t.setSpeakerNames("{\"1\":\"张总\"}");
+        t.setScene(AudioTranscription.Scene.MEETING);
+        t.setSceneSource(AudioTranscription.SceneSource.AUTO);
+        AudioTranscription saved = service.trigger(1L, "b", AudioTranscription.TriggerType.MANUAL, AudioTranscription.Stage.FULL).orElseThrow();
+        assertThat(saved.getEditedAt()).isNull();
+        assertThat(saved.getSpeakerNames()).isNull();
+        assertThat(saved.getScene()).isNull();
+        assertThat(saved.getSceneSource()).isNull();
+    }
+
+    @Test
+    void manualFull_keepsUserScene() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done(UTTS);
+        t.setScene(AudioTranscription.Scene.LECTURE);
+        t.setSceneSource(AudioTranscription.SceneSource.USER);
+        AudioTranscription saved = service.trigger(1L, "b", AudioTranscription.TriggerType.MANUAL, AudioTranscription.Stage.FULL).orElseThrow();
+        assertThat(saved.getScene()).isEqualTo(AudioTranscription.Scene.LECTURE);
+        assertThat(saved.getSceneSource()).isEqualTo(AudioTranscription.SceneSource.USER);
+    }
+
+    @Test
+    void agentRetriggerOfSummaryFailedOnlyResummarizes() throws Exception {
+        block("audioRecord", 60);
+        AudioTranscription t = done(UTTS);
+        t.setErrorKind(AudioTranscription.ErrorKind.SUMMARY_FAILED);
+        AudioTranscription saved = service.triggerFromAgent(1L, "b");
+        assertThat(saved.getStage()).isEqualTo(AudioTranscription.Stage.SUMMARY);
+        assertThat(saved.getUtterances()).isEqualTo(UTTS);
     }
 }
