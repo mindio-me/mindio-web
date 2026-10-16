@@ -177,3 +177,63 @@ async def test_transcribe_utterances_raises_not_configured_without_key(test_sett
     client = _client_with_transport(cfg, handler)
     with pytest.raises(AsrNotConfiguredError):
         await client.transcribe_utterances("x")
+
+
+async def test_transcribe_utterances_requests_speaker_info_and_maps_speaker(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = request.content
+        return httpx.Response(
+            200,
+            headers={"X-Api-Status-Code": "20000000"},
+            json={"result": {"utterances": [
+                {"start_time": 0, "end_time": 1000, "text": "你好。", "additions": {"speaker": "1"}},
+                {"start_time": 1200, "end_time": 2000, "text": "Hi.", "additions": {"speaker": "2"}},
+                {"start_time": 2100, "end_time": 2500, "text": "无编号。"},
+                {"start_time": 2600, "end_time": 2900, "text": "怪编号。", "additions": {"speaker": "x"}},
+            ]}},
+        )
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.transcribe_utterances("base64audio")
+
+    assert b'"enable_speaker_info":true' in captured["body"]
+    assert result == [
+        {"start": 0, "end": 1000, "text": "你好。", "speaker": 1},
+        {"start": 1200, "end": 2000, "text": "Hi.", "speaker": 2},
+        {"start": 2100, "end": 2500, "text": "无编号。"},
+        {"start": 2600, "end": 2900, "text": "怪编号。"},
+    ]
+
+
+async def test_transcribe_utterances_retries_without_speaker_info_when_rejected(test_settings):
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.content)
+        if len(bodies) == 1:
+            return httpx.Response(200, headers={"X-Api-Status-Code": "45000001", "X-Api-Message": "bad param"})
+        return httpx.Response(200, headers={"X-Api-Status-Code": "20000000"},
+                              json={"result": {"utterances": [{"start_time": 0, "end_time": 900, "text": "好"}]}})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.transcribe_utterances("base64audio")
+
+    assert len(bodies) == 2
+    assert b"enable_speaker_info" in bodies[0]
+    assert b"enable_speaker_info" not in bodies[1]
+    assert result == [{"start": 0, "end": 900, "text": "好"}]
+
+
+async def test_transcribe_utterances_does_not_retry_network_errors(test_settings):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        raise httpx.ConnectError("down")
+
+    client = _client_with_transport(test_settings, handler)
+    with pytest.raises(AsrClientError):
+        await client.transcribe_utterances("base64audio")
+    assert len(calls) == 1

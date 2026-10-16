@@ -144,3 +144,9 @@ async def test_audio_summarize_raises_summary_failed_on_bad_json(monkeypatch):
     with pytest.raises(HTTPException) as e:
         await audio_summarize(AudioSummarizeRequest(utterances=UTTS, marks=[]))
     assert e.value.status_code == 502 and e.value.detail["code"] == "SUMMARY_FAILED"
+
+
+async def test_asr_transcribe_keeps_speaker(monkeypatch):
+    _patch(monkeypatch, FakeJava(), FakeAsr([{"start": 0, "end": 1000, "text": "你好", "speaker": 2}]))
+    resp = await asr_transcribe(AsrTranscribeRequest(noteId=1, blockId="b", segment=None, offsetMs=500))
+    assert resp.utterances == [{"start": 500, "end": 1500, "text": "你好", "speaker": 2}]

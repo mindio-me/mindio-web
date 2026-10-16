@@ -119,7 +119,7 @@ async def asr_transcribe(request: AsrTranscribeRequest) -> AsrTranscribeResponse
         raise _error(502, "ASR_FAILED", str(e)) from e
     finally:
         await asr_client.aclose()
-    shifted = [{"start": u["start"] + request.offsetMs, "end": u["end"] + request.offsetMs, "text": u["text"]}
+    shifted = [{**u, "start": u["start"] + request.offsetMs, "end": u["end"] + request.offsetMs}
                for u in utterances]
     return AsrTranscribeResponse(utterances=shifted)
 

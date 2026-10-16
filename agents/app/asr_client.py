@@ -29,12 +29,21 @@ class AsrNotConfiguredError(AsrClientError):
     """没有配置语音识别 Key：设置页和 agents 环境变量都是空的。"""
 
 
+class AsrStatusError(AsrClientError):
+    """接口返回了非成功状态码（区别于网络错误）：带说话人参数时据此去参重试一次。"""
+
+
+def _speaker(value) -> int | None:
+    s = str(value or "").strip()
+    return int(s) if s.isdigit() else None
+
+
 class VolcengineAsrClient:
     def __init__(self, cfg: Settings | None = None, client: httpx.AsyncClient | None = None):
         self._cfg = cfg
         self._client = client or httpx.AsyncClient(timeout=180.0)
 
-    async def _recognize(self, audio_base64: str, show_utterances: bool) -> dict:
+    async def _recognize(self, audio_base64: str, show_utterances: bool, speaker_info: bool = False) -> dict:
         cfg = self._cfg or current_settings()
         if not cfg.volcengine_asr_app_key:
             raise AsrNotConfiguredError("请到 设置 → AI 服务 填写语音识别 Key")
@@ -57,6 +66,8 @@ class VolcengineAsrClient:
         request_opts = {"model_name": "bigmodel", "enable_itn": True, "enable_punc": True}
         if show_utterances:
             request_opts["show_utterances"] = True
+        if speaker_info:
+            request_opts["enable_speaker_info"] = True
         body = {
             "user": {"uid": cfg.volcengine_asr_app_key},
             "audio": {"data": audio_base64},
@@ -72,7 +83,7 @@ class VolcengineAsrClient:
             return {}
         if status_code != SUCCESS_STATUS_CODE:
             message = resp.headers.get("X-Api-Message", "未知错误")
-            raise AsrClientError(f"语音识别失败: status_code={status_code} message={message}")
+            raise AsrStatusError(f"语音识别失败: status_code={status_code} message={message}")
 
         return resp.json()
 
@@ -81,14 +92,23 @@ class VolcengineAsrClient:
         return payload.get("result", {}).get("text", "").strip()
 
     async def transcribe_utterances(self, audio_base64: str) -> list[dict]:
-        """逐句结果，时间是这段音频内的毫秒（调用方自己加分段偏移）；空文本句丢掉。"""
-        payload = await self._recognize(audio_base64, show_utterances=True)
+        """逐句结果，时间是这段音频内的毫秒（调用方自己加分段偏移）；空文本句丢掉。
+        开启说话人分离（实测字段在 utterances[].additions.speaker，值是字符串）；
+        接口若拒绝该参数（非成功状态码），去掉参数重试一次。"""
+        try:
+            payload = await self._recognize(audio_base64, show_utterances=True, speaker_info=True)
+        except AsrStatusError:
+            payload = await self._recognize(audio_base64, show_utterances=True)
         result = []
         for u in payload.get("result", {}).get("utterances") or []:
             text = (u.get("text") or "").strip()
             if not text:
                 continue
-            result.append({"start": int(u.get("start_time") or 0), "end": int(u.get("end_time") or 0), "text": text})
+            item = {"start": int(u.get("start_time") or 0), "end": int(u.get("end_time") or 0), "text": text}
+            speaker = _speaker((u.get("additions") or {}).get("speaker"))
+            if speaker is not None:
+                item["speaker"] = speaker
+            result.append(item)
         return result
 
     async def aclose(self) -> None:
