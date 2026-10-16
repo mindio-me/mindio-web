@@ -81,6 +81,17 @@ export default {
       const uploadService = this.$uploadService
       const model = options.model
       const entityId = options.entityId || 0
+      // 不能把 $audioTranscriptionService 这个类实例直接放进工具 config：Editor.js 初始化时
+      // ut({}, internalTools, config.tools) 会把配置深合并进新对象，类实例被当成普通对象拆开，
+      // 只剩自身属性 $axios，原型上的 list/trigger 全丢（面板报 service.list is not a function）。
+      // 函数在深合并时按引用原样保留，所以只传两个包装函数。
+      const audioTranscriptions = this.$audioTranscriptionService
+      const transcriptionService = audioTranscriptions
+        ? {
+            list: (noteId) => audioTranscriptions.list(noteId),
+            trigger: (...args) => audioTranscriptions.trigger(...args)
+          }
+        : null
       const ph = options.placeholders
 
       const tools = {
@@ -249,7 +260,7 @@ export default {
           class: AudioTool,
           config: {
             getNoteId: options.getRecordEntityId || null,
-            transcriptionService: this.$audioTranscriptionService,
+            transcriptionService,
             uploader: {
               async uploadByFile(file) {
                 try {
@@ -276,7 +287,7 @@ export default {
       if (options.includeRecordTool) {
         tools.audioRecord = {
           class: RecordTool,
-          config: { getNoteId: options.getRecordEntityId, transcriptionService: this.$audioTranscriptionService }
+          config: { getNoteId: options.getRecordEntityId, transcriptionService }
         }
       }
 
