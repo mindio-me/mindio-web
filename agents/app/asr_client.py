@@ -35,7 +35,11 @@ class AsrStatusError(AsrClientError):
 
 def _speaker(value) -> int | None:
     s = str(value or "").strip()
-    return int(s) if s.isdigit() else None
+    # isdigit() 对上标数字 "²" 等也返回 True，但 int() 解析不了
+    try:
+        return int(s) if s.isdigit() else None
+    except ValueError:
+        return None
 
 
 class VolcengineAsrClient:

@@ -237,3 +237,11 @@ async def test_transcribe_utterances_does_not_retry_network_errors(test_settings
     with pytest.raises(AsrClientError):
         await client.transcribe_utterances("base64audio")
     assert len(calls) == 1
+
+
+def test_speaker_ignores_non_ascii_digits():
+    from app.asr_client import _speaker
+
+    assert _speaker("²") is None
+    assert _speaker(" 2 ") == 2
+    assert _speaker(None) is None
