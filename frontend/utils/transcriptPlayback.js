@@ -46,3 +46,100 @@ export function silenceSkipTarget(utts, ms, gap = SILENCE_GAP_MS, lead = SILENCE
   const target = next.start - lead
   return target > ms ? target : null
 }
+
+const SPEED_KEY = 'mindio.transcript.speed'
+const SKIP_KEY = 'mindio.transcript.skipSilence'
+const USER_SCROLL_PAUSE_MS = 5000
+
+function readPref(key) {
+  try {
+    return window.localStorage.getItem(key)
+  } catch (e) {
+    return null
+  }
+}
+
+function writePref(key, value) {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch (e) {}
+}
+
+/** 绑定到一个 <audio>：timeupdate 时高亮当前行、按需跳过静音、保持当前行可见 */
+export function createPlayback(audio) {
+  let utts = []
+  let lines = []
+  let box = null
+  let active = null
+  let userScrollAt = 0
+  let ignoreScroll = false
+  let skipSilence = readPref(SKIP_KEY) === '1'
+  const savedSpeed = parseFloat(readPref(SPEED_KEY))
+  let speed = SPEED_OPTIONS.includes(savedSpeed) ? savedSpeed : 1
+  if (audio) audio.playbackRate = speed
+
+  const onScroll = () => {
+    if (ignoreScroll) {
+      ignoreScroll = false
+      return
+    }
+    userScrollAt = Date.now()
+  }
+
+  const keepVisible = (line) => {
+    if (!box || Date.now() - userScrollAt < USER_SCROLL_PAUSE_MS) return
+    const top = line.offsetTop
+    if (top >= box.scrollTop && top + line.offsetHeight <= box.scrollTop + box.clientHeight) return
+    ignoreScroll = true
+    box.scrollTop = Math.max(0, top - box.clientHeight / 3)
+  }
+
+  const onTime = () => {
+    const ms = audio.currentTime * 1000
+    if (skipSilence && !audio.paused) {
+      const to = silenceSkipTarget(utts, ms)
+      if (to != null) {
+        audio.currentTime = to / 1000
+        return
+      }
+    }
+    const i = findIndexAt(lines, ms)
+    const line = i >= 0 ? lines[i].el : null
+    if (line === active) return
+    if (active) active.classList.remove('playing')
+    active = line
+    if (line) {
+      line.classList.add('playing')
+      keepVisible(line)
+    }
+  }
+
+  if (audio) audio.addEventListener('timeupdate', onTime)
+
+  return {
+    bind(next) {
+      if (box) box.removeEventListener('scroll', onScroll)
+      utts = next.utterances || []
+      lines = next.lines || []
+      box = next.box || null
+      active = null
+      if (box) box.addEventListener('scroll', onScroll)
+      if (audio) onTime()
+    },
+    getSpeed: () => speed,
+    setSpeed(v) {
+      speed = v
+      if (audio) audio.playbackRate = v
+      writePref(SPEED_KEY, String(v))
+    },
+    getSkipSilence: () => skipSilence,
+    setSkipSilence(v) {
+      skipSilence = !!v
+      writePref(SKIP_KEY, skipSilence ? '1' : '0')
+    },
+    destroy() {
+      if (audio) audio.removeEventListener('timeupdate', onTime)
+      if (box) box.removeEventListener('scroll', onScroll)
+    }
+  }
+}

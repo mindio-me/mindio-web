@@ -3,7 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { MessageBox } from 'element-ui'
 import { subscribe, notifyChanged } from './audioTranscriptionStore'
+import { el } from './transcriptDom'
+import { createPlayback, SPEED_OPTIONS } from './transcriptPlayback'
+import { speakerText } from './transcriptEditor'
 
 // 音频块下方的"转写面板"：摘要优先、原文折叠、所有时间戳可点击跳转。
 // Editor.js 工具是原生 DOM，这里也用原生 DOM（<details> 折叠），样式向 Element UI 靠拢。
@@ -36,6 +40,13 @@ function injectStyles() {
 .atp-line { padding: 2px 0 2px 8px; border-left: 3px solid transparent; }
 .atp-line.marked { border-left-color: #e6a23c; background: #fdf6ec; }
 .atp-legacy { white-space: pre-wrap; color: #888; }
+.atp-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: #606266; font-size: 12.5px; margin: 6px 0; }
+.atp-bar select { font-size: 12px; border: 1px solid #dcdfe6; border-radius: 4px; padding: 1px 4px; background: #fff; color: #606266; }
+.atp-bar label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.atp-lines { max-height: 360px; overflow-y: auto; position: relative; }
+.atp-line.playing { background: #ecf5ff; }
+.atp-spk { display: inline-block; font-size: 11.5px; padding: 0 6px; border-radius: 3px; margin-right: 6px; cursor: pointer; color: #fff; }
+.atp-spk-input { font-size: 12px; width: 7em; margin-right: 6px; }
 `
   document.head.appendChild(el)
 }
@@ -48,13 +59,6 @@ export function fmt(ms) {
   const mm = (m < 10 ? '0' : '') + m
   const ss = (r < 10 ? '0' : '') + r
   return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
-}
-
-function el(tag, cls, text) {
-  const e = document.createElement(tag)
-  if (cls) e.className = cls
-  if (text != null) e.textContent = text
-  return e
 }
 
 /** "**关键词**：说明" → 加粗关键词；先按纯文本拼节点，不用 innerHTML，避免注入 */
@@ -72,6 +76,13 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   const root = el('div', 'atp')
   container.appendChild(root)
   let record = null
+  const playback = createPlayback(audio)
+  const SCENES = [['MEETING', '会议'], ['LECTURE', '课堂'], ['INTERVIEW', '访谈'], ['MEMO', '闪念'], ['SYSTEM_AUDIO', '内录']]
+  const SPEAKER_COLORS = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399', '#9b59b6', '#16a085', '#d35400', '#2c3e50', '#c0392b']
+  const isBusy = () => !!record && (record.status === 'PENDING' || record.status === 'PROCESSING')
+  const names = () => (record && record.speakerNames) || {}
+  const speakerName = (n) => names()[n] || `说话人 ${n}`
+  const multiSpeaker = (utts) => new Set(utts.map((u) => u.speaker).filter((s) => s != null)).size > 1
   let transcriptMode = 'polished'
   const openState = { keyPoints: true }
 
@@ -155,15 +166,108 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     return null
   }
 
+  function renderBar() {
+    const r = record
+    const bar = el('div', 'atp-bar')
+    if (!readOnly) {
+      const sceneLabel = el('label', null, '场景：')
+      const select = el('select')
+      if (!r.scene) select.appendChild(el('option', null, '未判断')).value = ''
+      SCENES.forEach(([v, label]) => {
+        const o = el('option', null, label)
+        o.value = v
+        if (r.scene === v) o.selected = true
+        select.appendChild(o)
+      })
+      select.disabled = isBusy()
+      select.addEventListener('change', async () => {
+        const v = select.value
+        try {
+          await MessageBox.confirm('将按新场景重新整理，约需 1–2 分钟', '切换场景', { type: 'info' })
+        } catch (e) {
+          render()
+          return
+        }
+        try {
+          await service.update(noteId, blockId, { scene: v })
+        } catch (e) {
+          console.warn('切换场景失败:', e)
+          triggerError = '切换场景失败，请稍后重试'
+        }
+        notifyChanged(noteId, blockId)
+      })
+      sceneLabel.appendChild(select)
+      bar.appendChild(sceneLabel)
+    }
+    const speedSel = el('select')
+    SPEED_OPTIONS.forEach((v) => {
+      const o = el('option', null, v + 'x')
+      o.value = String(v)
+      if (v === playback.getSpeed()) o.selected = true
+      speedSel.appendChild(o)
+    })
+    speedSel.addEventListener('change', () => playback.setSpeed(parseFloat(speedSel.value)))
+    bar.appendChild(speedSel)
+    if ((r.utterances || []).length) {
+      const skip = el('label')
+      const box = el('input')
+      box.type = 'checkbox'
+      box.checked = playback.getSkipSilence()
+      box.addEventListener('change', () => playback.setSkipSilence(box.checked))
+      skip.appendChild(box)
+      skip.appendChild(document.createTextNode('跳过静音'))
+      bar.appendChild(skip)
+    }
+    return bar
+  }
+
+  function speakerChip(n) {
+    const chip = el('span', 'atp-spk', speakerName(n))
+    chip.style.background = SPEAKER_COLORS[(n - 1) % SPEAKER_COLORS.length]
+    if (readOnly) return chip
+    chip.title = '点击改名'
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const input = el('input', 'atp-spk-input')
+      input.value = names()[n] || ''
+      input.placeholder = `说话人 ${n}`
+      chip.replaceWith(input)
+      input.focus()
+      let done = false
+      const commit = async (save) => {
+        if (done) return
+        done = true
+        if (save) {
+          const next = { ...names() }
+          const v = input.value.trim()
+          if (v) next[n] = v
+          else delete next[n]
+          try {
+            record = await service.update(noteId, blockId, { speakerNames: next })
+          } catch (err) {
+            console.warn('改名失败:', err)
+          }
+        }
+        render()
+      }
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') commit(true)
+        else if (ev.key === 'Escape') commit(false)
+      })
+      input.addEventListener('blur', () => commit(true))
+    })
+    return chip
+  }
+
   function renderSummary(s) {
     const frag = document.createDocumentFragment()
-    if (s.overview) frag.appendChild(el('div', 'atp-overview', s.overview))
+    if (s.overview) frag.appendChild(el('div', 'atp-overview', speakerText(s.overview, names())))
     const items = [
       section('keyPoints', '要点', (s.keyPoints || []).length, (d) => {
         s.keyPoints.forEach((k) => {
-          if (k.topic) d.appendChild(el('div', 'atp-topic', k.topic))
+          if (k.topic) d.appendChild(el('div', 'atp-topic', speakerText(k.topic, names())))
           const ul = el('ul')
-          ;(k.points || []).forEach((p) => { const li = el('li'); li.appendChild(richText(p)); ul.appendChild(li) })
+          ;(k.points || []).forEach((p) => { const li = el('li'); li.appendChild(richText(speakerText(p, names()))); ul.appendChild(li) })
           d.appendChild(ul)
         })
       }),
@@ -172,15 +276,15 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         s.chapters.forEach((c) => {
           const li = el('li')
           li.appendChild(ts(c.start))
-          li.appendChild(el('strong', null, c.title))
-          if (c.desc) li.appendChild(document.createTextNode(' ' + c.desc))
+          li.appendChild(el('strong', null, speakerText(c.title, names())))
+          if (c.desc) li.appendChild(document.createTextNode(' ' + speakerText(c.desc, names())))
           ul.appendChild(li)
         })
         d.appendChild(ul)
       }),
       section('highlights', '重点片段', (s.highlights || []).length, (d) => {
         const ul = el('ul')
-        s.highlights.forEach((h) => { const li = el('li'); li.appendChild(ts(h.start)); li.appendChild(document.createTextNode(h.text)); ul.appendChild(li) })
+        s.highlights.forEach((h) => { const li = el('li'); li.appendChild(ts(h.start)); li.appendChild(document.createTextNode(speakerText(h.text, names()))); ul.appendChild(li) })
         d.appendChild(ul)
       }),
       section('quotes', '金句', (s.quotes || []).length, (d) => {
@@ -188,7 +292,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         s.quotes.forEach((q) => {
           const li = el('li')
           li.appendChild(ts(q.start))
-          li.appendChild(document.createTextNode('“' + q.text + '”'))
+          li.appendChild(document.createTextNode('“' + speakerText(q.text, names()) + '”'))
           if (q.category) li.appendChild(el('span', 'atp-quote-cat', '（' + q.category + '）'))
           ul.appendChild(li)
         })
@@ -196,7 +300,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       }),
       section('todos', '待办', (s.todos || []).length, (d) => {
         const ul = el('ul')
-        s.todos.forEach((t) => ul.appendChild(el('li', null, t)))
+        s.todos.forEach((t) => ul.appendChild(el('li', null, speakerText(t, names()))))
         d.appendChild(ul)
       })
     ]
@@ -224,12 +328,29 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         head.appendChild(seg)
       }
       const usePolished = polished.length && (transcriptMode === 'polished' || !utts.length)
-      ;(usePolished ? polished : utts).forEach((u) => {
+      const items = usePolished ? polished : utts
+      const showSpeakers = multiSpeaker(utts)
+      // 优化版段落取段首那句的说话人：段落 start 等于某句 start
+      const speakerAt = (item) => {
+        if (!usePolished) return item.speaker
+        const u = utts.find((x) => x.start === item.start)
+        return u ? u.speaker : null
+      }
+      const box = el('div', 'atp-lines')
+      const lines = []
+      let lastSpeaker = null
+      items.forEach((u) => {
         const line = el('div', 'atp-line' + (!usePolished && inMark(u) ? ' marked' : ''))
         line.appendChild(ts(u.start))
+        const sp = showSpeakers ? speakerAt(u) : null
+        if (sp != null && sp !== lastSpeaker) line.appendChild(speakerChip(sp))
+        if (sp != null) lastSpeaker = sp
         line.appendChild(document.createTextNode(u.text))
-        d.appendChild(line)
+        box.appendChild(line)
+        lines.push({ start: u.start, el: line })
       })
+      d.appendChild(box)
+      playback.bind({ utterances: utts, lines, box })
     })
   }
 
@@ -252,8 +373,10 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     const hasUtterances = !!record && (record.utterances || []).length > 0
     if (!record || (record.status === 'FAILED' && !hasUtterances) || (record.status !== 'DONE' && record.status !== 'FAILED' && !hasUtterances)) {
       if (!record || record.status === 'FAILED') root.appendChild(renderLegacy())
+      playback.bind({ utterances: [], lines: [], box: null })
       return
     }
+    root.appendChild(renderBar())
     if (record.summary) root.appendChild(renderSummary(record.summary))
     const t = renderTranscript(record)
     if (t) root.appendChild(t)
@@ -270,7 +393,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     unsubscribe = subscribe(noteId, blockId, service, (r) => {
       // Editor.js 重渲染 / 替换块时不一定调用 destroy()：根节点曾挂载、现已脱离文档就自行退订
       if (root.isConnected) seenConnected = true
-      else if (seenConnected) { stop(); return }
+      else if (seenConnected) { stop(); playback.destroy(); return }
       record = r
       render()
     })
@@ -279,6 +402,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   return {
     destroy() {
       stop()
+      playback.destroy()
       root.remove()
     }
   }
