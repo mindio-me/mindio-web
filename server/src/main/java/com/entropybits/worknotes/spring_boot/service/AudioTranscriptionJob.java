@@ -6,6 +6,8 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.ErrorKind;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Scene;
+import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.SceneSource;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Stage;
 import com.entropybits.worknotes.spring_boot.entity.AudioTranscription.Status;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
@@ -102,7 +104,7 @@ public class AudioTranscriptionJob {
                 finish(t);
                 return;
             }
-            summarize(t, utterances, readMarks(block.data()));
+            summarize(t, utterances, readMarks(block.data()), block.data().path("systemAudio").asBoolean(false));
             finish(t);
         } catch (AgentUnavailableException e) {
             int attempts = t.getAttempts() + 1;
@@ -182,11 +184,18 @@ public class AudioTranscriptionJob {
         return true;
     }
 
-    private void summarize(AudioTranscription t, List<Map<String, Object>> utterances, List<Long> marks) throws Exception {
+    private void summarize(AudioTranscription t, List<Map<String, Object>> utterances, List<Long> marks,
+                           boolean systemAudio) throws Exception {
         try {
-            Map<String, Object> result = agentServiceClient.audioSummarize(utterances, marks);
+            // 用户选过的场景照用；否则交给模型判断（内录由 Python 直接定为 SYSTEM_AUDIO）
+            String scene = t.getSceneSource() == SceneSource.USER && t.getScene() != null ? t.getScene().name() : null;
+            Map<String, Object> result = agentServiceClient.audioSummarize(utterances, marks, scene, systemAudio);
             t.setPolished(objectMapper.writeValueAsString(result.get("polished")));
             t.setSummary(objectMapper.writeValueAsString(result.get("summary")));
+            if (t.getSceneSource() != SceneSource.USER) {
+                t.setScene(parseScene(result.get("scene")));
+                t.setSceneSource(SceneSource.AUTO);
+            }
         } catch (AgentCallException e) {
             t.setErrorKind(ErrorKind.SUMMARY_FAILED);
             t.setErrorMessage("整理失败：" + e.getMessage());
@@ -197,6 +206,14 @@ public class AudioTranscriptionJob {
             log.warn("录音整理失败 id={}", t.getId(), e);
             t.setErrorKind(ErrorKind.SUMMARY_FAILED);
             t.setErrorMessage("整理失败：" + e.getMessage());
+        }
+    }
+
+    private static Scene parseScene(Object value) {
+        try {
+            return Scene.valueOf(String.valueOf(value).trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return Scene.MEMO;
         }
     }
 

@@ -280,10 +280,13 @@ public class AgentServiceClient {
         return utterances == null ? List.of() : utterances;
     }
 
-    public Map<String, Object> audioSummarize(List<Map<String, Object>> utterances, List<Long> marks) {
+    public Map<String, Object> audioSummarize(List<Map<String, Object>> utterances, List<Long> marks,
+                                              String scene, boolean systemAudio) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("utterances", utterances);
         body.put("marks", marks);
+        body.put("scene", scene);
+        body.put("systemAudio", systemAudio);
         // 长录音要分约 14 个优化块、并发 3 路，整体可能超过 15 分钟，所以放宽到 30 分钟
         return postInternal("/internal/audio-summarize", body, Duration.ofSeconds(1800));
     }

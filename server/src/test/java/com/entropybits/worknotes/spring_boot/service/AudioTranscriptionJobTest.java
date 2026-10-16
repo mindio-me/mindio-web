@@ -23,6 +23,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -52,9 +53,9 @@ class AudioTranscriptionJobTest {
         when(repository.existsById(9L)).thenReturn(true);
         blockData("{\"url\":\"/uploads/a.webm\",\"duration\":3700,\"marks\":[5000]," +
                 "\"segments\":[{\"url\":\"/uploads/s0.webm\",\"start\":0},{\"url\":\"/uploads/s1.webm\",\"start\":1800}]}");
-        when(agent.audioSummarize(any(), any())).thenReturn(Map.of(
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenReturn(Map.of(
                 "polished", List.of(Map.of("start", 0, "text", "整理后")),
-                "summary", Map.of("overview", "概述")));
+                "summary", Map.of("overview", "概述"), "scene", "MEETING"));
     }
 
     private void blockData(String json) throws Exception {
@@ -79,7 +80,7 @@ class AudioTranscriptionJobTest {
         assertThat(record.getSummary()).contains("概述");
         assertThat(record.getErrorKind()).isNull();
         assertThat(record.getCompletedAt()).isNotNull();
-        verify(agent).audioSummarize(any(), eq(List.of(5000L)));
+        verify(agent).audioSummarize(any(), eq(List.of(5000L)), any(), anyBoolean());
         verify(indexing).reindexNote(1L);
     }
 
@@ -89,7 +90,7 @@ class AudioTranscriptionJobTest {
         when(agent.asrTranscribe(1L, "b", null, 0L)).thenReturn(List.of(u(0, "甲")));
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
-        verify(agent).audioSummarize(any(), eq(List.of()));
+        verify(agent).audioSummarize(any(), eq(List.of()), any(), anyBoolean());
     }
 
     @Test
@@ -109,7 +110,7 @@ class AudioTranscriptionJobTest {
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.FAILED);
         assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.ASR_FAILED);
-        verify(agent, never()).audioSummarize(any(), any());
+        verify(agent, never()).audioSummarize(any(), any(), any(), anyBoolean());
     }
 
     @Test
@@ -128,13 +129,13 @@ class AudioTranscriptionJobTest {
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
         assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.NO_SPEECH);
-        verify(agent, never()).audioSummarize(any(), any());
+        verify(agent, never()).audioSummarize(any(), any(), any(), anyBoolean());
     }
 
     @Test
     void summaryFailure_keepsUtterancesAndMarksSummaryFailed() {
         when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
-        when(agent.audioSummarize(any(), any())).thenThrow(new AgentCallException("SUMMARY_FAILED", "坏 JSON"));
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenThrow(new AgentCallException("SUMMARY_FAILED", "坏 JSON"));
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
         assertThat(record.getUtterances()).contains("甲");
@@ -159,7 +160,7 @@ class AudioTranscriptionJobTest {
     @Test
     void retriesOnlySummaryWhenAgentUnavailableAfterAsr() {
         when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
-        when(agent.audioSummarize(any(), any())).thenThrow(new AgentUnavailableException("down", null));
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenThrow(new AgentUnavailableException("down", null));
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.PENDING);
         assertThat(record.getStage()).isEqualTo(AudioTranscription.Stage.SUMMARY);
@@ -169,7 +170,7 @@ class AudioTranscriptionJobTest {
     @Test
     void agentUnavailableExhaustedAfterAsr_keepsUtterancesAsSummaryFailedDone() {
         when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
-        when(agent.audioSummarize(any(), any())).thenThrow(new AgentUnavailableException("down", null));
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenThrow(new AgentUnavailableException("down", null));
         record.setAttempts(2);
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
@@ -182,7 +183,7 @@ class AudioTranscriptionJobTest {
     @Test
     void runtimeExceptionInSummarize_endsDoneWithSummaryFailed() {
         when(agent.asrTranscribe(any(), any(), any(), anyLong())).thenReturn(List.of(u(0, "甲")));
-        when(agent.audioSummarize(any(), any())).thenThrow(new IllegalStateException("boom"));
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenThrow(new IllegalStateException("boom"));
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
         assertThat(record.getUtterances()).contains("甲");
@@ -231,7 +232,7 @@ class AudioTranscriptionJobTest {
         job.processOne(9L);
         verify(repository).deleteByNoteId(1L);
         assertThat(record.getUtterances()).isNull();
-        verify(agent, never()).audioSummarize(any(), any());
+        verify(agent, never()).audioSummarize(any(), any(), any(), anyBoolean());
         verify(indexing, never()).reindexNote(any());
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.PROCESSING);
     }
@@ -243,7 +244,7 @@ class AudioTranscriptionJobTest {
         job.processOne(9L);
         // 只有开头翻 PROCESSING 的那一次 save
         verify(repository, times(1)).save(any());
-        verify(agent, never()).audioSummarize(any(), any());
+        verify(agent, never()).audioSummarize(any(), any(), any(), anyBoolean());
         verify(indexing, never()).reindexNote(any());
     }
 
@@ -253,5 +254,45 @@ class AudioTranscriptionJobTest {
         doThrow(new RuntimeException("index down")).when(indexing).reindexNote(1L);
         job.processOne(9L);
         assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+    }
+
+    @Test
+    void summarize_passesUserSceneAndSystemAudioThenKeepsUserScene() throws Exception {
+        blockData("{\"url\":\"/uploads/a.webm\",\"duration\":60,\"systemAudio\":true}");
+        record.setStage(AudioTranscription.Stage.SUMMARY);
+        record.setUtterances("[{\"start\":0,\"end\":1000,\"text\":\"甲\"}]");
+        record.setScene(AudioTranscription.Scene.LECTURE);
+        record.setSceneSource(AudioTranscription.SceneSource.USER);
+
+        job.processOne(9L);
+
+        verify(agent).audioSummarize(any(), any(), eq("LECTURE"), eq(true));
+        assertThat(record.getScene()).isEqualTo(AudioTranscription.Scene.LECTURE);
+        assertThat(record.getSceneSource()).isEqualTo(AudioTranscription.SceneSource.USER);
+    }
+
+    @Test
+    void summarize_storesDetectedSceneAsAuto() throws Exception {
+        blockData("{\"url\":\"/uploads/a.webm\",\"duration\":60}");
+        record.setStage(AudioTranscription.Stage.SUMMARY);
+        record.setUtterances("[{\"start\":0,\"end\":1000,\"text\":\"甲\"}]");
+
+        job.processOne(9L);
+
+        verify(agent).audioSummarize(any(), any(), isNull(), eq(false));
+        assertThat(record.getScene()).isEqualTo(AudioTranscription.Scene.MEETING);
+        assertThat(record.getSceneSource()).isEqualTo(AudioTranscription.SceneSource.AUTO);
+    }
+
+    @Test
+    void summarize_ignoresUnknownSceneFromAgent() throws Exception {
+        when(agent.audioSummarize(any(), any(), any(), anyBoolean())).thenReturn(Map.of(
+                "polished", List.of(), "summary", Map.of("overview", "x"), "scene", "PARTY"));
+        record.setStage(AudioTranscription.Stage.SUMMARY);
+        record.setUtterances("[{\"start\":0,\"end\":1000,\"text\":\"甲\"}]");
+
+        job.processOne(9L);
+
+        assertThat(record.getScene()).isEqualTo(AudioTranscription.Scene.MEMO);
     }
 }
