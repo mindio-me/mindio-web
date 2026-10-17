@@ -18,6 +18,7 @@ import DOMPurify from 'dompurify'
 import katex from '@vscode/markdown-it-katex'
 import { isMermaidCode } from './markdown'
 import { highlightCode } from './markdown-document-highlight'
+import { markdownDocumentSyntax } from './markdown-document-syntax'
 
 /**
  * 标题锚点 slug，GitHub/VS Code 规则：转小写、去掉字母/数字/空白/下划线/连字符以外的字符、空白换成 -，
@@ -64,6 +65,7 @@ md.use(taskLists, { enabled: false, label: true }) // 任务列表：静态展�
   .use(mark)
   .use(anchor, { slugify: slugifyHeading, tabIndex: false })
   .use(katex, { throwOnError: false, enableFencedBlocks: true }) // 公式：$行内$、$$块级$$、```math；出错时显示带错误色的源码
+  .use(markdownDocumentSyntax) // Obsidian/GitHub：front matter、提示块、双链、图片嵌入
 
 // 脚注编号去掉方括号，和 GitHub 一样显示成上标数字
 md.renderer.rules.footnote_caption = (tokens, idx) => {
