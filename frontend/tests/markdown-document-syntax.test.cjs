@@ -75,3 +75,16 @@ test('代码块和行内代码里的 Obsidian/GitHub 语法原样保留', () => 
   assert.match(html, /&gt; \[!NOTE\]\n!\[\[a\.png\]\]\n---\ntitle: z/)
   assert.ok(!html.includes('markdown-alert'))
 })
+
+test('front matter：中文 key、YAML 注释行、--- 行尾空格都照样隐藏', () => {
+  const zh = render('---\n标题: 测试\ntags: [a]\n---\n# Hi')
+  assert.ok(!zh.includes('标题: 测试'))
+  assert.ok(!zh.includes('<hr'))
+  assert.match(zh, /<h1 id="user-content-hi">Hi<\/h1>/)
+  const comment = render('---\n# comment\ntitle: x\n---\nbody')
+  assert.ok(!comment.includes('title: x'))
+  assert.match(comment, /<p>body<\/p>/)
+  const trailing = render('---  \ntitle: x\n---  \nbody')
+  assert.ok(!trailing.includes('title: x'))
+  assert.match(trailing, /<p>body<\/p>/)
+})

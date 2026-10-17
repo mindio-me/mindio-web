@@ -11,15 +11,17 @@
  * 都写成 markdown-it 规则而不是源码预处理，代码块和行内代码里的同样写法天然不受影响。
  */
 
-const FRONTMATTER_KEY = /^[A-Za-z_][\w-]*\s*:/
+// key 不限 ASCII（Obsidian 属性名可以是中文）；以 # 开头的是 YAML 注释行
+const FRONTMATTER_KEY = /^[^\s:#][^:]*:/
+const FRONTMATTER_COMMENT = /^#/
 
-// 只认文首：第一行是 ---，第一个非空行是 key: value，并且有 --- 或 ... 闭合；否则交给分割线等其他规则
+// 只认文首：第一行是 ---，第一个非空、非注释行是 key: value，并且有 --- 或 ... 闭合；否则交给分割线等其他规则
 function frontMatter(state, startLine, endLine, silent) {
   if (startLine !== 0 || state.blkIndent !== 0) return false
-  const lineText = n => state.src.slice(state.bMarks[n] + state.tShift[n], state.eMarks[n])
+  const lineText = n => state.src.slice(state.bMarks[n] + state.tShift[n], state.eMarks[n]).trimEnd()
   if (lineText(0) !== '---') return false
   let first = 1
-  while (first < endLine && lineText(first).trim() === '') first++
+  while (first < endLine && (lineText(first) === '' || FRONTMATTER_COMMENT.test(lineText(first)))) first++
   if (first >= endLine || !FRONTMATTER_KEY.test(lineText(first))) return false
   let end = first
   while (end < endLine && lineText(end) !== '---' && lineText(end) !== '...') end++
