@@ -360,7 +360,7 @@
                       {{ $t('workspace.notes.viewOriginalMarkdown') }}
                     </el-dropdown-item>
                     <el-dropdown-item v-if="isEditorjsNote" command="export-mindio" :disabled="exportingCurrent">
-                      <i :class="exportingCurrent ? 'el-icon-loading' : 'el-icon-download'"></i>
+                      <i :class="exportingCurrent ? 'el-icon-loading' : 'el-icon-upload'"></i>
                       {{ $t('workspace.noteBackup.exportCurrent') }}
                     </el-dropdown-item>
                     <el-dropdown-item command="export-pdf">
