@@ -40,6 +40,8 @@ public class AudioTranscriptionJob {
     static final int MAX_ATTEMPTS = 3;
     /** 重试退避：第 n 次失败后至少等 n × 30 秒再重新派发 */
     static final int RETRY_BACKOFF_SECONDS = 30;
+    /** 火山极速版单次识别上限，也是录音胶囊单段录音的上限（满了自动续录） */
+    static final double WHOLE_FILE_MAX_SECONDS = 2 * 60 * 60;
 
     private final AudioTranscriptionRepository repository;
     private final MediaBlockService mediaBlockService;
@@ -129,8 +131,40 @@ public class AudioTranscriptionJob {
         }
     }
 
-    /** 逐段 ASR 并先存逐句原文；返回 false 表示已经判失败、不用继续 */
+    /**
+     * ASR 并先存逐句原文；返回 false 表示已经判失败、不用继续。
+     * 2 小时以内整个文件一次识别（火山极速版单次上限 2 小时 / 100MB，32kbps 录音 2 小时约 29MB），
+     * 说话人编号在整段录音里统一；分段识别时每段各自从"说话人 1"编号，跨段会张冠李戴。
+     * 整段失败且有分段时退回分段识别，保证不丢结果；超过 2 小时（录音胶囊会自动续录，正常录不出来）只能分段。
+     */
     private boolean transcribe(AudioTranscription t, JsonNode data) throws Exception {
+        JsonNode segments = data.path("segments");
+        boolean hasSegments = segments.isArray() && segments.size() > 1;
+        boolean overLimit = data.path("duration").asDouble(0) > WHOLE_FILE_MAX_SECONDS;
+        if (overLimit && !hasSegments) {
+            fail(t, ErrorKind.ASR_FAILED, "录音超过 2 小时，暂不支持转写");
+            return false;
+        }
+        if (!overLimit) {
+            try {
+                return saveUtterances(t, agentServiceClient.asrTranscribe(t.getNoteId(), t.getBlockId(), null, 0L), List.of());
+            } catch (AgentCallException e) {
+                if ("ASR_NOT_CONFIGURED".equals(e.getCode())) {
+                    fail(t, ErrorKind.ASR_NOT_CONFIGURED, e.getMessage());
+                    return false;
+                }
+                if (!hasSegments) {
+                    fail(t, ErrorKind.ASR_FAILED, "语音识别失败：" + e.getMessage());
+                    return false;
+                }
+                log.warn("整段识别失败，改为分段识别 id={}: {}", t.getId(), e.getMessage());
+            }
+        }
+        return transcribeSegments(t, data);
+    }
+
+    /** 逐段 ASR：某段失败插占位句，全部失败判失败 */
+    private boolean transcribeSegments(AudioTranscription t, JsonNode data) throws Exception {
         List<Integer> segmentIndexes = new ArrayList<>();
         List<Long> offsets = new ArrayList<>();
         JsonNode segments = data.path("segments");
@@ -168,6 +202,11 @@ public class AudioTranscriptionJob {
             fail(t, ErrorKind.ASR_FAILED, "语音识别失败：" + lastError);
             return false;
         }
+        return saveUtterances(t, all, failed);
+    }
+
+    /** 先存逐句原文（ASR 已经花了钱），再进入整理阶段 */
+    private boolean saveUtterances(AudioTranscription t, List<Map<String, Object>> all, List<Integer> failed) throws Exception {
         // 转写期间笔记可能被删（deleteNote 会清掉这条记录）：此时再 save 会把行"复活"成孤儿
         if (!stillExists(t)) {
             return false;

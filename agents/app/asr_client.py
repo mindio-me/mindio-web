@@ -19,6 +19,7 @@ VOLCENGINE_ASR_URL = "https://openspeech.bytedance.com/api/v3/auc/bigmodel/recog
 SUCCESS_STATUS_CODE = "20000000"
 # 全静音音频：服务端不返回 utterances，按"成功但无内容"处理
 SILENCE_STATUS_CODE = "20000003"
+ASR_TIMEOUT_SECONDS = 360.0
 
 
 class AsrClientError(Exception):
@@ -45,7 +46,8 @@ def _speaker(value) -> int | None:
 class VolcengineAsrClient:
     def __init__(self, cfg: Settings | None = None, client: httpx.AsyncClient | None = None):
         self._cfg = cfg
-        self._client = client or httpx.AsyncClient(timeout=180.0)
+        # 2 小时的录音整段一次识别（录音胶囊满 2 小时自动续录），先按 6 分钟给足；Java 侧调本接口是 7 分钟
+        self._client = client or httpx.AsyncClient(timeout=ASR_TIMEOUT_SECONDS)
 
     async def _recognize(self, audio_base64: str, show_utterances: bool, speaker_info: bool = False) -> dict:
         cfg = self._cfg or current_settings()

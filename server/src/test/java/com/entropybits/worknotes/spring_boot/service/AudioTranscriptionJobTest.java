@@ -68,7 +68,9 @@ class AudioTranscriptionJobTest {
     }
 
     @Test
-    void fullRun_transcribesEachSegmentWithOffsetThenSummarizes() {
+    void overTwoHours_transcribesEachSegmentWithOffsetThenSummarizes() throws Exception {
+        blockData("{\"url\":\"/uploads/a.webm\",\"duration\":7300,\"marks\":[5000]," +
+                "\"segments\":[{\"url\":\"/uploads/s0.webm\",\"start\":0},{\"url\":\"/uploads/s1.webm\",\"start\":1800}]}");
         when(agent.asrTranscribe(1L, "b", 0, 0L)).thenReturn(List.of(u(0, "甲")));
         when(agent.asrTranscribe(1L, "b", 1, 1_800_000L)).thenReturn(List.of(u(1_800_000, "乙")));
 
@@ -85,6 +87,54 @@ class AudioTranscriptionJobTest {
     }
 
     @Test
+    void underTwoHours_withSegments_transcribesWholeFileOnce() {
+        when(agent.asrTranscribe(1L, "b", null, 0L)).thenReturn(List.of(u(0, "甲"), u(1_800_000, "乙")));
+
+        job.processOne(9L);
+
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(record.getUtterances()).contains("甲").contains("乙");
+        verify(agent, times(1)).asrTranscribe(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void wholeFileFailure_fallsBackToSegments() {
+        when(agent.asrTranscribe(1L, "b", null, 0L)).thenThrow(new AgentCallException("ASR_FAILED", "超时"));
+        when(agent.asrTranscribe(1L, "b", 0, 0L)).thenReturn(List.of(u(0, "甲")));
+        when(agent.asrTranscribe(1L, "b", 1, 1_800_000L)).thenReturn(List.of(u(1_800_000, "乙")));
+
+        job.processOne(9L);
+
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.DONE);
+        assertThat(record.getUtterances()).contains("甲").contains("乙");
+        assertThat(record.getErrorKind()).isNull();
+    }
+
+    @Test
+    void wholeFileFailureWithoutSegments_marksFailed() throws Exception {
+        blockData("{\"url\":\"/uploads/a.webm\",\"duration\":60}");
+        when(agent.asrTranscribe(1L, "b", null, 0L)).thenThrow(new AgentCallException("ASR_FAILED", "超时"));
+
+        job.processOne(9L);
+
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.FAILED);
+        assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.ASR_FAILED);
+        verify(agent, times(1)).asrTranscribe(any(), any(), any(), anyLong());
+    }
+
+    @Test
+    void overTwoHoursWithoutSegments_failsWithoutCallingAsr() throws Exception {
+        blockData("{\"url\":\"/uploads/long.mp3\",\"duration\":7300}");
+
+        job.processOne(9L);
+
+        assertThat(record.getStatus()).isEqualTo(AudioTranscription.Status.FAILED);
+        assertThat(record.getErrorKind()).isEqualTo(AudioTranscription.ErrorKind.ASR_FAILED);
+        assertThat(record.getErrorMessage()).contains("2 小时");
+        verify(agent, never()).asrTranscribe(any(), any(), any(), anyLong());
+    }
+
+    @Test
     void singleFileWithoutSegments_usesNullSegmentAndZeroOffset() throws Exception {
         blockData("{\"url\":\"/uploads/a.webm\",\"duration\":60}");
         when(agent.asrTranscribe(1L, "b", null, 0L)).thenReturn(List.of(u(0, "甲")));
@@ -94,7 +144,9 @@ class AudioTranscriptionJobTest {
     }
 
     @Test
-    void partialSegmentFailure_insertsPlaceholderAndMarksPartial() {
+    void partialSegmentFailure_insertsPlaceholderAndMarksPartial() throws Exception {
+        blockData("{\"url\":\"/uploads/a.webm\",\"duration\":7300,\"marks\":[5000]," +
+                "\"segments\":[{\"url\":\"/uploads/s0.webm\",\"start\":0},{\"url\":\"/uploads/s1.webm\",\"start\":1800}]}");
         when(agent.asrTranscribe(1L, "b", 0, 0L)).thenThrow(new AgentCallException("ASR_FAILED", "超时"));
         when(agent.asrTranscribe(1L, "b", 1, 1_800_000L)).thenReturn(List.of(u(1_800_000, "乙")));
         job.processOne(9L);

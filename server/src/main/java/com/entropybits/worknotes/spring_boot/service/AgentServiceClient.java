@@ -274,6 +274,7 @@ public class AgentServiceClient {
         body.put("blockId", blockId);
         body.put("segment", segment);
         body.put("offsetMs", offsetMs);
+        // Python 调火山最多 6 分钟（2 小时录音整段识别），再留 1 分钟给它取音频
         Map<String, Object> result = postInternal("/internal/asr-transcribe", body, Duration.ofSeconds(420));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> utterances = (List<Map<String, Object>>) result.get("utterances");
