@@ -96,3 +96,57 @@ test('没有可用 DOM 时返回空串而不是未过滤 HTML', () => {
     globalThis.window = saved
   }
 })
+
+test('围栏代码块按语言高亮，未知语言原样转义', () => {
+  const js = render('```js\nconst a = 1 // <b>\n```')
+  assert.match(js, /<pre><code class="hljs language-js"><span class="hljs-keyword">const<\/span>/)
+  assert.match(js, /&lt;b&gt;/)
+  const unknown = render('```nosuchlang\n<x>\n```')
+  assert.match(unknown, /<pre><code class="hljs language-nosuchlang">&lt;x&gt;\n<\/code><\/pre>/)
+  const plain = render('```\nplain <y>\n```')
+  assert.match(plain, /<pre><code class="hljs">plain &lt;y&gt;\n<\/code><\/pre>/)
+})
+
+test('缩进代码块与围栏代码块同样式', () => {
+  assert.match(render('    indented <z>'), /<pre><code class="hljs">indented &lt;z&gt;\n<\/code><\/pre>/)
+})
+
+test('mermaid 代码块输出现有图表占位（无语言标记时按内容检测）', () => {
+  const tagged = render('```mermaid\ngraph TD\nA-->B\n```')
+  assert.match(tagged, /<div class="mermaid-block" data-mermaid-source="graph%20TD%0AA--%3EB">/)
+  const detected = render('```\nsequenceDiagram\nA->>B: hi\n```')
+  assert.match(detected, /class="mermaid-block"/)
+  const jsNotMermaid = render('```js\ngraph = 1\n```')
+  assert.ok(!jsNotMermaid.includes('mermaid-block'))
+})
+
+test('KaTeX：行内、块级、```math，过滤后 MathML 结构保留', () => {
+  const html = render('inline $x^2$\n\n$$\sqrt{a}$$\n\n```math\nE=mc^2\n```')
+  assert.match(html, /<span class="katex">/)
+  assert.match(html, /<p class="katex-block">/)
+  assert.match(html, /<annotation encoding="application\/x-tex">x\^2<\/annotation>/)
+  assert.match(html, /E=mc\^2\s*<\/annotation>/)
+})
+
+test('KaTeX 语法错误不抛异常', () => {
+  assert.doesNotThrow(() => render('$\frac{a$ and $$\bad{$$'))
+})
+
+test('美元金额不被当成公式', () => {
+  const html = render('costs $5 and $10 total')
+  assert.ok(!html.includes('katex'))
+  assert.match(html, /costs \$5 and \$10 total/)
+})
+
+// 回归护栏：贴近真实笔记的 300KB 文档（约 180 个公式、1800 个代码块）。jsdom 比浏览器慢数倍，
+// 计划编写时实测 jsdom 下约 3 秒（时间主要花在 DOMPurify 解析 KaTeX 的大量 span 上），这里留余量到 8 秒
+test('300KB 真实规模文档在 8 秒内渲染完（jsdom）', () => {
+  const prose = '## 小节\n\n一段正文 **粗体** `code` [链接](https://example.com)，再写一些中文内容让段落更像真实笔记，这里补足长度。\n\n- 列表项一\n- 列表项二\n\n```js\nfunction f(a) { return a * 2 }\n```\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n'
+  const withMath = '行内公式 $x^2$ 与块级公式：\n\n$$a^2+b^2=c^2$$\n\n'
+  let doc = ''
+  for (let i = 1; doc.length < 300 * 1024; i++) doc += prose + (i % 10 === 0 ? withMath : '')
+  const start = Date.now()
+  const html = render(doc)
+  assert.ok(html.length > doc.length)
+  assert.ok(Date.now() - start < 8000, `took ${Date.now() - start}ms`)
+})

@@ -15,6 +15,9 @@ import footnote from 'markdown-it-footnote'
 import mark from 'markdown-it-mark'
 import anchor from 'markdown-it-anchor'
 import DOMPurify from 'dompurify'
+import katex from '@vscode/markdown-it-katex'
+import { isMermaidCode } from './markdown'
+import { highlightCode } from './markdown-document-highlight'
 
 /**
  * 标题锚点 slug，GitHub/VS Code 规则：转小写、去掉字母/数字/空白/下划线/连字符以外的字符、空白换成 -，
@@ -32,11 +35,35 @@ const md = new MarkdownIt({
   linkify: true // 裸 URL 自动转链接
 })
 
+function renderCodeBlock(code, lang) {
+  const highlighted = highlightCode(code, lang)
+  const langClass = lang ? ` language-${md.utils.escapeHtml(lang)}` : ''
+  return `<pre><code class="hljs${langClass}">${highlighted || md.utils.escapeHtml(code)}</code></pre>\n`
+}
+
+// 围栏代码块：mermaid 走现有图表占位（由 v-mermaid 指令渲染），其余按语言高亮。
+// 没写语言时才按内容检测 mermaid，避免 ```js 里恰好以 graph 开头的代码被误判。
+// 必须在 use(katex) 之前设置：katex 插件 use 时会接管 ```math，其余围栏交还给这里
+md.renderer.rules.fence = (tokens, idx) => {
+  const token = tokens[idx]
+  const code = token.content || ''
+  const lang = (token.info || '').trim().split(/\s+/)[0].toLowerCase()
+  if (lang === 'mermaid' || (!lang && isMermaidCode(code))) {
+    const source = code.trim()
+    return `<div class="mermaid-block" data-mermaid-source="${encodeURIComponent(source)}">${md.utils.escapeHtml(source)}</div>\n`
+  }
+  return renderCodeBlock(code, lang)
+}
+
+// 缩进代码块（4 空格缩进）：与无语言的围栏代码块同样式
+md.renderer.rules.code_block = (tokens, idx) => renderCodeBlock(tokens[idx].content || '', '')
+
 // 插件统一在这里注册（自定义渲染规则要写在这句之前：有的插件会在 use 时接管已有规则）
 md.use(taskLists, { enabled: false, label: true }) // 任务列表：静态展示，checkbox 只读
   .use(footnote)
   .use(mark)
   .use(anchor, { slugify: slugifyHeading, tabIndex: false })
+  .use(katex, { throwOnError: false, enableFencedBlocks: true }) // 公式：$行内$、$$块级$$、```math；出错时显示带错误色的源码
 
 // 脚注编号去掉方括号，和 GitHub 一样显示成上标数字
 md.renderer.rules.footnote_caption = (tokens, idx) => {
