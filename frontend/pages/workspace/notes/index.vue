@@ -1602,23 +1602,29 @@ export default {
      * 真正的播放器，而不是在末尾追加一个新块。跟 editor.vue 的同名处理是同一套逻辑，
      * 这两个页面各跑各的 EditorJS 实例，没法共用一份方法实现。
      */
-    async onRecordingResolveBlock({ noteId, blockId, data }) {
+    async onRecordingResolveBlock({ noteId, blockId, data, afterBlockId }) {
       if (!this.editor || !this.activeNote || String(this.activeNote.id) !== String(noteId)) return
-      let idx = -1
-      try {
-        idx = this.editor.blocks.getBlockIndex(blockId)
-      } catch (e) {
-        idx = -1
+      const indexOf = (id) => {
+        try {
+          const i = id ? this.editor.blocks.getBlockIndex(id) : -1
+          return i === undefined ? -1 : i
+        } catch (e) {
+          return -1
+        }
       }
-      if (idx === undefined || idx < 0) {
-        this.$nuxt.$emit('recording:resolve-block:ack', { noteId, blockId, ok: false })
-        return
-      }
-
-      this.editor.blocks.delete(idx)
+      const idx = indexOf(blockId)
       // data: { url, duration, segments?, marks? }。必须沿用原块 id 插入：录音胶囊随后要按这个
       // id 触发自动转写，Editor.js 默认会给新块生成新 id，后端就找不到这个块了
-      this.editor.blocks.insert('audioRecord', data, {}, idx, true, false, blockId)
+      if (idx >= 0) {
+        this.editor.blocks.delete(idx)
+        this.editor.blocks.insert('audioRecord', data, {}, idx, true, false, blockId)
+      } else {
+        // 没有占位块（自动续录的下一段，或录音中占位块被删了）：在本编辑器里插入，紧跟上一段，
+        // 找不到就放末尾。不能退回后端直接写——这里开着的编辑器随后自动保存会把它盖掉
+        const after = indexOf(afterBlockId)
+        const at = after >= 0 ? after + 1 : this.editor.blocks.getBlocksCount()
+        this.editor.blocks.insert('audioRecord', data, {}, at, false, false, blockId)
+      }
       this.hasUnsavedChanges = true
       this.updateSaveStatus('saving')
 

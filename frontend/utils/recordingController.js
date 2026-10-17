@@ -77,6 +77,16 @@ let activeSegments = [] // 正在录的分段（换段的几秒重叠期里会�
 let finishedSegments = [] // 录完的分段：{ index, start, duration, blob, url }
 let nextSegmentIndex = 0
 
+// 单段录音上限 = 火山极速版单次识别上限：满了自动保存并续录下一段，保证每段都能整段转写、说话人编号一致
+const MAX_RECORDING_SECONDS = 2 * 60 * 60
+let limitEmitted = false
+
+function maxRecordingSeconds() {
+  // 测试时可在控制台设 window.__MINDIO_MAX_RECORDING_SECONDS__ 缩短上限，验证自动续录
+  const override = typeof window !== 'undefined' && Number(window.__MINDIO_MAX_RECORDING_SECONDS__)
+  return override > 0 ? override : MAX_RECORDING_SECONDS
+}
+
 function segmentSeconds() {
   // 测试钩子：E2E 里把分段时长改短，不用真等 30 分钟
   const override = typeof window !== 'undefined' && Number(window.__MINDIO_SEGMENT_SECONDS__)
@@ -332,6 +342,7 @@ async function start(origin) {
   state.elapsedSeconds = 0
   state.marks = []
   state.systemAudioUsed = false
+  limitEmitted = false
   startSegment(stash, 0)
 
   timerId = setInterval(() => {
@@ -345,6 +356,10 @@ async function start(origin) {
     if (current && state.elapsedSeconds - current.start >= segmentSeconds()) {
       startSegment(stash, state.elapsedSeconds)
       setTimeout(() => stopSegment(current), SEGMENT_OVERLAP_SECONDS * 1000)
+    }
+    if (!limitEmitted && state.elapsedSeconds >= maxRecordingSeconds()) {
+      limitEmitted = true
+      emit('limit', { seconds: state.elapsedSeconds })
     }
   }, 1000)
 
@@ -655,6 +670,13 @@ function stop() {
   })
 }
 
+/** 录音进行中改去向（自动续录：上一段存好后，这一段改为接在它后面），连同本地副本一起改，崩溃恢复后去向也对 */
+function setOrigin(origin) {
+  if (state.status === 'idle') return
+  state.origin = origin
+  if (currentStash) currentStash.then((id) => id && recordingStash.update(id, { origin }))
+}
+
 function cancel() {
   if (state.status === 'starting') {
     stopRequested = true
@@ -713,4 +735,4 @@ function cleanup() {
   state.origin = null
 }
 
-export default { state, on, off, start, pause, resume, mark, stop, cancel, setSystemAudio, setOwner, setPendingBlock }
+export default { state, on, off, start, pause, resume, mark, stop, cancel, setSystemAudio, setOwner, setPendingBlock, setOrigin }

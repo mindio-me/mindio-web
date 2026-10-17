@@ -92,7 +92,7 @@
 <script>
 import recordingController from '~/utils/recordingController'
 import recordingStash from '~/utils/recordingStash'
-import { resolveBlockInNote, createNoteWithRecording, blobToFile } from '~/services/noteAttachService'
+import { resolveBlockInNote, createNoteWithRecording, blobToFile, newBlockId } from '~/services/noteAttachService'
 import { notifyChanged } from '~/utils/audioTranscriptionStore'
 
 // 等 notes 页回执的超时时间：替换块 + 一次直存的往返，8s 足够；超时按"当前没有活的
@@ -115,6 +115,7 @@ export default {
       orphanTimer: null,
       orphanInterval: null,
       recovering: false,
+      continuationPart: 1, // 自动续录到第几段了；用户手动开始新录音时回到 1
       offStashMessage: null,
       dragPos: null // {left, top} once dragged; else default bottom-right via CSS
     }
@@ -166,6 +167,7 @@ export default {
     recordingController.on('stop', this.onControllerStop)
     recordingController.on('orphaned', this.onOrphaned)
     recordingController.on('segment', this.onSegment)
+    recordingController.on('limit', this.onRecordingLimit)
     recordingController.setOwner(this.$auth && this.$auth.user && this.$auth.user.username)
     this.offStashMessage = recordingStash.onMessage(this.onStashMessage)
     // 上次没存成功的录音（刷新/崩溃/关页签/上传失败后离开）：页面稳定下来后找一次，之后每分钟再看一次
@@ -178,6 +180,7 @@ export default {
     recordingController.off('stop', this.onControllerStop)
     recordingController.off('orphaned', this.onOrphaned)
     recordingController.off('segment', this.onSegment)
+    recordingController.off('limit', this.onRecordingLimit)
     if (this.offStashMessage) this.offStashMessage()
     clearTimeout(this.toastTimer)
     clearTimeout(this.orphanTimer)
@@ -240,9 +243,37 @@ export default {
     /** 接手一段录完了但还没保存的录音，直接保存；只有保存失败才弹面板 */
     adoptStopResult(result) {
       this.stopResult = result
-      this.saveRecording()
+      return this.saveRecording()
+    },
+    /**
+     * 录满 2 小时（火山单次识别上限）：保存这一段，马上开始下一段，接在同一篇笔记里上一段的后面。
+     * 先开始下一段、再等上一段存好，尽量缩短两段之间的空档；上一段落在哪个块，存好后再告诉录音控制器。
+     * 网页版的"电脑声音"要用户亲手点才能重新共享，续录的这一段只有麦克风，要提示一下。
+     */
+    async onRecordingLimit() {
+      const hadSystemAudio = recordingController.state.systemAudio === 'on'
+      const result = await recordingController.stop()
+      if (!result) return
+      const saving = this.adoptStopResult(result)
+      const part = this.continuationPart + 1
+      try {
+        await recordingController.start({ type: 'topbar' })
+      } catch (e) {
+        this.showToast('已录满 2 小时并保存，下一段没能自动开始，请手动重新录音')
+        return
+      }
+      this.continuationPart = part
+      const desktop = !!(typeof window !== 'undefined' && window.mindioDesktop)
+      this.showToast(hadSystemAudio && !desktop
+        ? `已录满 2 小时，已保存并自动开始第 ${part} 段。电脑声音需要重新点一下开启`
+        : `已录满 2 小时，已保存并自动开始第 ${part} 段`)
+      const target = await saving
+      if (target && recordingController.state.status !== 'idle') {
+        recordingController.setOrigin({ type: 'block', noteId: target.noteId, blockId: newBlockId(), afterBlockId: target.blockId })
+      }
     },
     async onStop() {
+      this.continuationPart = 1
       const result = await recordingController.stop()
       if (!result) return
       this.adoptStopResult(result)
@@ -310,7 +341,7 @@ export default {
             target = { noteId: origin.noteId, blockId: origin.blockId }
           }
           // 别的页签可能也开着这篇笔记：让它们把那个块也换成播放器，免得它们之后自动保存时把这里的结果盖掉
-          recordingStash.post({ type: 'resolved', noteId: origin.noteId, blockId: origin.blockId, data })
+          recordingStash.post({ type: 'resolved', noteId: origin.noteId, blockId: origin.blockId, afterBlockId: origin.afterBlockId, data })
         } else {
           const note = await createNoteWithRecording({ data, startedAt: result.startedAt, noteService: this.$noteService })
           this.$nuxt.$emit('workspace:note-created', note)
@@ -321,10 +352,12 @@ export default {
         this.settleStopResult()
         this.showToast(message, action)
         this.autoTranscribe(target)
+        return target
       } catch (e) {
         this.showToast((e && e.message) || '保存失败，请重试')
         // 失败时绝不能丢掉录音——那可能是唯一的副本。面板里可以重试或下载到本地
         this.showAttachPopover = true
+        return null
       } finally {
         this.saving = false
       }
@@ -347,10 +380,10 @@ export default {
      */
     async placeIntoBlock(origin, data, startedAt) {
       const ackPromise = this.waitForResolveAck(origin.noteId, origin.blockId)
-      this.$nuxt.$emit('recording:resolve-block', { noteId: origin.noteId, blockId: origin.blockId, data })
+      this.$nuxt.$emit('recording:resolve-block', { noteId: origin.noteId, blockId: origin.blockId, afterBlockId: origin.afterBlockId, data })
       if (await ackPromise) return {}
       try {
-        await resolveBlockInNote({ noteId: origin.noteId, blockId: origin.blockId, data, noteService: this.$noteService })
+        await resolveBlockInNote({ noteId: origin.noteId, blockId: origin.blockId, afterBlockId: origin.afterBlockId, data, noteService: this.$noteService })
         return {}
       } catch (e) {
         const status = e && e.response && e.response.status
@@ -377,7 +410,7 @@ export default {
     /** 别的页签把录音放回了某个块：这个页面要是也开着那篇笔记，让它把那个块换成播放器 */
     onStashMessage(message) {
       if (!message || message.type !== 'resolved') return
-      this.$nuxt.$emit('recording:resolve-block', { noteId: message.noteId, blockId: message.blockId, data: message.data })
+      this.$nuxt.$emit('recording:resolve-block', { noteId: message.noteId, blockId: message.blockId, afterBlockId: message.afterBlockId, data: message.data })
     },
     /** 这段录音的去向定了（存好了，或确认放弃）：删掉本地副本，再看看还有没有别的待恢复 */
     settleStopResult() {

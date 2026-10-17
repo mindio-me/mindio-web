@@ -44,7 +44,7 @@ async function saveNotePreservingFields(noteId, note, content, noteService) {
  * 从顶栏发起的录音（没有对应的录音块），或者原来那篇笔记已经被删了：新建一篇笔记放这段录音。
  * data 是录音块的数据：{ url, duration, segments?, marks? }；返回值带 recordBlockId（录音块的 id）
  */
-function newBlockId() {
+export function newBlockId() {
   // 与 Editor.js 自动生成的 id 同形（10 位字母数字）；提前生成，后端触发转写时要用它定位块
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   let id = ''
@@ -72,7 +72,7 @@ export async function createNoteWithRecording({ data, startedAt, noteService }) 
  * 占位块换成真正的播放器数据。找不到（比如录音过程中用户手动把那个块删了）就退化成
  * 追加到末尾，保证录音本身不会因为占位块没了就被静默丢弃。
  */
-export async function resolveBlockInNote({ noteId, blockId, data, noteService }) {
+export async function resolveBlockInNote({ noteId, blockId, data, noteService, afterBlockId }) {
   const note = await noteService.getNoteById(noteId)
   if (note.contentType !== 'editorjs') {
     const err = new Error('这篇笔记不是 EditorJS 格式，暂不支持插入录音块')
@@ -88,7 +88,10 @@ export async function resolveBlockInNote({ noteId, blockId, data, noteService })
   if (idx >= 0) {
     content.blocks[idx] = resolvedBlock
   } else {
-    content.blocks.push(resolvedBlock)
+    // 自动续录的下一段没有占位块：紧跟在上一段后面；找不到上一段就追加到末尾
+    const after = afterBlockId ? content.blocks.findIndex((b) => b.id === afterBlockId) : -1
+    if (after >= 0) content.blocks.splice(after + 1, 0, resolvedBlock)
+    else content.blocks.push(resolvedBlock)
   }
 
   await saveNotePreservingFields(noteId, note, content, noteService)
