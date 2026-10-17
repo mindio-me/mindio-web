@@ -40,6 +40,7 @@ export default {
     '@/plugins/services',
     '@/plugins/theme',
     { src: '@/plugins/mermaid-directive', mode: 'client' },
+    { src: '@/plugins/md-document-directive', mode: 'client' },
     '@/plugins/device'
   ],
 

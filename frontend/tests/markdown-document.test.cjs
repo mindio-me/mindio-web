@@ -150,3 +150,19 @@ test('300KB 真实规模文档在 8 秒内渲染完（jsdom）', () => {
   assert.ok(html.length > doc.length)
   assert.ok(Date.now() - start < 8000, `took ${Date.now() - start}ms`)
 })
+
+test('相对路径图片拼 axiosBaseURL 并记录原路径；远程/站内/data 图片不动', () => {
+  const html = render('![a](images/a.png) ![r](https://x.com/r.png) ![s](/uploads/s.png) ![d](data:image/png;base64,AAAA)',
+    { axiosBaseURL: 'http://h/api' })
+  assert.match(html, /<img src="http:\/\/h\/api\/images\/a.png" alt="a" data-md-local="images\/a.png" loading="lazy">/)
+  assert.match(html, /<img src="https:\/\/x.com\/r.png" alt="r" loading="lazy">/)
+  assert.match(html, /<img src="\/uploads\/s.png" alt="s" loading="lazy">/)
+  assert.match(html, /<img src="data:image\/png;base64,AAAA" alt="d" loading="lazy">/)
+})
+
+test('内嵌 HTML 的本地图片与 Markdown 图片同样处理', () => {
+  const html = render('<img src="pics/x.png" width="300">', { axiosBaseURL: 'http://h/api' })
+  assert.match(html, /src="http:\/\/h\/api\/pics\/x.png"/)
+  assert.match(html, /data-md-local="pics\/x.png"/)
+  assert.match(html, /width="300"/)
+})

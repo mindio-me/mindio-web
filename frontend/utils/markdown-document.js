@@ -87,6 +87,7 @@ const SANITIZE_CONFIG = {
 }
 
 let purifier = null
+let currentBaseUrl = '' // renderMarkdownDocument 调用时写入，供下面的图片 hook 读取；渲染是同步单次调用，不会互相覆盖
 
 // DOMPurify 需要真实 DOM：浏览器里用 window，单测里由测试注入 jsdom 的 window。
 // 用独立实例挂 hook，不污染 mermaid 等其他库共用的默认实例
@@ -105,6 +106,16 @@ function getPurifier() {
       node.setAttribute('type', 'checkbox')
       node.setAttribute('disabled', '')
     }
+    // Markdown 图片和内嵌 HTML 的 <img> 一视同仁：相对路径（没有 scheme、不以 / 开头）= 导入文档引用的本地文件，
+    // 拼服务地址，并记下原路径，加载失败时由 v-md-document 指令提示"图片未随导入上传"
+    if (node.tagName === 'IMG') {
+      const src = node.getAttribute('src') || ''
+      if (src && !/^(?:[a-z][a-z0-9+.-]*:|\/)/i.test(src)) {
+        node.setAttribute('data-md-local', src)
+        node.setAttribute('src', `${currentBaseUrl}/${src}`)
+      }
+      node.setAttribute('loading', 'lazy')
+    }
   })
   purifier = instance
   return purifier
@@ -122,5 +133,6 @@ export function renderMarkdownDocument(markdown, options = {}) {
   const sanitizer = getPurifier()
   // 宁可输出空，也不输出未过滤的 HTML；三处页面的笔记内容都在浏览器端加载，SSR 不会走到这里
   if (!sanitizer) return ''
+  currentBaseUrl = options.axiosBaseURL || ''
   return sanitizer.sanitize(md.render(markdown.replace(/^﻿/, '')), SANITIZE_CONFIG)
 }

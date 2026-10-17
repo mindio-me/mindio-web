@@ -1167,5 +1167,9 @@
     "saveFailed": "Save failed",
     "loadFailed": "Failed to load AI settings",
     "nothingChanged": "Nothing changed"
+  },
+  "markdownDocument": {
+    "imageNotImported": "Image was not uploaded with the import: {name}",
+    "imageLoadFailed": "Image failed to load: {name}"
   }
 }
