@@ -25,6 +25,47 @@ html body .md-document .markdown-body,
 html.theme-dark body .md-document .markdown-body {
   background-color: transparent; // 跟随笔记卡片背景
 
+  // 写回公开页 .article-page ::v-deep 通用样式会漏进来的属性：github-markdown-css 没设置这些属性，
+  // 抬高的优先级挡不住，只能显式恢复成 GitHub 的效果
+  img {
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  blockquote {
+    background: none;
+    border-radius: 0;
+  }
+
+  code {
+    border: 0;
+  }
+
+  table {
+    font-size: inherit;
+  }
+
+  th {
+    background: inherit;
+  }
+
+  li {
+    margin: 0;
+  }
+
+  li + li {
+    margin-top: 0.25em;
+  }
+
+  a {
+    text-decoration-thickness: auto;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: normal;
+  }
+
   // 代码块底色由 github-markdown-css 的 pre 提供，hljs 主题自带的底色和内边距去掉
   .hljs {
     background: transparent;
