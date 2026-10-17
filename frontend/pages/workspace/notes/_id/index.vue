@@ -357,10 +357,12 @@
             ></div>
             <div
               v-else-if="note.contentType === 'markdown'"
-              class="markdown-content"
+              class="md-document"
               v-mermaid
-              v-html="renderMarkdown(note.content)"
-            ></div>
+              v-md-document
+            >
+              <div class="markdown-body" v-html="markdownDocumentHtml"></div>
+            </div>
             <div
               v-else
               class="plain-content"
@@ -404,6 +406,7 @@
 
 <script>
 import { renderMarkdown as renderMd, isMermaidCode } from '~/utils/markdown'
+import { renderMarkdownDocument } from '~/utils/markdown-document'
 import { createEditorJSToc } from '~/utils/editorjs-toc'
 import { parseListItems } from '~/utils/editorjs-list'
 
@@ -417,6 +420,11 @@ export default {
     }
   },
   computed: {
+    // 整篇 Markdown 笔记的 HTML：放 computed 缓存，避免每次组件重渲染都重新解析大文档
+    markdownDocumentHtml() {
+      if (!this.note || this.note.contentType !== 'markdown') return ''
+      return renderMarkdownDocument(this.note.content, { axiosBaseURL: this.$axios?.defaults?.baseURL || '' })
+    },
     editorjsToc() {
       if (!this.note || this.note.contentType !== 'editorjs' || !this.note.content) {
         return []

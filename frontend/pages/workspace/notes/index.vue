@@ -448,7 +448,9 @@
               <!-- EditorJS 格式 -->
               <div v-if="isEditorjsNote" ref="editorContainer" class="editorjs-workspace-container editorjs-container"></div>
               <!-- Markdown 格式 -->
-              <div v-else-if="activeNote.contentType === 'markdown'" class="markdown-content-display" v-mermaid v-html="renderMarkdown(activeNote.content)"></div>
+              <div v-else-if="activeNote.contentType === 'markdown'" class="md-document" v-mermaid v-md-document>
+                <div class="markdown-body" v-html="activeMarkdownDocumentHtml"></div>
+              </div>
               <!-- 富文本格式 -->
               <div v-else-if="activeNote.contentType === 'richtext'" class="wangeditor-content" v-html="activeNote.content"></div>
               <!-- 旧格式多区块 -->
@@ -712,6 +714,7 @@
 
 <script>
 import { renderMarkdown as renderMd } from '~/utils/markdown'
+import { renderMarkdownDocument } from '~/utils/markdown-document'
 import workspaceLayoutResize from '~/mixins/workspaceLayoutResize'
 import workspaceAiDock from '~/mixins/workspaceAiDock'
 import editorjsHost from '~/mixins/editorjsHost'
@@ -847,6 +850,11 @@ export default {
     }
   },
   computed: {
+    // 整篇 Markdown 笔记的 HTML：放 computed 缓存，避免每次组件重渲染都重新解析大文档
+    activeMarkdownDocumentHtml() {
+      if (!this.activeNote || this.activeNote.contentType !== 'markdown') return ''
+      return renderMarkdownDocument(this.activeNote.content, { axiosBaseURL: this.$axios?.defaults?.baseURL || '' })
+    },
     hasMoreNotes() {
       return this.notes.length < this.total
     },
