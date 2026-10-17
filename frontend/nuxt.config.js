@@ -30,6 +30,7 @@ export default {
   // Global CSS
   css: [
     'element-ui/lib/theme-chalk/index.css',
+    'katex/dist/katex.min.css',
     '~/assets/styles/main.scss'
   ],
 
@@ -142,6 +143,7 @@ export default {
       /^@editorjs/,
       /^editorjs-undo/,
       /^mermaid/,
+      /highlight\.js/,
       /markdown-it/ // 不能加 ^ 锚点：markdown-it 的嵌套依赖 entities 用了 webpack 4 解析不了的数字分隔符语法，
                      // 这条要同时匹配 node_modules/markdown-it/... 和 node_modules/markdown-it/node_modules/entities/...，
                      // 而 Nuxt 判断是否转译时用的路径永远带开头分隔符，^ 锚定的正则在这里永远匹配不上

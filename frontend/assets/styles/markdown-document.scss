@@ -1,0 +1,61 @@
+// 整篇 Markdown 笔记的显示样式（对齐 VS Code / GitHub 预览），配合 utils/markdown-document.js 使用。
+// 结构固定为 <div class="md-document"><div class="markdown-body">…</div></div>，类名 markdown-body 由 github-markdown-css 决定。
+// 所有规则统一加 `html body .md-document` 前缀抬高优先级：公开页 .article-page 下有 ::v-deep 的 h1/p/pre/code/table
+// 通用样式（编译后是 .article-page[data-v-xxx] h1 这一级），不抬高会被它们盖掉。
+@use 'sass:meta';
+
+html body .md-document {
+  @include meta.load-css('github-markdown-css/github-markdown-light');
+
+  .markdown-body {
+    @include meta.load-css('highlight.js/styles/github');
+  }
+}
+
+html.theme-dark body .md-document {
+  @include meta.load-css('github-markdown-css/github-markdown-dark');
+
+  .markdown-body {
+    @include meta.load-css('highlight.js/styles/github-dark');
+  }
+}
+
+// 以下微调要同时覆盖浅色和深色两套（深色选择器优先级更高，只写浅色会被盖掉）
+html body .md-document .markdown-body,
+html.theme-dark body .md-document .markdown-body {
+  background-color: transparent; // 跟随笔记卡片背景
+
+  // 代码块底色由 github-markdown-css 的 pre 提供，hljs 主题自带的底色和内边距去掉
+  .hljs {
+    background: transparent;
+  }
+
+  pre code.hljs {
+    padding: 0;
+  }
+
+  // 长公式横向滚动，不撑破版面
+  .katex-block {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .mermaid-block {
+    margin-bottom: 16px;
+    text-align: center;
+
+    svg {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
+  .md-image-fallback {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px dashed var(--border-color, #dcdfe6);
+    border-radius: 4px;
+    color: var(--text-muted, #999);
+    font-size: 12px;
+  }
+}
