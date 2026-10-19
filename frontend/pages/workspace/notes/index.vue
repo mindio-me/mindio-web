@@ -126,7 +126,7 @@
                     @change="toggleNoteSelected(note)"
                   />
                   <div class="note-list-title">
-                    {{ note.title || $t('workspace.notes.untitledNote') }}
+                    {{ noteTitleLabel(note.title) }}
                     <span v-if="note.language === 'en'" class="note-lang-badge">EN</span>
                   </div>
                 </div>
@@ -226,7 +226,7 @@
                       class="cal-note-chip"
                       @click="openNoteFromCalendar(note)"
                     >
-                      {{ note.title || $t('workspace.notes.untitledNote') }}
+                      {{ noteTitleLabel(note.title) }}
                     </div>
                     <div v-if="dayObj.notes.length > 3" class="cal-note-more">
                       {{ $t('workspace.notes.moreNotes', { n: dayObj.notes.length - 3 }) }}
@@ -516,7 +516,7 @@
             <h3 class="right-title">{{ $t('workspace.notes.recentNotes') }}</h3>
             <ul class="recent-list">
               <li v-for="note in recentNotes" :key="note.id" class="recent-item" @click="selectNote(note)">
-                <div class="recent-title">{{ note.title || $t('workspace.notes.untitledNote') }}</div>
+                <div class="recent-title">{{ noteTitleLabel(note.title) }}</div>
                 <div class="recent-meta">{{ formatTime(note.modifiedAt || note.createdAt) }}</div>
               </li>
             </ul>
@@ -720,6 +720,7 @@ import workspaceAiDock from '~/mixins/workspaceAiDock'
 import editorjsHost from '~/mixins/editorjsHost'
 import { confirmDiscardEdits } from '~/utils/audioTranscriptionStore'
 import { downloadBlob, backupFileName, isDesktopRuntime, errorMessageOf } from '~/utils/note-backup'
+import { isDefaultNoteTitle, noteTitleLabel, formatNoteTitleList } from '~/utils/noteTitle'
 
 // 左侧笔记列表每批加载的数量（无限滚动的批大小），asyncData 首屏预取和后续
 // loadMoreNotes 都必须用同一个值——否则首屏拿到的 size 和 page=1 时按这个
@@ -862,11 +863,9 @@ export default {
       return this.activeNote && this.activeNote.contentType === 'editorjs'
     },
     displayTitle() {
-      // 当标题是"未命名笔记"或空时，返回空字符串以显示 placeholder
+      // 当标题是默认标题（中英文任一种）或空时，返回空字符串以显示 placeholder；否则返回原始标题（保留空格）
       if (!this.activeNote || !this.activeNote.title) return ''
-      const trimmedTitle = this.activeNote.title.trim()
-      // 只有当 trim 后等于"未命名笔记"时才返回空，否则返回原始标题（保留空格）
-      return trimmedTitle === '未命名笔记' ? '' : this.activeNote.title
+      return isDefaultNoteTitle(this.activeNote.title) ? '' : this.activeNote.title
     },
     contentTypeLabel() {
       if (!this.activeNote || !this.activeNote.contentType) return ''
@@ -1024,6 +1023,9 @@ export default {
     this.$nuxt.$emit('workspace:current-note-id', null)
   },
   methods: {
+    noteTitleLabel(title) {
+      return noteTitleLabel(title, this.$t('workspace.notes.untitledNote'))
+    },
     toggleSelectMode() {
       this.selectMode = !this.selectMode
       this.selectedNoteIds = []
@@ -1234,7 +1236,7 @@ export default {
     async handleCreateBlankNote() {
       try {
         const noteData = {
-          title: '未命名笔记',
+          title: this.$t('workspace.notes.untitledNote'),
           content: JSON.stringify({ time: Date.now(), blocks: [], version: '2.28.2' }),
           contentType: 'editorjs',
           isPublic: false,
@@ -1554,7 +1556,7 @@ export default {
           if (this.imageResizer) {
             this.imageResizer.syncWidthsToBlocks(outputData)
           }
-          const title = (this.activeNote.title || '').trim() || '未命名笔记'
+          const title = (this.activeNote.title || '').trim() || this.$t('workspace.notes.untitledNote')
           const tagIds = (this.activeNote.tags || []).map(t => t.id).sort()
 
           // 比较内容快照，未变化则跳过保存（包含标签）
@@ -1817,7 +1819,7 @@ export default {
         if (conflicts && !force) {
           try {
             await this.$confirm(this.$t('workspace.chat.undoConfirmModified', {
-              titles: conflicts.map(n => `《${n.title || '未命名笔记'}》`).join('、')
+              titles: formatNoteTitleList(conflicts, this.$t('workspace.notes.untitledNote'), this.$i18n.locale)
             }), this.$t('workspace.chat.undoTurn'), { type: 'warning' })
           } catch (cancel) {
             return
@@ -1985,7 +1987,7 @@ export default {
       this.isSaving = true
       this.updateSaveStatus('saving')
       try {
-        const title = (this.activeNote.title || '').trim() || '未命名笔记'
+        const title = (this.activeNote.title || '').trim() || this.$t('workspace.notes.untitledNote')
         // 获取当前笔记内容（如果存在）
         let content = this.activeNote.content
         let sectionContents = this.activeNote.sectionContents || []

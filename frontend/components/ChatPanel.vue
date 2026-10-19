@@ -231,6 +231,7 @@
 import { renderMarkdown } from '~/utils/markdown'
 import chatPanelState from '~/utils/chatPanelState'
 import { notifyChanged } from '~/utils/audioTranscriptionStore'
+import { formatNoteTitleList } from '~/utils/noteTitle'
 
 export default {
   name: 'ChatPanel',
@@ -607,7 +608,7 @@ export default {
       }
     },
     noteTitles(notes) {
-      return notes.map(n => `《${n.title || '未命名笔记'}》`).join('、')
+      return formatNoteTitleList(notes, this.$t('workspace.notes.untitledNote'), this.$i18n.locale)
     },
     async undoTurn(msg, force = false) {
       this.undoingTurnId = msg.turnId
