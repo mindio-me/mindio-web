@@ -2,12 +2,12 @@
  * Copyright (c) 2026 Fasong Wu
  * SPDX-License-Identifier: AGPL-3.0-only
  */
-import { createEl, createButton } from './editorjsUiHelpers'
+import { createEl, createButton, toolTranslator } from './editorjsUiHelpers'
 
 export default class TimelineTool {
   static get toolbox() {
     return {
-      title: '时间线',
+      title: 'Timeline',
       icon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><circle cx="12" cy="6" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="18" r="2"/></svg>'
     }
   }
@@ -18,6 +18,7 @@ export default class TimelineTool {
 
   constructor({ data, api, readOnly }) {
     this.api = api
+    this._t = toolTranslator(api)
     this.readOnly = readOnly
     this.data = { items: Array.isArray(data?.items) ? data.items : [] }
     this.wrapper = null
@@ -27,7 +28,7 @@ export default class TimelineTool {
     this.wrapper = createEl('div', 'cdx-timeline')
     this._renderList()
     if (!this.readOnly) {
-      this.wrapper.appendChild(createButton('+ 添加时间点', () => this._openAddForm(), 'cdx-timeline__add-btn'))
+      this.wrapper.appendChild(createButton(this._t('+ Add event'), () => this._openAddForm(), 'cdx-timeline__add-btn'))
     }
     return this.wrapper
   }
@@ -64,12 +65,12 @@ export default class TimelineTool {
   _openAddForm() {
     if (this.wrapper.querySelector('.cdx-timeline__form')) return
     const form = createEl('div', 'cdx-timeline__form')
-    const dateInput = createEl('input', 'cdx-timeline__input', { placeholder: '日期（如 2024-01 或 2024-01-15）' })
-    const titleInput = createEl('input', 'cdx-timeline__input', { placeholder: '发生了什么' })
-    const descInput = createEl('textarea', 'cdx-timeline__input', { placeholder: '详细说明（可选）' })
-    const linkInput = createEl('input', 'cdx-timeline__input', { placeholder: '相关链接（可选）' })
+    const dateInput = createEl('input', 'cdx-timeline__input', { placeholder: this._t('Date (e.g. 2024-01 or 2024-01-15)') })
+    const titleInput = createEl('input', 'cdx-timeline__input', { placeholder: this._t('What happened') })
+    const descInput = createEl('textarea', 'cdx-timeline__input', { placeholder: this._t('Details (optional)') })
+    const linkInput = createEl('input', 'cdx-timeline__input', { placeholder: this._t('Related link (optional)') })
     form.append(dateInput, titleInput, descInput, linkInput)
-    form.appendChild(createButton('添加', () => {
+    form.appendChild(createButton(this._t('Add'), () => {
       if (!dateInput.value.trim() || !titleInput.value.trim()) return
       this.data.items.push({
         date: dateInput.value.trim(),

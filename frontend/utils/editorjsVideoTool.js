@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { toolTranslator } from './editorjsUiHelpers'
+
 class VideoTool {
   static get toolbox() {
     return {
-      title: '本地视频',
+      title: 'Local Video',
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="23 7 16 12 23 17 23 7"/>
         <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
@@ -22,6 +24,7 @@ class VideoTool {
     this.data = data || {}
     this.config = config || {}
     this.api = api
+    this._t = toolTranslator(api)
     this.readOnly = readOnly
     this._element = null
   }
@@ -76,7 +79,7 @@ class VideoTool {
           <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
         </svg>
       </div>
-      <span class="video-tool__upload-text">点击上传视频或拖入文件</span>
+      <span class="video-tool__upload-text">${this._t('Click to upload a video or drop a file here')}</span>
     `
 
     const input = document.createElement('input')
@@ -91,7 +94,7 @@ class VideoTool {
 
     const doUpload = async (file) => {
       if (!file || !file.type.startsWith('video/')) return
-      textEl().textContent = '上传中...'
+      textEl().textContent = this._t('Uploading...')
       uploadArea.classList.add('video-tool__upload-area--loading')
 
       try {
@@ -102,12 +105,12 @@ class VideoTool {
             wrapper.innerHTML = ''
             this._renderVideo(wrapper)
           } else {
-            textEl().textContent = '上传失败，请重试'
+            textEl().textContent = this._t('Upload failed, please try again')
             uploadArea.classList.remove('video-tool__upload-area--loading')
           }
         }
       } catch (e) {
-        textEl().textContent = '上传失败，请重试'
+        textEl().textContent = this._t('Upload failed, please try again')
         uploadArea.classList.remove('video-tool__upload-area--loading')
       }
     }

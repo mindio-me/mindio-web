@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { toolTranslator } from './editorjsUiHelpers'
+
 /**
  * 代码块「自动换行」Block Tune
  * 默认沿用 @editorjs/code 自带样式（不换行、横向滚动），
@@ -13,8 +15,9 @@ export default class CodeWrapTune {
     return true
   }
 
-  constructor({ data, block }) {
+  constructor({ data, api, block }) {
     this.block = block
+    this._t = toolTranslator(api)
     this.wrapEnabled = !!(data && data.wrap)
     // 构造时机早于 EditorJS 把渲染好的 DOM 挂到 block.holder（先 composeTunes() 再 this.holder = this.compose()），
     // 此刻读 block.holder 还是 undefined。用微任务延后到当前构造调用栈结束后再应用，届时 holder 已就绪。
@@ -24,7 +27,7 @@ export default class CodeWrapTune {
   render() {
     return {
       icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="17" y2="12"/><path d="M17 12h2a2 2 0 0 1 0 4h-4"/><polyline points="13 14 11 16 13 18"/><line x1="3" y1="18" x2="9" y2="18"/></svg>',
-      label: this.wrapEnabled ? '取消自动换行' : '自动换行',
+      label: this.wrapEnabled ? this._t('Turn off word wrap') : this._t('Word wrap'),
       isActive: this.wrapEnabled,
       closeOnActivate: true,
       onActivate: () => {

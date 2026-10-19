@@ -37,7 +37,7 @@ function createNoReferrerVideo(videoUrl) {
  * 交互对齐常见相册灯箱：深色遮罩、右上角关闭、左右切换（箭头 / ←→）、底部计数和说明，
  * Esc 或点遮罩关闭。返回关闭函数，调用方销毁时可以顺手关掉。
  */
-export function openMediaLightbox(items, startIndex, { fetchTweetVideo } = {}) {
+export function openMediaLightbox(items, startIndex, { fetchTweetVideo, t = (text) => text } = {}) {
   if (!items.length) return () => {}
   let index = Math.max(0, Math.min(startIndex, items.length - 1))
   // 每次切换加一，异步请求回来时对不上就丢弃，避免切走后又把上一项的视频塞进来
@@ -51,16 +51,16 @@ export function openMediaLightbox(items, startIndex, { fetchTweetVideo } = {}) {
   const footer = createEl('div', 'media-lightbox__footer')
   const counter = createEl('span', 'media-lightbox__counter')
   const caption = createEl('span', 'media-lightbox__caption')
-  const original = createEl('a', 'media-lightbox__original', { textContent: '查看原图', target: '_blank', rel: 'noopener noreferrer' })
+  const original = createEl('a', 'media-lightbox__original', { textContent: t('View original'), target: '_blank', rel: 'noopener noreferrer' })
   footer.append(counter, caption, original)
   const closeBtn = createButton('×', () => close(), 'media-lightbox__close')
-  closeBtn.setAttribute('aria-label', '关闭')
+  closeBtn.setAttribute('aria-label', t('Close'))
   overlay.append(stage, footer, closeBtn)
   if (items.length > 1) {
     const prevBtn = createButton('‹', () => go(-1), 'media-lightbox__nav media-lightbox__nav--prev')
     const nextBtn = createButton('›', () => go(1), 'media-lightbox__nav media-lightbox__nav--next')
-    prevBtn.setAttribute('aria-label', '上一个')
-    nextBtn.setAttribute('aria-label', '下一个')
+    prevBtn.setAttribute('aria-label', t('Previous'))
+    nextBtn.setAttribute('aria-label', t('Next'))
     overlay.append(prevBtn, nextBtn)
   }
 

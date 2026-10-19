@@ -6,6 +6,7 @@
 import recordingController from './recordingController'
 import recordingStash from './recordingStash'
 import { mountTranscriptionPanel } from './audioTranscriptionPanel'
+import { toolTranslator } from './editorjsUiHelpers'
 
 const STYLE_ID = 'record-tool-injected-styles'
 
@@ -132,7 +133,7 @@ function formatDuration(totalSeconds) {
 class RecordTool {
   static get toolbox() {
     return {
-      title: '录音',
+      title: 'Recording',
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
         <path d="M19 11a7 7 0 0 1-14 0"/>
@@ -148,6 +149,7 @@ class RecordTool {
   constructor({ data, api, readOnly, block, config }) {
     this.data = data || {}
     this.api = api
+    this._t = toolTranslator(api)
     this.readOnly = readOnly
     this.block = block
     this.config = config || {}
@@ -216,13 +218,13 @@ class RecordTool {
     el.classList.add('record-tool__placeholder')
     if (busy) {
       el.classList.add('record-tool__placeholder--recording')
-      el.innerHTML = `<span class="record-tool__dot"></span><span>已经在录音了，看右下角胶囊</span>`
+      el.innerHTML = `<span class="record-tool__dot"></span><span>${this._t('Already recording, see the capsule at the bottom right')}</span>`
     } else {
       el.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/><path d="M19 11a7 7 0 0 1-14 0"/>
         </svg>
-        <span>点击开始录音</span>
+        <span>${this._t('Click to start recording')}</span>
       `
       el.addEventListener('click', () => this._handleTriggerClick())
     }
@@ -269,12 +271,12 @@ class RecordTool {
     const isPendingSave = this.block && recordingController.state.pendingBlockId === this.block.id
 
     if (isThisBlockRecording) {
-      el.innerHTML = `<span class="record-tool__dot"></span><span>录音中，看右下角胶囊</span>`
+      el.innerHTML = `<span class="record-tool__dot"></span><span>${this._t('Recording, see the capsule at the bottom right')}</span>`
     } else if (isPendingSave) {
       // 录完了但还没存成功（比如上传失败）：录音在右下角面板里，没丢。不给"移除"，免得误删
       el.classList.remove('record-tool__placeholder--recording')
       el.classList.add('record-tool__placeholder--pending')
-      el.innerHTML = `<span>录音还没保存成功，在右下角面板里，可以重试或下载到本地</span>`
+      el.innerHTML = `<span>${this._t("This recording hasn't been saved yet. You can retry or download it from the panel at the bottom right")}</span>`
     } else {
       this._renderStale(el)
     }
@@ -290,8 +292,8 @@ class RecordTool {
         const fresh = el.cloneNode(false)
         fresh.className = 'record-tool__placeholder record-tool__placeholder--pending'
         fresh.innerHTML = session.status === 'recording'
-          ? '<span>这段录音正在另一个页面里录制</span>'
-          : '<span>这段录音还没保存好，正在另一个页面里处理，或稍后会在右下角提示恢复</span>'
+          ? `<span>${this._t('This recording is in progress on another page')}</span>`
+          : `<span>${this._t("This recording isn't saved yet. It's being processed on another page, or you'll be prompted to recover it at the bottom right")}</span>`
         el.replaceWith(fresh)
       })
     }
@@ -303,7 +305,7 @@ class RecordTool {
     // 状态对用户没有意义，允许点掉它（只读模式下不给这个交互）。
     el.classList.remove('record-tool__placeholder--recording')
     el.classList.add('record-tool__placeholder--stale')
-    el.innerHTML = `<span>这段录音没能正常完成${this.readOnly ? '' : '，点击移除'}</span>`
+    el.innerHTML = `<span>${this._t(this.readOnly ? "This recording didn't finish properly" : "This recording didn't finish properly. Click to remove")}</span>`
     if (!this.readOnly) {
       el.addEventListener('click', () => {
         const idx = this.block && this.block.id
@@ -359,7 +361,7 @@ class RecordTool {
     if (this.data.transcript) {
       const toggle = document.createElement('span')
       toggle.classList.add('record-tool__transcript-toggle')
-      toggle.textContent = '查看完整逐字稿'
+      toggle.textContent = this._t('View full transcript')
       const transcriptEl = document.createElement('div')
       transcriptEl.classList.add('record-tool__transcript')
       transcriptEl.textContent = this.data.transcript
@@ -367,7 +369,7 @@ class RecordTool {
       toggle.addEventListener('click', () => {
         const showing = transcriptEl.style.display !== 'none'
         transcriptEl.style.display = showing ? 'none' : ''
-        toggle.textContent = showing ? '查看完整逐字稿' : '收起逐字稿'
+        toggle.textContent = showing ? this._t('View full transcript') : this._t('Hide transcript')
       })
       wrapper.appendChild(toggle)
       wrapper.appendChild(transcriptEl)

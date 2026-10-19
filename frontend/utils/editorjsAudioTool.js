@@ -5,6 +5,7 @@
 
 import QRCode from 'qrcode'
 import { mountTranscriptionPanel } from './audioTranscriptionPanel'
+import { toolTranslator } from './editorjsUiHelpers'
 
 const STYLE_ID = 'audio-tool-injected-styles'
 
@@ -385,7 +386,7 @@ function injectStyles() {
 class AudioTool {
   static get toolbox() {
     return {
-      title: '音频',
+      title: 'Audio',
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 18V5l12-2v13"/>
         <circle cx="6" cy="18" r="3"/>
@@ -402,6 +403,7 @@ class AudioTool {
     this.data = data || {}
     this.config = config || {}
     this.api = api
+    this._t = toolTranslator(api)
     this.readOnly = readOnly
     this.block = block
     this._panel = null
@@ -449,7 +451,7 @@ class AudioTool {
       <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
       </svg>
-      <span>点击添加音频</span>
+      <span>${this._t('Click to add audio')}</span>
     `
     ph.addEventListener('click', () => this._openModal())
     wrapper.appendChild(ph)
@@ -499,7 +501,7 @@ class AudioTool {
     if (this.data.transcript) {
       const toggle = document.createElement('span')
       toggle.classList.add('audio-tool__transcript-toggle')
-      toggle.textContent = '查看完整逐字稿'
+      toggle.textContent = this._t('View full transcript')
       const transcriptEl = document.createElement('div')
       transcriptEl.classList.add('audio-tool__transcript')
       transcriptEl.textContent = this.data.transcript
@@ -507,7 +509,7 @@ class AudioTool {
       toggle.addEventListener('click', () => {
         const showing = transcriptEl.style.display !== 'none'
         transcriptEl.style.display = showing ? 'none' : ''
-        toggle.textContent = showing ? '查看完整逐字稿' : '收起逐字稿'
+        toggle.textContent = showing ? this._t('View full transcript') : this._t('Hide transcript')
       })
       wrapper.appendChild(toggle)
       wrapper.appendChild(transcriptEl)
@@ -533,9 +535,9 @@ class AudioTool {
             <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
           </svg>
         </div>
-        上传音频
+        ${this._t('Upload audio')}
       </div>
-      <button class="at-close-btn" title="关闭">✕</button>
+      <button class="at-close-btn" title="${this._t('Close')}">✕</button>
     `
     hdr.querySelector('.at-close-btn').addEventListener('click', () => this._closeModal())
     modal.appendChild(hdr)
@@ -545,10 +547,10 @@ class AudioTool {
     tabsEl.classList.add('at-tabs')
     const btnLocal = document.createElement('button')
     btnLocal.classList.add('at-tab-btn', 'active')
-    btnLocal.textContent = '本地上传'
+    btnLocal.textContent = this._t('Upload from computer')
     const btnScan = document.createElement('button')
     btnScan.classList.add('at-tab-btn')
-    btnScan.textContent = '手机扫码上传'
+    btnScan.textContent = this._t('Upload from phone')
     tabsEl.appendChild(btnLocal)
     tabsEl.appendChild(btnScan)
     modal.appendChild(tabsEl)
@@ -628,9 +630,9 @@ class AudioTool {
           <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
         </svg>
       </div>
-      <div class="at-dz-title">拖拽音频文件至此</div>
-      <div class="at-dz-hint">支持 MP3、WAV、M4A、FLAC、OGG、AAC 等格式<br>单文件最大 50 MB</div>
-      <button class="at-dz-btn">选择文件</button>
+      <div class="at-dz-title">${this._t('Drop an audio file here')}</div>
+      <div class="at-dz-hint">${this._t('Supports MP3, WAV, M4A, FLAC, OGG, AAC and more')}<br>${this._t('Up to 50 MB per file')}</div>
+      <button class="at-dz-btn">${this._t('Choose file')}</button>
       <div class="at-dz-status"></div>
     `
     panel.appendChild(dropzone)
@@ -639,11 +641,11 @@ class AudioTool {
 
     const doUpload = async (file) => {
       if (!file || !file.type.startsWith('audio/')) {
-        statusEl.textContent = '请选择音频文件'
+        statusEl.textContent = this._t('Please choose an audio file')
         return
       }
       dropzone.classList.add('loading')
-      statusEl.textContent = '上传中...'
+      statusEl.textContent = this._t('Uploading...')
 
       try {
         const result = await this.config.uploader?.uploadByFile(file)
@@ -656,11 +658,11 @@ class AudioTool {
           }
         } else {
           dropzone.classList.remove('loading')
-          statusEl.textContent = '上传失败，请重试'
+          statusEl.textContent = this._t('Upload failed, please try again')
         }
       } catch (e) {
         dropzone.classList.remove('loading')
-        statusEl.textContent = '上传失败，请重试'
+        statusEl.textContent = this._t('Upload failed, please try again')
       }
     }
 
@@ -705,7 +707,7 @@ class AudioTool {
     qrFrame.innerHTML = `
       <div class="at-qr-skeleton">
         <div class="at-qr-skeleton-box"></div>
-        <div class="at-qr-skeleton-text">稍候...</div>
+        <div class="at-qr-skeleton-text">${this._t('Just a moment...')}</div>
       </div>
     `
     this._qrFrame = qrFrame
@@ -714,15 +716,15 @@ class AudioTool {
     const info = document.createElement('div')
     info.classList.add('at-scan-info')
     info.innerHTML = `
-      <div class="at-scan-heading">用手机扫描二维码<br>上传录音文件</div>
+      <div class="at-scan-heading">${this._t('Scan the QR code with your phone')}<br>${this._t('to upload a recording')}</div>
       <ul class="at-scan-steps">
-        <li><span class="at-step-num">1</span>打开手机相机或微信扫一扫</li>
-        <li><span class="at-step-num">2</span>在手机上选择录音文件</li>
-        <li><span class="at-step-num">3</span>上传完成后此处自动更新</li>
+        <li><span class="at-step-num">1</span>${this._t('Open your phone camera or WeChat scanner')}</li>
+        <li><span class="at-step-num">2</span>${this._t('Choose the recording on your phone')}</li>
+        <li><span class="at-step-num">3</span>${this._t('This updates automatically once uploaded')}</li>
       </ul>
       <div class="at-status-row">
         <div class="at-status-dot waiting"></div>
-        <span class="at-status-text">正在生成二维码...</span>
+        <span class="at-status-text">${this._t('Generating QR code...')}</span>
       </div>
     `
     this._qrStatusDot = info.querySelector('.at-status-dot')
@@ -730,7 +732,7 @@ class AudioTool {
 
     const regenBtn = document.createElement('button')
     regenBtn.classList.add('at-regen-btn')
-    regenBtn.textContent = '重新生成'
+    regenBtn.textContent = this._t('Regenerate')
     regenBtn.style.display = 'none'
     regenBtn.addEventListener('click', () => {
       regenBtn.style.display = 'none'
@@ -754,11 +756,11 @@ class AudioTool {
       this._qrFrame.innerHTML = `
         <div class="at-qr-skeleton">
           <div class="at-qr-skeleton-box"></div>
-          <div class="at-qr-skeleton-text">生成中...</div>
+          <div class="at-qr-skeleton-text">${this._t('Generating...')}</div>
         </div>
       `
     }
-    this._setStatus('waiting', '正在生成二维码...')
+    this._setStatus('waiting', this._t('Generating QR code...'))
     if (this._regenBtn) this._regenBtn.style.display = 'none'
 
     try {
@@ -773,10 +775,10 @@ class AudioTool {
         img.src = dataUrl
         this._qrFrame.appendChild(img)
       }
-      this._setStatus('waiting', '等待手机扫码上传...')
+      this._setStatus('waiting', this._t('Waiting for upload from phone...'))
       this._startPolling(session.sessionId, session.token)
     } catch (e) {
-      this._setStatus('failed', '生成失败，请重试')
+      this._setStatus('failed', this._t('Failed to generate, please try again'))
       if (this._regenBtn) this._regenBtn.style.display = ''
     }
   }
@@ -804,11 +806,11 @@ class AudioTool {
           }
         } else if (session.status === 'FAILED') {
           this._stopPolling()
-          this._setStatus('failed', '上传失败')
+          this._setStatus('failed', this._t('Upload failed'))
           if (this._regenBtn) this._regenBtn.style.display = ''
         } else if (session.status === 'EXPIRED') {
           this._stopPolling()
-          this._setStatus('expired', '二维码已过期')
+          this._setStatus('expired', this._t('QR code expired'))
           if (this._regenBtn) this._regenBtn.style.display = ''
         }
       } catch (e) {

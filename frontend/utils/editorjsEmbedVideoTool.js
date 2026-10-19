@@ -4,12 +4,12 @@
  */
 
 import { resolveVideoEmbed as resolveEmbed, fetchVimeoPoster, getTweetResizeHeight, isYouTubeEmbed } from './videoEmbedResolver'
-import { createVideoFacade } from './editorjsUiHelpers'
+import { createVideoFacade, toolTranslator } from './editorjsUiHelpers'
 
 class EmbedVideoTool {
   static get toolbox() {
     return {
-      title: '网络视频',
+      title: 'Web Video',
       icon: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"/>
         <polygon points="10 8 16 12 10 16 10 8"/>
@@ -24,6 +24,7 @@ class EmbedVideoTool {
   constructor({ data, api, readOnly }) {
     this.data = data || {}
     this.api = api
+    this._t = toolTranslator(api)
     this.readOnly = readOnly
     this._element = null
     // 只是渲染态，不持久化——重新打开笔记时应该总是先显示封面图（见 _renderEmbed 的注释），
@@ -123,12 +124,12 @@ class EmbedVideoTool {
 
     const input = document.createElement('input')
     input.type = 'text'
-    input.placeholder = '粘贴 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频链接...'
+    input.placeholder = this._t('Paste a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video link...')
     input.classList.add('embed-video-tool__input')
 
     const btn = document.createElement('button')
     btn.type = 'button'
-    btn.textContent = '嵌入'
+    btn.textContent = this._t('Embed')
     btn.classList.add('embed-video-tool__btn')
 
     const error = document.createElement('div')
@@ -169,7 +170,7 @@ class EmbedVideoTool {
           })
         }
       } else {
-        error.textContent = '无法识别链接，请粘贴 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频地址'
+        error.textContent = this._t("Can't recognize this link. Paste a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video URL")
       }
     }
 

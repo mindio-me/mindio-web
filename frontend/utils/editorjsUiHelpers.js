@@ -3,6 +3,11 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+/** Editor.js 给工具的翻译函数（命名空间 tools.<注册名>，中文字典见 editorjsI18n）；没有 api 时原样返回英文 */
+export function toolTranslator(api) {
+  return (text) => (api && api.i18n ? api.i18n.t(text) : text)
+}
+
 /** 创建一个 DOM 元素，attrs 里的键直接赋给元素属性（不是 setAttribute，方便传 style/textContent） */
 export function createEl(tag, className, attrs = {}) {
   const el = document.createElement(tag)

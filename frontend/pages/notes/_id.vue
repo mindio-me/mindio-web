@@ -176,6 +176,7 @@
 import { renderMarkdown as renderMd, isMermaidCode } from '~/utils/markdown'
 import { renderMarkdownDocument } from '~/utils/markdown-document'
 import { createEditorJSToc } from '~/utils/editorjs-toc'
+import { editorjsI18nConfig } from '~/utils/editorjsI18n'
 
 export default {
   name: 'NoteDetailPage',
@@ -544,6 +545,7 @@ export default {
           holder: this.$refs.editorjsContainer,
           readOnly: true,
           data: editorData,
+          i18n: editorjsI18nConfig(this.$i18n.locale),
           tools: {
             header: { class: Header, inlineToolbar: false },
             list: { class: List, inlineToolbar: false },

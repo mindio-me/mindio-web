@@ -2,7 +2,7 @@
  * Copyright (c) 2026 Fasong Wu
  * SPDX-License-Identifier: AGPL-3.0-only
  */
-import { createEl, createButton, createVideoFacade } from './editorjsUiHelpers'
+import { createEl, createButton, createVideoFacade, toolTranslator } from './editorjsUiHelpers'
 import { resolveVideoEmbed, fetchVimeoPoster, getTweetIdFromEmbedUrl, isYouTubeEmbed } from './videoEmbedResolver'
 import { openMediaLightbox } from './editorjsMediaLightbox'
 
@@ -20,7 +20,7 @@ function loadsAsImage(url, timeoutMs = 10000) {
 export default class GalleryTool {
   static get toolbox() {
     return {
-      title: '媒体画廊',
+      title: 'Media Gallery',
       icon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>'
     }
   }
@@ -31,6 +31,7 @@ export default class GalleryTool {
 
   constructor({ data, config, api, readOnly, block }) {
     this.api = api
+    this._t = toolTranslator(api)
     this.block = block
     this.readOnly = readOnly
     this.config = config || {}
@@ -47,9 +48,9 @@ export default class GalleryTool {
       const toolbar = createEl('div', 'cdx-gallery__toolbar')
       const fileInput = createEl('input', null, { type: 'file', accept: 'image/*,audio/*', multiple: true, style: 'display:none' })
       fileInput.addEventListener('change', (e) => this._handleFiles(e.target.files))
-      toolbar.appendChild(createButton('上传图片/音频', () => fileInput.click()))
+      toolbar.appendChild(createButton(this._t('Upload image/audio'), () => fileInput.click()))
       toolbar.appendChild(fileInput)
-      toolbar.appendChild(createButton('粘贴链接（图片/视频）', () => this._openLinkInput()))
+      toolbar.appendChild(createButton(this._t('Paste link (image/video)'), () => this._openLinkInput()))
       this.wrapper.appendChild(toolbar)
     }
     return this.wrapper
@@ -90,7 +91,8 @@ export default class GalleryTool {
     const viewable = this.data.items.filter((it) => it.type !== 'audio')
     if (this._closeLightbox) this._closeLightbox()
     this._closeLightbox = openMediaLightbox(viewable, viewable.indexOf(item), {
-      fetchTweetVideo: this.config.fetchTweetVideo
+      fetchTweetVideo: this.config.fetchTweetVideo,
+      t: this._t
     })
   }
 
@@ -120,7 +122,7 @@ export default class GalleryTool {
           this.data.items.push({ type: isAudio ? 'audio' : 'image', url: result.file.url, caption: '' })
         }
       } catch (e) {
-        this.api.notifier?.show({ message: `${file.name} 上传失败`, style: 'error' })
+        this.api.notifier?.show({ message: `${this._t('Upload failed')}: ${file.name}`, style: 'error' })
       }
     }
     this._renderGrid()
@@ -137,13 +139,13 @@ export default class GalleryTool {
     const inputRow = createEl('div', 'cdx-gallery__link-row')
     const input = createEl('input', 'cdx-gallery__link-input', {
       type: 'text',
-      placeholder: '粘贴图片链接，或 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频链接...'
+      placeholder: this._t('Paste an image link, or a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video link...')
     })
     const error = createEl('div', 'cdx-gallery__link-error')
     let btn = null
     const setBusy = (busy) => {
       btn.disabled = busy
-      btn.textContent = busy ? '添加中...' : '添加'
+      btn.textContent = busy ? this._t('Adding...') : this._t('Add')
     }
     const doAdd = async () => {
       const url = input.value.trim()
@@ -189,9 +191,9 @@ export default class GalleryTool {
         return
       }
       setBusy(false)
-      error.textContent = '无法识别链接，请粘贴图片地址，或 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频地址'
+      error.textContent = this._t("Can't recognize this link. Paste an image URL, or a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video URL")
     }
-    btn = createButton('添加', doAdd, 'cdx-gallery__link-btn')
+    btn = createButton(this._t('Add'), doAdd, 'cdx-gallery__link-btn')
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd() })
     inputRow.append(input, btn)
     row.append(inputRow, error)

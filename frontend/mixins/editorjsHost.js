@@ -7,6 +7,7 @@ import { createEditorImageResizer } from '~/utils/editorjsImageResize'
 import { clipboardMayContainImage, getClipboardImagePayload, uploadClipboardImage } from '~/utils/clipboardImage'
 import { confirmDiscardEdits } from '~/utils/audioTranscriptionStore'
 import { tweetSyndicationToken } from '~/utils/videoEmbedResolver'
+import { editorjsI18nConfig } from '~/utils/editorjsI18n'
 
 export default {
   data() {
@@ -306,37 +307,8 @@ export default {
         onChange: () => {
           if (options.onChange) options.onChange()
         },
-        // EditorJS 自身有一套独立于 vue-i18n 的内部 i18n 机制（块工具/菜单文案），
-        // 且这套字典是模块级全局单例（I18n.currentDictionary），只有传入非空 messages 时
-        // 才会调用 setDictionary() 覆盖它——英文分支必须显式传空字典触发重置，
-        // 传 undefined 只会导致沿用上一次（通常是中文）构造过的编辑器留下的全局字典，
-        // 表现上就像英文模式下菜单文案"写死"成中文了一样
-        i18n: options.locale === 'zh-CN' ? {
-          messages: {
-            ui: {
-              blockTunes: { toggler: { 'Click to tune': '点击调整', 'or drag to move': '或拖动移动' } },
-              inlineToolbar: { converter: { 'Convert to': '转换为' } },
-              toolbar: { toolbox: { Add: '添加' } }
-            },
-            toolNames: {
-              Text: '文本', Heading: '标题', List: '列表', Quote: '引用',
-              Code: '代码块', Delimiter: '分割线', Table: '表格', Image: '图片',
-              InlineCode: '行内代码', Marker: '高亮', Strikethrough: '删除线', Superscript: '上标', Math: '公式', Checklist: '任务列表', Warning: '提示框', Attachment: '附件', Markdown: 'Markdown', Embed: '嵌入视频2', Video: '视频2', Audio: '音频', AudioRecord: '录音', Bold: '加粗', Italic: '斜体', Link: '链接'
-            },
-            tools: {
-              header: { 'Heading 1': '标题 1', 'Heading 2': '标题 2', 'Heading 3': '标题 3', 'Heading 4': '标题 4', 'Heading 5': '标题 5', 'Heading 6': '标题 6' },
-              list: { Ordered: '有序列表', Unordered: '无序列表' },
-              quote: { 'Align Left': '左对齐', 'Align Center': '居中' },
-              table: { 'With headings': '带表头', 'Without headings': '无表头', 'Add row above': '上方插入行', 'Add row below': '下方插入行', 'Delete row': '删除行', 'Add column to the left': '左侧插入列', 'Add column to the right': '右侧插入列', 'Delete column': '删除列' },
-              image: { Caption: '图片说明', 'Select an Image': '选择图片', 'With border': '带边框', 'Stretch image': '拉伸图片', 'With background': '带背景', 'With caption': '图片说明' }
-            },
-            blockTunes: {
-              delete: { Delete: '删除', 'Click to delete': '点击确认删除' },
-              moveUp: { 'Move up': '上移' },
-              moveDown: { 'Move down': '下移' }
-            }
-          }
-        } : { messages: {} }
+        // 中文字典和"英文必须传空字典"的原因见 editorjsI18n
+        i18n: editorjsI18nConfig(options.locale)
       })
 
       await this.editor.isReady

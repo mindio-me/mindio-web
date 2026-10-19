@@ -4,6 +4,7 @@
  */
 
 import { renderTex } from './mathRender'
+import { toolTranslator } from './editorjsUiHelpers'
 
 /**
  * EditorJS 块级公式：数据 { tex }。编辑态是 TeX 源码框 + 实时预览，只读态只显示渲染结果。
@@ -25,8 +26,9 @@ export default class MathTool {
     return true
   }
 
-  constructor({ data, readOnly }) {
+  constructor({ data, api, readOnly }) {
     this.readOnly = readOnly
+    this._t = toolTranslator(api)
     this.data = { tex: (data && data.tex) || '' }
     this.input = null
     this.preview = null
@@ -38,7 +40,7 @@ export default class MathTool {
     if (!this.readOnly) {
       this.input = document.createElement('textarea')
       this.input.classList.add('cdx-math-block__input')
-      this.input.placeholder = 'TeX，例如 E = mc^2'
+      this.input.placeholder = this._t('TeX, e.g. E = mc^2')
       this.input.value = this.data.tex
       this._fitRows()
       this.input.addEventListener('input', () => {

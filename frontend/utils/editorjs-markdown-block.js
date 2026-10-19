@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  */
 
+import { toolTranslator } from './editorjsUiHelpers'
+
 /**
  * EditorJS Markdown Block 插件
  * 支持实时预览的 Markdown 编辑块
@@ -50,6 +52,7 @@ export default class MarkdownBlock {
    */
   constructor({ data, config, api, readOnly }) {
     this.api = api
+    this._t = toolTranslator(api)
     this.readOnly = readOnly
     this.config = config || {}
 
@@ -151,7 +154,7 @@ export default class MarkdownBlock {
     // 之后 _setMode 里的 focus() 会触发浏览器把光标位置滚动进视口，
     // 也就是滚到内容末尾而不是顶部——这里把光标复位到开头，避免切换模式时页面自动跳到底部
     this.textarea.selectionStart = this.textarea.selectionEnd = 0
-    this.textarea.placeholder = '输入 Markdown 内容...'
+    this.textarea.placeholder = this._t('Enter Markdown...')
     this.textarea.spellcheck = false
     this.textarea.autocomplete = 'off'
     this.textarea.autocorrect = 'off'
@@ -213,9 +216,9 @@ export default class MarkdownBlock {
     modeGroup.classList.add('cdx-markdown-block__mode-group')
 
     const modes = [
-      { id: 'edit', label: '编辑', icon: '&#9998;' },
-      { id: 'split', label: '分栏', icon: '&#9783;' },
-      { id: 'preview', label: '预览', icon: '&#128065;' }
+      { id: 'edit', label: this._t('Edit'), icon: '&#9998;' },
+      { id: 'split', label: this._t('Split'), icon: '&#9783;' },
+      { id: 'preview', label: this._t('Preview'), icon: '&#128065;' }
     ]
 
     modes.forEach(mode => {
@@ -293,7 +296,7 @@ export default class MarkdownBlock {
     if (!this.preview) return
 
     const html = await this._renderMarkdown(this.data.markdown)
-    this.preview.innerHTML = html || '<p class="cdx-markdown-block__empty">预览区域</p>'
+    this.preview.innerHTML = html || `<p class="cdx-markdown-block__empty">${this._t('Preview area')}</p>`
 
     // 处理 Mermaid 图表
     this._processMermaidBlocks(this.preview)
