@@ -32,6 +32,31 @@ function createNoReferrerVideo(videoUrl) {
 }
 
 /**
+ * 长视频的 mp4 开头有几 MB 的索引，网络慢时要等很久才出第一帧，期间盖一层封面加"加载中"。
+ * srcdoc 内嵌页和本页同源，可以直接监听里面的 <video>（内嵌页继承本页 CSP，不能放内联脚本）。
+ */
+function attachVideoLoading(frame, iframe, posterUrl, t) {
+  const overlay = createEl('div', 'media-lightbox__video-loading')
+  if (posterUrl) overlay.style.backgroundImage = `url(${posterUrl})`
+  const hint = createEl('span', 'media-lightbox__video-loading-hint', { textContent: t('Loading video...') })
+  overlay.append(createEl('span', 'media-lightbox__spinner'), hint)
+  frame.appendChild(overlay)
+  iframe.addEventListener('load', () => {
+    const video = iframe.contentDocument && iframe.contentDocument.querySelector('video')
+    if (!video) return
+    if (video.readyState >= 2) {
+      overlay.remove()
+      return
+    }
+    video.addEventListener('loadeddata', () => overlay.remove(), { once: true })
+    video.addEventListener('error', () => {
+      overlay.classList.add('is-failed')
+      hint.textContent = t('Failed to load video')
+    }, { once: true })
+  })
+}
+
+/**
  * 媒体画廊的弹窗查看器：图片看原图，视频在弹窗里直接播放（平台播放器带 autoplay=1；
  * X 推文用原生播放器播 mp4 直链，取不到直链时退回推文卡片）。
  * 交互对齐常见相册灯箱：深色遮罩、右上角关闭、左右切换（箭头 / ←→）、底部计数和说明，
@@ -100,7 +125,9 @@ export function openMediaLightbox(items, startIndex, { fetchTweetVideo, t = (tex
       clearStage()
       if (video && video.videoUrl) {
         const frame = createFrame(video.aspectRatio)
-        frame.appendChild(createNoReferrerVideo(video.videoUrl))
+        const iframe = createNoReferrerVideo(video.videoUrl)
+        frame.appendChild(iframe)
+        attachVideoLoading(frame, iframe, item.posterUrl, t)
         stage.appendChild(frame)
       } else {
         showTweetCard(item)

@@ -37,7 +37,9 @@ const ZH_MESSAGES = {
       'View original': '查看原图',
       Close: '关闭',
       Previous: '上一个',
-      Next: '下一个'
+      Next: '下一个',
+      'Loading video...': '视频加载中...',
+      'Failed to load video': '视频加载失败'
     },
     audio: {
       'Click to add audio': '点击添加音频',
