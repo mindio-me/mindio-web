@@ -13,6 +13,7 @@ import com.entropybits.worknotes.spring_boot.security.CustomUserDetailsService;
 import com.entropybits.worknotes.spring_boot.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -43,6 +44,11 @@ public class AuthController {
      */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserDetails userDetails) {
+        // /v1/auth/** 是 permitAll：token 缺失、过期或签名对不上时这里是匿名请求。
+        // 直接回 401（不走 sendError，免得被 /error 分派改写），前端据此清 token 回登录页，而不是卡在 500。
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         var user = userDetailsService.getUserByUsername(userDetails.getUsername());
         return ResponseEntity.ok(UserResponse.fromEntity(user));
     }
@@ -62,6 +68,9 @@ public class AuthController {
     public ResponseEntity<String> changePassword(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody ChangePasswordRequest request) {
+        if (userDetails == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         authService.changePassword(userDetails.getUsername(), request);
         return ResponseEntity.ok("密码修改成功");
     }
