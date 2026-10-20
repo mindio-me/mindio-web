@@ -460,8 +460,29 @@ class AgentServiceClientTest {
         AgentServiceClient c = serveInternal("/internal/share-card/background", 502,
                 "{\"detail\":\"image provider rejected the request\"}", null);
 
-        assertThatThrownBy(() -> c.shareCardBackground("t", "x", null))
+        assertThatThrownBy(() -> c.shareCardBackground("t", "x", null, null))
                 .isInstanceOf(AgentCallException.class)
                 .hasMessage("image provider rejected the request");
+    }
+
+    @Test
+    void shareCardBackground_sendsImageConfigAndOmitsNullFields() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<String> capturedBody = new java.util.concurrent.atomic.AtomicReference<>();
+        AgentServiceClient c = serveInternal("/internal/share-card/background", 200,
+                "{\"prompt\":\"p\",\"imageBase64\":\"AAA\",\"mimeType\":\"image/png\"}", capturedBody);
+        java.util.Map<String, String> image = new java.util.LinkedHashMap<>();
+        image.put("provider", "doubao");
+        image.put("apiKey", "k-env");
+        image.put("baseUrl", "https://ark.example");
+        image.put("model", null);
+
+        c.shareCardBackground("t", "x", null, image);
+
+        assertThat(capturedBody.get())
+                .contains("\"image\":{")
+                .contains("\"provider\":\"doubao\"")
+                .contains("\"apiKey\":\"k-env\"")
+                .contains("\"baseUrl\":\"https://ark.example\"")
+                .doesNotContain("\"model\"");
     }
 }

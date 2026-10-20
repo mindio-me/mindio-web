@@ -75,7 +75,8 @@ public class ShareCardService {
             }
             return new String[]{note.getTitle(), NotePlainText.extract(note, TEXT_MAX_CHARS)};
         });
-        String availability = aiAvailability();
+        Map<String, String> imageConfig = effectiveImageConfig();
+        String availability = availabilityOf(imageConfig);
         if ("disabled".equals(availability)) {
             throw new BadRequestException("AI 生成背景功能已被关闭");
         }
@@ -84,7 +85,7 @@ public class ShareCardService {
         }
         Map<String, Object> result;
         try {
-            result = agentServiceClient.shareCardBackground(titleAndText[0], titleAndText[1], prompt);
+            result = agentServiceClient.shareCardBackground(titleAndText[0], titleAndText[1], prompt, imageConfig);
         } catch (AgentCallException | AgentUnavailableException e) {
             throw new BadRequestException(e.getMessage());
         }
@@ -116,19 +117,51 @@ public class ShareCardService {
 
     /** available | disabled（部署开关关闭）| not_configured（没选生图服务商或没有对应 Key） */
     public String aiAvailability() {
+        return availabilityOf(effectiveImageConfig());
+    }
+
+    private String availabilityOf(Map<String, String> imageConfig) {
         if (!aiEnabled) {
             return "disabled";
         }
-        String provider = aiSettingsService.imageConfig().get(AiSettingKeys.IMAGE_PROVIDER);
+        String provider = imageConfig.get("provider");
         if (provider == null || provider.isBlank()) {
             return "not_configured";
         }
+        String apiKey = imageConfig.get("apiKey");
+        return apiKey == null || apiKey.isBlank() ? "not_configured" : "available";
+    }
+
+    /**
+     * 生图的生效配置（后端是唯一来源）：服务商/模型来自设置，Key 和地址取该服务商在 env+库 合并后的值。
+     * 判断可用性和实际调用都用它，并随请求下发给 agents，避免两边读到不同的配置。
+     * 值可能为 null（未配置）。
+     */
+    private Map<String, String> effectiveImageConfig() {
+        Map<String, String> settings = aiSettingsService.imageConfig();
+        String provider = settings.get(AiSettingKeys.IMAGE_PROVIDER);
+        Map<String, String> out = new java.util.HashMap<>();
+        if (provider == null || provider.isBlank()) {
+            return out;
+        }
+        out.put("provider", provider);
         AiProperties cfg = aiSettingsService.current();
-        String apiKey = switch (provider) {
-            case "openai" -> cfg.getOpenai().getApiKey();
-            case "doubao" -> cfg.getDoubao().getApiKey();
+        AiProperties.ProviderConfig pc = switch (provider) {
+            case "openai" -> cfg.getOpenai();
+            case "doubao" -> cfg.getDoubao();
             default -> null;
         };
-        return apiKey == null || apiKey.isBlank() ? "not_configured" : "available";
+        if (pc != null) {
+            putIfPresent(out, "apiKey", pc.getApiKey());
+            putIfPresent(out, "baseUrl", pc.getBaseUrl());
+        }
+        putIfPresent(out, "model", settings.get(AiSettingKeys.IMAGE_MODEL));
+        return out;
+    }
+
+    private static void putIfPresent(Map<String, String> m, String k, String v) {
+        if (v != null && !v.isBlank()) {
+            m.put(k, v);
+        }
     }
 }

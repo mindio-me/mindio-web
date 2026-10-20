@@ -144,7 +144,7 @@ class ShareCardServiceTest {
         ownedNote();
         assertThatThrownBy(() -> service(false).generateBackground(3L, "alice", null))
                 .isInstanceOf(BadRequestException.class);
-        verify(agent, never()).shareCardBackground(any(), any(), any());
+        verify(agent, never()).shareCardBackground(any(), any(), any(), any());
     }
 
     @Test
@@ -152,7 +152,7 @@ class ShareCardServiceTest {
         ownedNote();
         assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
                 .isInstanceOf(BadRequestException.class);
-        verify(agent, never()).shareCardBackground(any(), any(), any());
+        verify(agent, never()).shareCardBackground(any(), any(), any(), any());
     }
 
     @Test
@@ -162,32 +162,32 @@ class ShareCardServiceTest {
                 Note.builder().id(3L).owner(User.builder().id(2L).build()).build()));
         assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
                 .isInstanceOf(UnauthorizedException.class);
-        verify(agent, never()).shareCardBackground(any(), any(), any());
+        verify(agent, never()).shareCardBackground(any(), any(), any(), any());
     }
 
     @Test
     void generateBackgroundSavesImageAndReturnsUrl() {
         configureAvailable();
         ownedNote();
-        when(agent.shareCardBackground(any(), any(), any())).thenReturn(
+        when(agent.shareCardBackground(any(), any(), any(), any())).thenReturn(
                 Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png"));
         FileResultVo saved = new FileResultVo();
         saved.setUrl("/api/uploads/x.jpg");
         when(uploadService.base64Upload("data:image/png;base64,AAA", "share-card", 3)).thenReturn(saved);
         ShareCardBackgroundResponse r = service(true).generateBackground(3L, "alice", "user prompt");
         assertThat(r).isEqualTo(new ShareCardBackgroundResponse("p", "/api/uploads/x.jpg"));
-        verify(agent).shareCardBackground(anyString(), anyString(), org.mockito.ArgumentMatchers.eq("user prompt"));
+        verify(agent).shareCardBackground(anyString(), anyString(), org.mockito.ArgumentMatchers.eq("user prompt"), any());
     }
 
     @Test
     void generateBackgroundPassesTitleAndPlainText() {
         configureAvailable();
         Note n = ownedNote();
-        when(agent.shareCardBackground(any(), any(), any())).thenReturn(
+        when(agent.shareCardBackground(any(), any(), any(), any())).thenReturn(
                 Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png"));
         when(uploadService.base64Upload(anyString(), anyString(), any())).thenReturn(new FileResultVo());
         service(true).generateBackground(3L, "alice", null);
-        verify(agent).shareCardBackground("My title", NotePlainText.extract(n, 1500), null);
+        verify(agent).shareCardBackground("My title", NotePlainText.extract(n, 1500), null, java.util.Map.of("provider", "openai", "apiKey", "k"));
         assertThat(NotePlainText.extract(n, 1500)).isEqualTo("hello world");
     }
 
@@ -195,7 +195,7 @@ class ShareCardServiceTest {
     void generateBackgroundSurfacesAgentDetail() {
         configureAvailable();
         ownedNote();
-        when(agent.shareCardBackground(any(), any(), any()))
+        when(agent.shareCardBackground(any(), any(), any(), any()))
                 .thenThrow(new AgentCallException("UNKNOWN", "image provider rejected the request"));
         assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
                 .isInstanceOf(BadRequestException.class)
@@ -208,7 +208,7 @@ class ShareCardServiceTest {
         ownedNote();
         java.util.concurrent.atomic.AtomicBoolean agentInTx = new java.util.concurrent.atomic.AtomicBoolean(true);
         java.util.concurrent.atomic.AtomicBoolean uploadInTx = new java.util.concurrent.atomic.AtomicBoolean(true);
-        when(agent.shareCardBackground(any(), any(), any())).thenAnswer(inv -> {
+        when(agent.shareCardBackground(any(), any(), any(), any())).thenAnswer(inv -> {
             agentInTx.set(txManager.active);
             return Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png");
         });
@@ -220,5 +220,20 @@ class ShareCardServiceTest {
         assertThat(txManager.begun).isEqualTo(1);
         assertThat(agentInTx).isFalse();
         assertThat(uploadInTx).isFalse();
+    }
+
+    @Test
+    void generateBackgroundSendsEffectiveImageConfigFromEnv() {
+        when(aiSettings.imageConfig()).thenReturn(Map.of("ai.image.provider", "doubao", "ai.image.model", "m1"));
+        props.getDoubao().setApiKey("k-env");
+        props.getDoubao().setBaseUrl("https://ark.example");
+        ownedNote();
+        when(agent.shareCardBackground(any(), any(), any(), any())).thenReturn(
+                Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png"));
+        when(uploadService.base64Upload(anyString(), anyString(), any())).thenReturn(new FileResultVo());
+        service(true).generateBackground(3L, "alice", null);
+        verify(agent).shareCardBackground(anyString(), anyString(), org.mockito.ArgumentMatchers.isNull(),
+                org.mockito.ArgumentMatchers.eq(Map.of("provider", "doubao", "apiKey", "k-env",
+                        "baseUrl", "https://ark.example", "model", "m1")));
     }
 }

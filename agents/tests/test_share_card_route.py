@@ -40,7 +40,7 @@ def _image_configured(monkeypatch, test_settings):
 
 def _fake_gen(captured, error=None):
     async def gen(provider, cfg, model, prompt, **kw):
-        captured.update(provider=provider, model=model, prompt=prompt, key=cfg.api_key)
+        captured.update(provider=provider, model=model, prompt=prompt, key=cfg.api_key, base_url=cfg.base_url)
         if error:
             raise error
         return b"IMG", "image/png"
@@ -95,3 +95,35 @@ async def test_maps_provider_error_to_502_with_message(monkeypatch):
         await share_card_background(BackgroundRequest(title="t", text="x", prompt="p"))
     assert e.value.status_code == 502
     assert "401" in e.value.detail
+
+
+async def test_uses_image_config_from_request_over_settings(monkeypatch, test_settings):
+    import dataclasses
+    from app.routes.share_card import ImageConfig
+    cfg = dataclasses.replace(test_settings, image_provider="", image_model="")
+
+    async def fake_load(java_client, base=None):
+        return cfg
+
+    captured = {}
+    monkeypatch.setattr(route, "load_effective_settings", fake_load)
+    monkeypatch.setattr(route, "generate_image", _fake_gen(captured))
+    image = ImageConfig(provider="doubao", apiKey="k-java", baseUrl="https://ark.example", model="m1")
+
+    await share_card_background(BackgroundRequest(title="t", text="x", prompt="p", image=image))
+
+    assert captured["provider"] == "doubao"
+    assert captured["key"] == "k-java"
+    assert captured["base_url"] == "https://ark.example"
+    assert captured["model"] == "m1"
+
+
+async def test_falls_back_to_settings_without_request_image(monkeypatch, _image_configured):
+    captured = {}
+    monkeypatch.setattr(route, "generate_image", _fake_gen(captured))
+    key = _image_configured.providers["openai"].api_key
+
+    await share_card_background(BackgroundRequest(title="t", text="x", prompt="p"))
+
+    assert captured["provider"] == "openai"
+    assert captured["key"] == key

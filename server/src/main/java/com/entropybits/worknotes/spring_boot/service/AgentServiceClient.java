@@ -293,11 +293,24 @@ public class AgentServiceClient {
     }
 
     /** 笔记分享卡片：让 agents 生成背景图，返回 {prompt, imageBase64, mimeType}；生图较慢，超时 120 秒 */
-    public Map<String, Object> shareCardBackground(String title, String text, String prompt) {
+    public Map<String, Object> shareCardBackground(String title, String text, String prompt,
+                                                  Map<String, String> image) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("title", title);
         body.put("text", text);
         body.put("prompt", prompt);
+        if (image != null) {
+            // 生图配置（含 Key）以后端为准随请求下发；不记录请求体，空字段不发送
+            Map<String, String> img = new LinkedHashMap<>();
+            image.forEach((k, v) -> {
+                if (v != null && !v.isBlank()) {
+                    img.put(k, v);
+                }
+            });
+            if (!img.isEmpty()) {
+                body.put("image", img);
+            }
+        }
         return postInternal("/internal/share-card/background", body, Duration.ofSeconds(120));
     }
 

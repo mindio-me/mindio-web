@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel
 
-from app.config import use_settings
+from app.config import ProviderConfig, use_settings
 from app.effective_settings import load_effective_settings
 from app.image_gen import ImageGenError, generate_image
 from app.java_client import JavaClient
@@ -35,10 +35,19 @@ STYLE_SUFFIX = ("No text, no letters, no numbers, no logo, no watermark. "
                 "Wide 1.91:1 banner composition, keep the lower third calm and darker for a title overlay.")
 
 
+class ImageConfig(BaseModel):
+    """后端下发的生效生图配置（后端是唯一来源，Key 可能只存在于后端自己的配置里）"""
+    provider: str | None = None
+    apiKey: str | None = None
+    baseUrl: str | None = None
+    model: str | None = None
+
+
 class BackgroundRequest(BaseModel):
     title: str
     text: str
     prompt: str | None = None
+    image: ImageConfig | None = None
 
 
 @router.post("/internal/share-card/background")
@@ -52,6 +61,18 @@ async def share_card_background(request: BackgroundRequest) -> dict:
 
     provider = cfg.image_provider
     provider_cfg = cfg.providers.get(provider)
+    image_model = cfg.image_model
+    img = request.image
+    if img and img.provider and img.apiKey:
+        provider = img.provider
+        base = cfg.providers.get(provider)
+        provider_cfg = ProviderConfig(
+            api_key=img.apiKey,
+            model=base.model if base else "",
+            base_url=img.baseUrl or (base.base_url if base else ""),
+            chat_path=base.chat_path if base else "/v1/chat/completions",
+        )
+        image_model = img.model or image_model
     if not provider or provider_cfg is None or not provider_cfg.api_key:
         raise HTTPException(status_code=400, detail="未配置图片生成服务：请先在设置里选择图片生成服务商并填写 Key")
 
@@ -67,7 +88,7 @@ async def share_card_background(request: BackgroundRequest) -> dict:
             raise HTTPException(status_code=502, detail="生成画面描述失败：模型没有返回内容")
 
     try:
-        data, mime = await generate_image(provider, provider_cfg, cfg.image_model, f"{prompt}\n{STYLE_SUFFIX}")
+        data, mime = await generate_image(provider, provider_cfg, image_model, f"{prompt}\n{STYLE_SUFFIX}")
     except ImageGenError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
     return {"prompt": prompt, "imageBase64": base64.b64encode(data).decode("ascii"), "mimeType": mime}
