@@ -177,6 +177,7 @@ import { renderMarkdown as renderMd, isMermaidCode } from '~/utils/markdown'
 import { renderMarkdownDocument } from '~/utils/markdown-document'
 import { createEditorJSToc } from '~/utils/editorjs-toc'
 import { editorjsI18nConfig } from '~/utils/editorjsI18n'
+import { tweetSyndicationToken } from '~/utils/videoEmbedResolver'
 
 export default {
   name: 'NoteDetailPage',
@@ -579,7 +580,24 @@ export default {
               }
             },
             references: { class: ReferencesTool },
-            mediaGallery: { class: GalleryTool },
+            mediaGallery: {
+              class: GalleryTool,
+              config: {
+                // 匿名访客不能调 /v1/embed（要登录），走分享路径下按笔记校验的同款接口；
+                // 失败返回 null，弹窗退回推文卡片。suppressErrorToast：404 只是「没有可直接播放的视频」，不弹错误提示
+                fetchTweetVideo: async (tweetId) => {
+                  try {
+                    const res = await this.$axios.get(`/v1/share/notes/${this.note.id}/tweet-video`, {
+                      params: { id: tweetId, token: tweetSyndicationToken(tweetId) },
+                      suppressErrorToast: true
+                    })
+                    return res.data?.videoUrl ? res.data : null
+                  } catch (e) {
+                    return null
+                  }
+                }
+              }
+            },
             timeline: { class: TimelineTool },
             // 只读渲染也要注册行内工具：编辑器按已注册工具的 sanitize 规则清洗正文，否则 <mark>/<s>/<code> 会被剥掉
             marker: { class: Marker },
