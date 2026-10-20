@@ -57,6 +57,20 @@ class SharePageRendererTest {
     }
 
     @Test
+    void keepsNonAsciiCharactersUnescaped() {
+        String html = SharePageRenderer.render(base().title("Videos —— 2000 PRs 中文").build(), BASE);
+        assertThat(html).contains("og:title\" content=\"Videos —— 2000 PRs 中文\"").doesNotContain("&mdash;");
+    }
+
+    @Test
+    void fallsBackToTitleWhenNoTextCanBeExtracted() {
+        Note n = base().summary(null).content(null).build();
+        String html = SharePageRenderer.render(n, BASE);
+        assertThat(html).contains("og:description\" content=\"Note title\"")
+                .contains("twitter:description\" content=\"Note title\"");
+    }
+
+    @Test
     void escapesHtmlInTitleAndDescription() {
         Note n = base().title("A <b> & \"Q\"").summary("<script>").build();
         String html = SharePageRenderer.render(n, BASE);

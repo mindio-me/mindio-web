@@ -22,6 +22,10 @@ public final class SharePageRenderer {
                 : (note.getTitle() == null ? "" : note.getTitle());
         String description = notBlank(note.getSummary()) ? note.getSummary().trim()
                 : NotePlainText.extract(note, 150);
+        if (!notBlank(description)) {
+            // 全是视频/图片的笔记抽不出正文；空描述会让部分平台（LinkedIn 告警）处理异常，用标题兜底
+            description = title;
+        }
         String pageUrl = publicBase + "/notes/" + note.getId();
         String image = notBlank(note.getShareCardImageUrl()) ? toPublicUrl(note.getShareCardImageUrl().trim(), publicBase) : null;
 
@@ -76,7 +80,8 @@ public final class SharePageRenderer {
     }
 
     private static String esc(String s) {
-        return HtmlUtils.htmlEscape(s == null ? "" : s);
+        // 带编码参数时只转义 < > & " '，中文和破折号等原样输出（不带时会转成 &mdash; 这类实体名）
+        return HtmlUtils.htmlEscape(s == null ? "" : s, "UTF-8");
     }
 
     private static boolean notBlank(String s) {
