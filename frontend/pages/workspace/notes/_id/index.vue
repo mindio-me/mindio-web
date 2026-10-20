@@ -401,6 +401,12 @@
         </el-empty>
       </div>
     </el-card>
+
+    <ShareCardDialog
+      v-if="note"
+      :visible.sync="shareCardVisible"
+      :note="{ id: note.id, title: note.title, isPublic: !!note.isPublic }"
+    />
   </div>
 </template>
 
@@ -412,6 +418,9 @@ import { parseListItems } from '~/utils/editorjs-list'
 
 export default {
   name: 'NoteDetailPage',
+  components: {
+    ShareCardDialog: () => import('~/components/ShareCardDialog.vue')
+  },
   layout: 'workspace',
   middleware: ['auth'],
   head() {
@@ -440,6 +449,7 @@ export default {
       avatarUrl: null,
       projects: [],
       clipCount: 0,
+      shareCardVisible: false
     }
   },
   async mounted() {
@@ -570,33 +580,8 @@ export default {
         this.$message.warning('只有公开笔记才能分享')
         return
       }
-      
-      const shareUrl = `${window.location.origin}/notes/public/${this.note.id}`
-      
-      // 复制到剪贴板
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareUrl).then(() => {
-          this.$message.success('分享链接已复制到剪贴板')
-        }).catch(() => {
-          this.showShareDialog(shareUrl)
-        })
-      } else {
-        this.showShareDialog(shareUrl)
-      }
-    },
-
-    /**
-     * 显示分享对话框
-     */
-    showShareDialog(url) {
-      this.$prompt('分享链接', '复制以下链接分享给他人', {
-        inputValue: url,
-        inputType: 'textarea',
-        confirmButtonText: '复制',
-        cancelButtonText: '关闭'
-      }).then(() => {
-        this.$message.success('链接已复制')
-      }).catch(() => {})
+      // 分享卡片弹窗（编辑模式）里自带分享链接和复制按钮
+      this.shareCardVisible = true
     },
 
     /**
