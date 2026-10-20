@@ -179,11 +179,6 @@
       &:disabled { opacity: 0.6; cursor: default; }
     }
     &__link-error { color: #f56c6c; font-size: 12px; margin-top: 4px; min-height: 16px; }
-    // 窄屏：卡片两列等分铺满，避免 160px 固定宽在手机上留出不均匀的空边
-    @media (max-width: 480px) {
-      &__card { width: calc(50% - 5px); }
-      &__media { width: 100%; height: auto; aspect-ratio: 4 / 3; }
-    }
   }
 
   .cdx-timeline {
@@ -202,6 +197,14 @@
 
 .editorjs-workspace-container, .editorjs-readonly-container {
   @include editorjs-block-styles;
+}
+
+/* 窄屏画廊两列等分：只给公开笔记页（只读），编辑器里保持原来的固定卡片尺寸 */
+@media (max-width: 480px) {
+  .editorjs-readonly-container .cdx-gallery {
+    &__card { width: calc(50% - 5px); }
+    &__media { width: 100%; height: auto; aspect-ratio: 4 / 3; }
+  }
 }
 
 .editorjs-workspace-container {
