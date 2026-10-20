@@ -373,7 +373,7 @@ public class NoteService {
         note.setShareCardAiPrompt(req.aiPrompt());
         note.setShareCardTitle(req.title());
         // 渐变卡片没有图片内容，标题必须叠在上面
-        note.setShareCardOverlay("gradient".equals(req.source()) || Boolean.TRUE.equals(req.overlayTitle()));
+        note.setShareCardOverlay(Boolean.TRUE.equals(req.overlayTitle()));
         if (req.publish()) {
             note.setIsPublic(true);
         }

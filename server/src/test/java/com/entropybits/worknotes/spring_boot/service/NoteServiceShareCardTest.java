@@ -73,8 +73,19 @@ class NoteServiceShareCardTest {
         assertThat(n.getShareCardGradient()).isEqualTo(3);
         assertThat(n.getShareCardImageUrl()).isEqualTo(IMG);
         assertThat(n.getShareCardTitle()).isEqualTo("T");
-        assertThat(n.getShareCardOverlay()).isTrue();
+        assertThat(n.getShareCardOverlay()).isFalse();
         assertThat(resp).isNotNull();
+    }
+
+    @Test
+    void gradientStoresSentOverlayValueAsIs() {
+        Note off = note(false);
+        service.saveShareCard(42L, "alice", new ShareCardSaveRequest("gradient", IMG, null, 3, null, "T", false, false));
+        assertThat(off.getShareCardOverlay()).isFalse();
+
+        Note on = note(false);
+        service.saveShareCard(42L, "alice", new ShareCardSaveRequest("gradient", IMG, null, 3, null, "T", true, false));
+        assertThat(on.getShareCardOverlay()).isTrue();
     }
 
     @Test

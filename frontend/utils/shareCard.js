@@ -77,35 +77,75 @@ function drawGradient(ctx, index, width, height) {
   ctx.fillRect(0, 0, width, height)
 }
 
-/** 逐字折行，最多 maxLines 行；最后一行放不下时截断并补省略号 */
+const CJK_RE = /[⺀-鿿豈-﫿＀-￯぀-ヿ가-힯]/
+
+/** 切词：CJK 字符逐字成词，其余连续非空白字符（拉丁单词、数字）整体成词；spaceBefore 表示该词前原文有空格 */
+function tokenizeTitle(text) {
+  const tokens = []
+  let word = ''
+  let space = false
+  const flush = () => {
+    if (word) tokens.push({ text: word, spaceBefore: space })
+    if (word) space = false
+    word = ''
+  }
+  for (const ch of Array.from(text)) {
+    if (/\s/.test(ch)) {
+      flush()
+      space = true
+    } else if (CJK_RE.test(ch)) {
+      flush()
+      tokens.push({ text: ch, spaceBefore: space })
+      space = false
+    } else {
+      word += ch
+    }
+  }
+  flush()
+  return tokens
+}
+
+/** 按词折行（拉丁词不拆开，CJK 可逐字断），最多 maxLines 行；超出时最后一行截断并补省略号。单词比整行还宽时退化为逐字拆 */
 export function wrapTitle(ctx, text, maxWidth, maxLines = MAX_TITLE_LINES) {
-  const chars = Array.from(String(text || '').replace(/\s+/g, ' ').trim())
+  const tokens = tokenizeTitle(String(text || '').trim())
+  const fits = (s) => ctx.measureText(s).width <= maxWidth
   const lines = []
   let current = ''
-  let i = 0
-  for (; i < chars.length; i++) {
-    const next = current + chars[i]
-    if (current && ctx.measureText(next).width > maxWidth) {
+  for (const tok of tokens) {
+    const joined = current ? current + (tok.spaceBefore ? ' ' : '') + tok.text : tok.text
+    if (fits(joined)) {
+      current = joined
+      continue
+    }
+    if (current) {
       lines.push(current)
-      if (lines.length === maxLines) break
-      current = chars[i] === ' ' ? '' : chars[i]
-    } else {
-      current = next
+      current = ''
+    }
+    if (fits(tok.text)) {
+      current = tok.text
+      continue
+    }
+    // 单个词超宽：逐字拆
+    for (const ch of Array.from(tok.text)) {
+      if (current && !fits(current + ch)) {
+        lines.push(current)
+        current = ch
+      } else {
+        current += ch
+      }
     }
   }
-  if (lines.length < maxLines) {
-    if (current) lines.push(current)
-    return lines
+  if (current) lines.push(current)
+  if (lines.length <= maxLines) return lines
+
+  // 行数超限：最后一行截断加省略号
+  const kept = lines.slice(0, maxLines)
+  let last = kept[maxLines - 1]
+  while (last && !fits(last + ELLIPSIS)) {
+    last = Array.from(last).slice(0, -1).join('')
   }
-  // 行数已满但还有剩余文字：最后一行截断加省略号
-  if (i < chars.length) {
-    let last = lines[maxLines - 1]
-    while (last && ctx.measureText(last + ELLIPSIS).width > maxWidth) {
-      last = Array.from(last).slice(0, -1).join('')
-    }
-    lines[maxLines - 1] = last.replace(/\s+$/, '') + ELLIPSIS
-  }
-  return lines
+  kept[maxLines - 1] = last.replace(/\s+$/, '') + ELLIPSIS
+  return kept
 }
 
 /**

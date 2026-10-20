@@ -1200,7 +1200,6 @@
     "aiNotConfigured": "Configure image generation in Settings → AI Services to use AI backgrounds",
     "cardTitle": "Card title",
     "overlayTitle": "Overlay title on image",
-    "overlayForced": "The title is always shown on gradient backgrounds",
     "shareLink": "Share link",
     "copyLink": "Copy link",
     "copied": "Link copied",

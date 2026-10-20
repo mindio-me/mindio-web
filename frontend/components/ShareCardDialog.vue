@@ -101,9 +101,8 @@
         <el-form-item class="overlay-item">
           <div class="overlay-row">
             <span>{{ $t('shareCard.overlayTitle') }}</span>
-            <el-switch :value="effectiveOverlay" :disabled="source === 'gradient'" @change="overlayTitle = $event" />
+            <el-switch v-model="overlayTitle" />
           </div>
-          <p v-if="source === 'gradient'" class="share-card-hint">{{ $t('shareCard.overlayForced') }}</p>
         </el-form-item>
         <el-form-item v-if="isEditMode" :label="$t('shareCard.shareLink')">
           <el-input :value="shareLink" readonly>
@@ -154,7 +153,7 @@ export default {
       source: 'gradient',
       gradient: 0,
       title: '',
-      overlayTitle: true,
+      overlayTitle: false,
       aiPrompt: '',
       // 每种来源各自保留背景，来回切换不丢
       uploadFile: null,            // 新选的本地文件（确认时才上传）
@@ -190,9 +189,6 @@ export default {
         ? this.$t('shareCard.aiDisabled')
         : this.$t('shareCard.aiNotConfigured')
     },
-    effectiveOverlay() {
-      return this.source === 'gradient' ? true : this.overlayTitle
-    },
     currentBackgroundObjectUrl() {
       if (this.source === 'upload') return this.uploadObjectUrl
       if (this.source === 'ai') return this.aiObjectUrl
@@ -203,7 +199,7 @@ export default {
     },
     previewKey() {
       return [
-        this.source, this.gradient, this.title, this.effectiveOverlay, this.currentBackgroundObjectUrl
+        this.source, this.gradient, this.title, this.overlayTitle, this.currentBackgroundObjectUrl
       ].join('|')
     }
   },
@@ -251,7 +247,7 @@ export default {
         source: 'gradient',
         gradient: 0,
         title: '',
-        overlayTitle: true,
+        overlayTitle: false,
         aiPrompt: '',
         uploadFile: null,
         uploadBackgroundUrl: null,
@@ -348,7 +344,7 @@ export default {
         backgroundObjectUrl: this.currentBackgroundObjectUrl,
         gradient: this.gradient,
         title: this.title,
-        overlayTitle: this.effectiveOverlay
+        overlayTitle: this.overlayTitle
       }
     },
 
@@ -449,7 +445,7 @@ export default {
           gradient: source === 'gradient' ? this.gradient : null,
           aiPrompt: source === 'ai' ? ((this.aiPrompt || '').trim() || null) : null,
           title: title || null,
-          overlayTitle: this.effectiveOverlay,
+          overlayTitle: this.overlayTitle,
           publish
         }, { suppressErrorToast: true })
 
