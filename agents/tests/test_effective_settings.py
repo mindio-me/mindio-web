@@ -61,3 +61,12 @@ def test_default_provider_is_deepseek_when_env_unset(monkeypatch):
 
     monkeypatch.delenv("DEFAULT_PROVIDER", raising=False)
     assert load_settings().default_provider == "deepseek"
+
+
+def test_merge_remote_image_config(test_settings):
+    merged = merge_remote(test_settings, {"image": {"provider": "doubao", "model": "m1"}})
+    assert merged.image_provider == "doubao"
+    assert merged.image_model == "m1"
+    base = dataclasses.replace(test_settings, image_provider="openai", image_model="x")
+    kept = merge_remote(base, {"defaultProvider": "doubao"})
+    assert (kept.image_provider, kept.image_model) == ("openai", "x")

@@ -28,6 +28,9 @@ class Settings:
     providers: dict[str, ProviderConfig]
     volcengine_asr_app_key: str
     volcengine_asr_access_key: str
+    # 分享卡片 AI 背景图：用哪家的图片模型（复用 providers 里同名配置的 Key/地址），空 = 未配置
+    image_provider: str = ""
+    image_model: str = ""
 
 
 def _provider_config(prefix: str, default_model: str, default_base_url: str,
@@ -56,6 +59,8 @@ def load_settings() -> Settings:
         },
         volcengine_asr_app_key=os.environ.get("VOLCENGINE_ASR_APP_KEY", ""),
         volcengine_asr_access_key=os.environ.get("VOLCENGINE_ASR_ACCESS_KEY", ""),
+        image_provider=os.environ.get("IMAGE_PROVIDER", ""),
+        image_model=os.environ.get("IMAGE_MODEL", ""),
     )
 
 
@@ -87,8 +92,11 @@ def merge_remote(base: Settings, remote: dict | None) -> Settings:
         asr_app_key, asr_access_key = asr.get("appKey") or "", asr.get("accessKey") or ""
     else:
         asr_app_key, asr_access_key = base.volcengine_asr_app_key, base.volcengine_asr_access_key
+    image = remote.get("image") or {}
     return dataclasses.replace(
         base,
+        image_provider=image.get("provider") or base.image_provider,
+        image_model=image.get("model") or base.image_model,
         default_provider=remote.get("defaultProvider") or base.default_provider,
         providers=providers,
         volcengine_asr_app_key=asr_app_key,
