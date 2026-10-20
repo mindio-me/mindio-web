@@ -5,6 +5,12 @@ map $http_user_agent $mindio_link_preview_bot {
     "~*(twitterbot|linkedinbot|redditbot|facebookexternalhit|facebookcatalog|slackbot|slack-imgproxy|discordbot|telegrambot|whatsapp|applebot|skypeuripreview|embedly|pinterestbot|mastodon)" 1;
 }
 
+# 透传上游（如 demo 主机的 TLS 终结 nginx）已设置的 X-Forwarded-Proto，没有才回落到本层 $scheme
+map $http_x_forwarded_proto $mindio_forwarded_proto {
+    default $http_x_forwarded_proto;
+    "" $scheme;
+}
+
 server {
     listen 80;
     root /usr/share/nginx/html;
@@ -32,7 +38,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $mindio_forwarded_proto;
         proxy_set_header X-Forwarded-Host $host;
         proxy_read_timeout 300s;
         # 不小于后端上传上限（WORKNOTES_UPLOAD_MAX_FILE_SIZE_MB，默认 500MB），否则长录音会被这里 413 拦掉
