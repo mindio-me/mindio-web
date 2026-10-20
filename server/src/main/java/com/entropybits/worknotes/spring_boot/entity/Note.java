@@ -104,6 +104,28 @@ public class Note {
     @Column(columnDefinition = "TEXT")
     private String summary; // AI 生成的摘要
 
+    // 分享卡片（网站卡片）；share_card_source 是纯字符串，不用 @Enumerated，避免 Hibernate 建原生 ENUM
+    @Column(name = "share_card_image_url", length = 500)
+    private String shareCardImageUrl;
+
+    @Column(name = "share_card_bg_url", length = 500)
+    private String shareCardBgUrl;
+
+    @Column(name = "share_card_source", length = 10)
+    private String shareCardSource;
+
+    @Column(name = "share_card_gradient")
+    private Integer shareCardGradient;
+
+    @Column(name = "share_card_ai_prompt", columnDefinition = "TEXT")
+    private String shareCardAiPrompt;
+
+    @Column(name = "share_card_title", length = 200)
+    private String shareCardTitle;
+
+    @Column(name = "share_card_overlay")
+    private Boolean shareCardOverlay;
+
     @Column(length = 10)
     private String language; // 'zh', 'en', null 表示未指定
 
