@@ -74,6 +74,47 @@ class ShareTweetVideoControllerTest {
     }
 
     @Test
+    void statusLinkReferenceIsAccepted_plainAndJsonEscaped() throws Exception {
+        when(repo.findById(4L)).thenReturn(Optional.of(Note.builder().id(4L).isPublic(true)
+                .content("{\"u\":\"https://x.com/someone/status/555000111\"}").build()));
+        when(repo.findById(5L)).thenReturn(Optional.of(Note.builder().id(5L).isPublic(true)
+                .content("{\"u\":\"https:\\/\\/x.com\\/someone\\/status\\/555000111\"}").build()));
+        mvc.perform(get("/v1/share/notes/4/tweet-video").param("id", "555000111").param("token", "t"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/v1/share/notes/5/tweet-video").param("id", "555000111").param("token", "t"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void overLongIdReturns404WithoutCallingX() throws Exception {
+        String id = "1".repeat(26);
+        when(repo.findById(6L)).thenReturn(Optional.of(Note.builder().id(6L).isPublic(true)
+                .content("Tweet.html?id=" + id).build()));
+        mvc.perform(get("/v1/share/notes/6/tweet-video").param("id", id).param("token", "t"))
+                .andExpect(status().isNotFound());
+        verify(tweets, never()).fetchVideo(any(), any());
+    }
+
+    @Test
+    void invalidTokenReturnsBare404WithoutCallingX() throws Exception {
+        mvc.perform(get("/v1/share/notes/1/tweet-video").param("id", "1234567890123").param("token", "BAD TOKEN!"))
+                .andExpect(status().isNotFound()).andExpect(content().string(""));
+        verify(tweets, never()).fetchVideo(any(), any());
+    }
+
+    @Test
+    void secondRequestIsServedFromCacheAndSendsCacheControl() throws Exception {
+        mvc.perform(get("/v1/share/notes/1/tweet-video").param("id", "1234567890123").param("token", "t"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Cache-Control", org.hamcrest.Matchers.containsString("max-age=300")));
+        mvc.perform(get("/v1/share/notes/1/tweet-video").param("id", "1234567890123").param("token", "t"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.videoUrl").value("https://video.twimg.com/a.mp4"));
+        verify(tweets, org.mockito.Mockito.times(1)).fetchVideo(any(), any());
+    }
+
+    @Test
     void nonDigitIdIsRejectedWithoutCallingX() throws Exception {
         mvc.perform(get("/v1/share/notes/1/tweet-video").param("id", "12.*").param("token", "t"))
                 .andExpect(status().isNotFound());
