@@ -215,6 +215,19 @@ class AiSettingsServiceTest {
     }
 
     @Test
+    void internalConfigIncludesImage() {
+        storePlain("ai.image.provider", "openai");
+        InternalAiConfigResponse cfg = service.internalConfig();
+        assertThat(cfg.image().provider()).isEqualTo("openai");
+        assertThat(cfg.image().model()).isNull();
+    }
+
+    @Test
+    void internalConfigOmitsImageWhenUnset() {
+        assertThat(service.internalConfig().image()).isNull();
+    }
+
+    @Test
     void autoTranscribeEnabled_defaultsTrueAndHonorsFalse() {
         when(repository.save(any(SystemSetting.class))).thenAnswer(inv -> {
             SystemSetting row = inv.getArgument(0);

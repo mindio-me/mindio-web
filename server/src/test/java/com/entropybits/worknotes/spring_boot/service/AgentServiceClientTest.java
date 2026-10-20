@@ -454,4 +454,14 @@ class AgentServiceClientTest {
         assertThat(listener.noteContentUpdatedNoteId).isEqualTo(9L);
         assertThat(listener.noteContentUpdatedData).containsEntry("op", "insert").containsEntry("blockId", "nb1");
     }
+
+    @Test
+    void shareCardBackground_surfacesStringDetailAsMessage() throws Exception {
+        AgentServiceClient c = serveInternal("/internal/share-card/background", 502,
+                "{\"detail\":\"image provider rejected the request\"}", null);
+
+        assertThatThrownBy(() -> c.shareCardBackground("t", "x", null))
+                .isInstanceOf(AgentCallException.class)
+                .hasMessage("image provider rejected the request");
+    }
 }

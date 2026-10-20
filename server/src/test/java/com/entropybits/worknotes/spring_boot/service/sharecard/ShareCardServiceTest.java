@@ -6,7 +6,13 @@ package com.entropybits.worknotes.spring_boot.service.sharecard;
 
 import com.entropybits.worknotes.spring_boot.ai.config.AiProperties;
 import com.entropybits.worknotes.spring_boot.ai.settings.AiSettingsService;
+import com.entropybits.worknotes.spring_boot.dto.FileResultVo;
+import com.entropybits.worknotes.spring_boot.dto.ShareCardBackgroundResponse;
 import com.entropybits.worknotes.spring_boot.dto.ShareCardResponse;
+import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
+import com.entropybits.worknotes.spring_boot.service.AgentCallException;
+import com.entropybits.worknotes.spring_boot.service.AgentServiceClient;
+import com.entropybits.worknotes.spring_boot.service.UploadService;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.User;
 import com.entropybits.worknotes.spring_boot.exception.UnauthorizedException;
@@ -20,7 +26,11 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ShareCardServiceTest {
@@ -28,6 +38,8 @@ class ShareCardServiceTest {
     NoteRepository noteRepository = mock(NoteRepository.class);
     UserRepository userRepository = mock(UserRepository.class);
     AiSettingsService aiSettings = mock(AiSettingsService.class);
+    AgentServiceClient agent = mock(AgentServiceClient.class);
+    UploadService uploadService = mock(UploadService.class);
     AiProperties props = new AiProperties();
     User owner = User.builder().id(1L).build();
 
@@ -39,7 +51,7 @@ class ShareCardServiceTest {
     }
 
     private ShareCardService service(boolean aiEnabled) {
-        return new ShareCardService(noteRepository, userRepository, aiSettings, aiEnabled);
+        return new ShareCardService(noteRepository, userRepository, aiSettings, agent, uploadService, aiEnabled);
     }
 
     @Test
@@ -100,5 +112,81 @@ class ShareCardServiceTest {
         when(noteRepository.findById(7L)).thenReturn(Optional.of(
                 Note.builder().id(7L).owner(User.builder().id(2L).build()).build()));
         assertThatThrownBy(() -> service(true).getCard(7L, "alice")).isInstanceOf(UnauthorizedException.class);
+    }
+
+    private void configureAvailable() {
+        when(aiSettings.imageConfig()).thenReturn(Map.of("ai.image.provider", "openai"));
+        props.getOpenai().setApiKey("k");
+    }
+
+    private Note ownedNote() {
+        Note n = Note.builder().id(3L).owner(owner).title("My title")
+                .content("<p>hello world</p>").contentType("richtext").build();
+        when(noteRepository.findById(3L)).thenReturn(Optional.of(n));
+        return n;
+    }
+
+    @Test
+    void generateBackgroundRejectsWhenDisabled() {
+        configureAvailable();
+        ownedNote();
+        assertThatThrownBy(() -> service(false).generateBackground(3L, "alice", null))
+                .isInstanceOf(BadRequestException.class);
+        verify(agent, never()).shareCardBackground(any(), any(), any());
+    }
+
+    @Test
+    void generateBackgroundRejectsWhenNotConfigured() {
+        ownedNote();
+        assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
+                .isInstanceOf(BadRequestException.class);
+        verify(agent, never()).shareCardBackground(any(), any(), any());
+    }
+
+    @Test
+    void generateBackgroundRejectsNonOwner() {
+        configureAvailable();
+        when(noteRepository.findById(3L)).thenReturn(Optional.of(
+                Note.builder().id(3L).owner(User.builder().id(2L).build()).build()));
+        assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
+                .isInstanceOf(UnauthorizedException.class);
+        verify(agent, never()).shareCardBackground(any(), any(), any());
+    }
+
+    @Test
+    void generateBackgroundSavesImageAndReturnsUrl() {
+        configureAvailable();
+        ownedNote();
+        when(agent.shareCardBackground(any(), any(), any())).thenReturn(
+                Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png"));
+        FileResultVo saved = new FileResultVo();
+        saved.setUrl("/api/uploads/x.jpg");
+        when(uploadService.base64Upload("data:image/png;base64,AAA", "share-card", 3)).thenReturn(saved);
+        ShareCardBackgroundResponse r = service(true).generateBackground(3L, "alice", "user prompt");
+        assertThat(r).isEqualTo(new ShareCardBackgroundResponse("p", "/api/uploads/x.jpg"));
+        verify(agent).shareCardBackground(anyString(), anyString(), org.mockito.ArgumentMatchers.eq("user prompt"));
+    }
+
+    @Test
+    void generateBackgroundPassesTitleAndPlainText() {
+        configureAvailable();
+        Note n = ownedNote();
+        when(agent.shareCardBackground(any(), any(), any())).thenReturn(
+                Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png"));
+        when(uploadService.base64Upload(anyString(), anyString(), any())).thenReturn(new FileResultVo());
+        service(true).generateBackground(3L, "alice", null);
+        verify(agent).shareCardBackground("My title", NotePlainText.extract(n, 1500), null);
+        assertThat(NotePlainText.extract(n, 1500)).isEqualTo("hello world");
+    }
+
+    @Test
+    void generateBackgroundSurfacesAgentDetail() {
+        configureAvailable();
+        ownedNote();
+        when(agent.shareCardBackground(any(), any(), any()))
+                .thenThrow(new AgentCallException("UNKNOWN", "image provider rejected the request"));
+        assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("image provider rejected the request");
     }
 }

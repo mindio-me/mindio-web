@@ -54,7 +54,7 @@ class AiSettingsControllerTest {
     void internalConfigLivesUnderInternalPathSoTheSharedTokenFilterGuardsIt() {
         assertThat(InternalAiConfigController.class.getAnnotation(RequestMapping.class).value())
                 .containsExactly("/internal");
-        InternalAiConfigResponse cfg = new InternalAiConfigResponse("openai", Map.of(), null);
+        InternalAiConfigResponse cfg = new InternalAiConfigResponse("openai", Map.of(), null, null);
         when(service.internalConfig()).thenReturn(cfg);
         assertThat(new InternalAiConfigController(service).aiConfig()).isSameAs(cfg);
     }

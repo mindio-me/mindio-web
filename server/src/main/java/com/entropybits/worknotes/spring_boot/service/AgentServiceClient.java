@@ -292,6 +292,15 @@ public class AgentServiceClient {
         return postInternal("/internal/audio-summarize", body, Duration.ofSeconds(1800));
     }
 
+    /** 笔记分享卡片：让 agents 生成背景图，返回 {prompt, imageBase64, mimeType}；生图较慢，超时 120 秒 */
+    public Map<String, Object> shareCardBackground(String title, String text, String prompt) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("title", title);
+        body.put("text", text);
+        body.put("prompt", prompt);
+        return postInternal("/internal/share-card/background", body, Duration.ofSeconds(120));
+    }
+
     /** 录音整理两个内部接口共用：连不上或 503 → AgentUnavailableException；其余错误 → AgentCallException */
     private Map<String, Object> postInternal(String path, Map<String, Object> body, Duration timeout) {
         HttpResponse<String> response;
@@ -338,6 +347,9 @@ public class AgentServiceClient {
                 Object message = d.get("message");
                 throw new AgentCallException(code == null ? "UNKNOWN" : code.toString(),
                         message == null ? "HTTP " + response.statusCode() : message.toString());
+            }
+            if (detail instanceof String d && !d.isBlank()) {
+                throw new AgentCallException("UNKNOWN", d);
             }
             throw new AgentCallException("UNKNOWN", "HTTP " + response.statusCode() + " " + response.body());
         }

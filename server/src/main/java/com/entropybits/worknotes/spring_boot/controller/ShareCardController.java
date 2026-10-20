@@ -5,6 +5,8 @@
 package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
+import com.entropybits.worknotes.spring_boot.dto.ShareCardBackgroundRequest;
+import com.entropybits.worknotes.spring_boot.dto.ShareCardBackgroundResponse;
 import com.entropybits.worknotes.spring_boot.dto.ShareCardResponse;
 import com.entropybits.worknotes.spring_boot.dto.ShareCardSaveRequest;
 import com.entropybits.worknotes.spring_boot.service.NoteService;
@@ -32,6 +34,17 @@ public class ShareCardController {
             @AuthenticationPrincipal UserDetails userDetails
     ) {
         return ResponseEntity.ok(shareCardService.getCard(id, userDetails.getUsername()));
+    }
+
+    /** AI 生成卡片背景图：存进上传目录并返回 URL，不改动笔记 */
+    @PostMapping("/{id}/share-card/background")
+    public ResponseEntity<ShareCardBackgroundResponse> generateBackground(
+            @PathVariable Long id,
+            @RequestBody(required = false) ShareCardBackgroundRequest request,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        String prompt = request == null ? null : request.prompt();
+        return ResponseEntity.ok(shareCardService.generateBackground(id, userDetails.getUsername(), prompt));
     }
 
     /** 保存卡片；body.publish=true 时同一请求里顺带公开笔记 */

@@ -13,7 +13,8 @@ import java.util.Map;
  * GET /internal/ai-config：只含界面里填过的值（Key 为解密后的原文），agents 拿去与自己的环境变量合并。
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public record InternalAiConfigResponse(String defaultProvider, Map<String, Provider> providers, Asr asr) {
+public record InternalAiConfigResponse(String defaultProvider, Map<String, Provider> providers, Asr asr,
+                                       Image image) {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Provider(String apiKey, String model, String baseUrl, String chatPath) {
@@ -28,6 +29,14 @@ public record InternalAiConfigResponse(String defaultProvider, Map<String, Provi
         @JsonIgnore
         public boolean isEmpty() {
             return appKey == null && accessKey == null;
+        }
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Image(String provider, String model) {
+        @JsonIgnore
+        public boolean isEmpty() {
+            return provider == null && model == null;
         }
     }
 }

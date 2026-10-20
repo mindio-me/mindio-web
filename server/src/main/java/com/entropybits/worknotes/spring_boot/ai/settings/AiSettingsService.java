@@ -122,7 +122,9 @@ public class AiSettingsService implements AiConfigSource {
             }
         }
         InternalAiConfigResponse.Asr asr = new InternalAiConfigResponse.Asr(s.get(ASR_APP_KEY), s.get(ASR_ACCESS_KEY));
-        return new InternalAiConfigResponse(s.get(DEFAULT_PROVIDER), providers, asr.isEmpty() ? null : asr);
+        InternalAiConfigResponse.Image image = new InternalAiConfigResponse.Image(s.get(IMAGE_PROVIDER), s.get(IMAGE_MODEL));
+        return new InternalAiConfigResponse(s.get(DEFAULT_PROVIDER), providers, asr.isEmpty() ? null : asr,
+                image.isEmpty() ? null : image);
     }
 
     /** 录音保存后是否自动转写：没有记录 = 默认开启，只有显式存了 "false" 才关闭 */
