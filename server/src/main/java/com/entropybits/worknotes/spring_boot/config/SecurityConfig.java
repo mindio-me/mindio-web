@@ -83,6 +83,7 @@ public class SecurityConfig {
                         // 允许访问公开笔记（使用更明确的路径匹配）
                         .requestMatchers("/v1/notes/public").permitAll()
                         .requestMatchers("/v1/notes/public/**").permitAll()
+                        .requestMatchers("/v1/share/**").permitAll()
                         // 允许访问公开项目
                         .requestMatchers("/v1/projects/public", "/v1/projects/featured", "/v1/projects/category/**").permitAll()
                         // 允许访问成就列表（仅公开列表接口，/my 和 /{id} 都需要登录，故不用通配符）

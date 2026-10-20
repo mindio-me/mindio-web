@@ -98,6 +98,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return path.startsWith("/v1/auth/") ||
                path.startsWith("/v1/integrations/feishu/oauth/callback") ||
                path.startsWith("/v1/notes/public") ||
+               path.startsWith("/v1/share/") ||
                path.startsWith("/v1/projects/public") ||
                path.startsWith("/v1/projects/featured") ||
                path.startsWith("/v1/resources") ||
