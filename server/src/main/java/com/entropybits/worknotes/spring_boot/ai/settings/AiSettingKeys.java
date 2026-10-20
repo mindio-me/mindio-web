@@ -22,6 +22,9 @@ public final class AiSettingKeys {
     public static final String ASR_APP_KEY = "asr.volcengine.app_key";
     public static final String ASR_ACCESS_KEY = "asr.volcengine.access_key";
     public static final String AUTO_TRANSCRIBE = "asr.auto_transcribe";
+    public static final String IMAGE_PROVIDER = "ai.image.provider";
+    public static final String IMAGE_MODEL = "ai.image.model";
+    public static final List<String> IMAGE_PROVIDERS = List.of("openai", "doubao");
 
     public static final String MISSING_API_KEY_MESSAGE = "请到 设置 → AI 服务 填写 API Key";
 
@@ -51,6 +54,8 @@ public final class AiSettingKeys {
         ordered.add(ASR_APP_KEY);
         ordered.add(ASR_ACCESS_KEY);
         ordered.add(AUTO_TRANSCRIBE);
+        ordered.add(IMAGE_PROVIDER);
+        ordered.add(IMAGE_MODEL);
         secrets.add(ASR_APP_KEY);
         secrets.add(ASR_ACCESS_KEY);
         ORDERED = List.copyOf(ordered);

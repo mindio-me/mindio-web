@@ -7,6 +7,7 @@ package com.entropybits.worknotes.spring_boot.service;
 
 import com.entropybits.worknotes.spring_boot.dto.NoteRequest;
 import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
+import com.entropybits.worknotes.spring_boot.dto.ShareCardSaveRequest;
 import com.entropybits.worknotes.spring_boot.entity.ContentChunk;
 import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.entity.NoteRevision;
@@ -329,6 +330,66 @@ public class NoteService {
         // 初始化懒加载集合后返回
         initializeLazyCollections(saved);
         return NoteResponse.fromEntity(saved);
+    }
+
+    private static final Set<String> SHARE_CARD_SOURCES = Set.of("upload", "ai", "gradient");
+
+    /**
+     * 保存笔记分享卡片；publish=true 时同一事务里把笔记设为公开（"确认公开"）
+     */
+    @Transactional
+    public NoteResponse saveShareCard(Long noteId, String username, ShareCardSaveRequest req) {
+        Note note = getNoteById(noteId);
+        User user = getUserByUsername(username);
+
+        if (!note.getOwner().getId().equals(user.getId())) {
+            throw new UnauthorizedException("无权限修改此笔记的分享卡片");
+        }
+        if (req.source() == null || !SHARE_CARD_SOURCES.contains(req.source())) {
+            throw new BadRequestException("不支持的卡片来源: " + req.source());
+        }
+        if (!isUploadsUrl(req.imageUrl())) {
+            throw new BadRequestException("卡片图片地址无效");
+        }
+        if (req.backgroundUrl() != null && !req.backgroundUrl().isBlank() && !isUploadsUrl(req.backgroundUrl())) {
+            throw new BadRequestException("卡片背景地址无效");
+        }
+        if (req.title() != null && req.title().length() > 200) {
+            throw new BadRequestException("卡片标题过长（最多 200 字）");
+        }
+        if (req.aiPrompt() != null && req.aiPrompt().length() > 2000) {
+            throw new BadRequestException("AI 提示词过长（最多 2000 字）");
+        }
+
+        boolean wasPublic = Boolean.TRUE.equals(note.getIsPublic());
+        note.setShareCardSource(req.source());
+        note.setShareCardImageUrl(req.imageUrl().trim());
+        note.setShareCardBgUrl(req.backgroundUrl());
+        note.setShareCardGradient(req.gradient());
+        note.setShareCardAiPrompt(req.aiPrompt());
+        note.setShareCardTitle(req.title());
+        // 渐变卡片没有图片内容，标题必须叠在上面
+        note.setShareCardOverlay("gradient".equals(req.source()) || Boolean.TRUE.equals(req.overlayTitle()));
+        if (req.publish()) {
+            note.setIsPublic(true);
+        }
+        Note saved = noteRepository.save(note);
+        // demo-en: reportNotePublished(saved, wasPublic) 挂在这里
+        initializeLazyCollections(saved);
+        return NoteResponse.fromEntity(saved);
+    }
+
+    /** 只接受路径里含 /uploads/ 的地址，拒绝外部站点图片 */
+    private static boolean isUploadsUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        try {
+            String path = java.net.URI.create(url.trim()).getPath();
+            return path != null && path.contains("/uploads/");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /** .mindio 导入后的 uid 引用（/workspace/notes/uid/:uid）点击时用：按当前用户 + uid 找本机笔记 id */

@@ -228,4 +228,23 @@ class AiSettingsServiceTest {
         service.update(Map.of("asr.auto_transcribe", "true"));
         assertThat(service.autoTranscribeEnabled()).isTrue();
     }
+
+    @Test
+    void acceptsImageProviderKeys() {
+        when(repository.save(any(SystemSetting.class))).thenAnswer(inv -> {
+            rows.add(inv.getArgument(0));
+            return inv.getArgument(0);
+        });
+        service.update(Map.of("ai.image.provider", "doubao"));
+        assertThat(service.imageConfig()).containsEntry("ai.image.provider", "doubao");
+        // image.* 键存在时 current()/view() 不能因此报错
+        assertThat(service.current().getProvider()).isEqualTo("anthropic");
+        assertThat(service.view().items()).anyMatch(i -> i.key().equals("ai.image.provider"));
+    }
+
+    @Test
+    void rejectsUnknownImageProvider() {
+        assertThatThrownBy(() -> service.update(Map.of("ai.image.provider", "midjourney")))
+                .isInstanceOf(BadRequestException.class);
+    }
 }

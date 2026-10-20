@@ -101,6 +101,10 @@ worknotes:
     max-file-size-mb: ${WORKNOTES_UPLOAD_MAX_FILE_SIZE_MB:500}
     max-image-size-mb: ${WORKNOTES_UPLOAD_MAX_IMAGE_SIZE_MB:20}
 
+  share-card:
+    # 分享卡片是否允许 AI 生成背景（部署开关；还需要在设置里配好生图服务商）
+    ai-enabled: ${WORKNOTES_SHARE_CARD_AI_ENABLED:true}
+
   frontend:
     # 前端基础地址（用于生成扫码二维码URL）
     base-url: ${WORKNOTES_FRONTEND_BASE_URL:http://localhost:10822}

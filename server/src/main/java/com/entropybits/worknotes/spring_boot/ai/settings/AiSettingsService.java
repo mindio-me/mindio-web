@@ -60,6 +60,10 @@ public class AiSettingsService implements AiConfigSource {
                 throw new BadRequestException("未知的配置项: " + key);
             }
         }
+        String imageProvider = changes.get(IMAGE_PROVIDER);
+        if (imageProvider != null && !imageProvider.isBlank() && !IMAGE_PROVIDERS.contains(imageProvider.trim())) {
+            throw new BadRequestException("不支持的生图服务: " + imageProvider);
+        }
         String provider = changes.get(DEFAULT_PROVIDER);
         if (provider != null && !provider.isBlank() && !PROVIDERS.contains(provider.trim())) {
             throw new BadRequestException("不支持的 AI 服务: " + provider);
@@ -124,6 +128,18 @@ public class AiSettingsService implements AiConfigSource {
     /** 录音保存后是否自动转写：没有记录 = 默认开启，只有显式存了 "false" 才关闭 */
     public boolean autoTranscribeEnabled() {
         return !"false".equalsIgnoreCase(stored().values().get(AUTO_TRANSCRIBE));
+    }
+
+    /** 库里存的生图配置（ai.image.provider / ai.image.model），没设的键不在返回值里 */
+    public Map<String, String> imageConfig() {
+        Map<String, String> s = stored().values();
+        Map<String, String> out = new LinkedHashMap<>();
+        for (String key : List.of(IMAGE_PROVIDER, IMAGE_MODEL)) {
+            if (s.get(key) != null) {
+                out.put(key, s.get(key));
+            }
+        }
+        return out;
     }
 
     private Stored stored() {
@@ -198,6 +214,8 @@ public class AiSettingsService implements AiConfigSource {
             cfg.setProvider(value);
         } else if (key.equals(EMBEDDING_MODEL)) {
             cfg.getEmbedding().setModel(value);
+        } else if (key.equals(IMAGE_PROVIDER) || key.equals(IMAGE_MODEL)) {
+            // 生图配置只存库，不进 AiProperties；见 imageConfig()
         } else if (key.startsWith("ai.")) {
             String[] parts = key.split("\\.");
             AiProperties.ProviderConfig c = providerOf(cfg, parts[1]);
@@ -215,7 +233,7 @@ public class AiSettingsService implements AiConfigSource {
     private static String envValue(AiProperties env, String key) {
         if (key.equals(DEFAULT_PROVIDER)) return env.getProvider();
         if (key.equals(EMBEDDING_MODEL)) return env.getEmbedding().getModel();
-        if (!key.startsWith("ai.")) return null;
+        if (!key.startsWith("ai.") || key.equals(IMAGE_PROVIDER) || key.equals(IMAGE_MODEL)) return null;
         String[] parts = key.split("\\.");
         AiProperties.ProviderConfig c = providerOf(env, parts[1]);
         return switch (parts[2]) {
