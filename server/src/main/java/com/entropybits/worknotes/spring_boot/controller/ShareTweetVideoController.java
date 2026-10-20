@@ -8,6 +8,7 @@ import com.entropybits.worknotes.spring_boot.entity.Note;
 import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.entropybits.worknotes.spring_boot.service.TweetPosterService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,7 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping("/v1/share")
 @RequiredArgsConstructor
+@Slf4j
 public class ShareTweetVideoController {
 
     private static final Pattern DIGITS = Pattern.compile("\\d{1,25}");
@@ -67,9 +69,11 @@ public class ShareTweetVideoController {
         Map<String, String> body = new HashMap<>();
         body.put("videoUrl", video == null ? null : video.videoUrl());
         body.put("aspectRatio", video == null ? null : video.aspectRatio());
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
-                .body(body);
+        // 取不到时别让浏览器缓存这次空结果（可能只是 X 瞬时失败），服务端自己有 60 秒的短缓存
+        CacheControl cc = video == null || video.videoUrl() == null
+                ? CacheControl.noStore()
+                : CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic();
+        return ResponseEntity.ok().cacheControl(cc).body(body);
     }
 
     private TweetPosterService.TweetVideo fetchCached(String id, String token) {
@@ -82,6 +86,7 @@ public class ShareTweetVideoController {
         try {
             video = tweetPosterService.fetchVideo(id, token);
         } catch (RuntimeException e) {
+            log.debug("tweet video fetch failed, tweetId={}: {}", id, e.toString());
             video = null;
         }
         if (cache.size() >= CACHE_MAX) {

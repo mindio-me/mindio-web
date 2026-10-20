@@ -115,6 +115,16 @@ class ShareTweetVideoControllerTest {
     }
 
     @Test
+    void missIsNotCachedByBrowsers() throws Exception {
+        when(tweets.fetchVideo(any(), any())).thenReturn(null);
+        mvc.perform(get("/v1/share/notes/1/tweet-video").param("id", "1234567890123").param("token", "t"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.videoUrl").doesNotExist())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Cache-Control", org.hamcrest.Matchers.containsString("no-store")));
+    }
+
+    @Test
     void nonDigitIdIsRejectedWithoutCallingX() throws Exception {
         mvc.perform(get("/v1/share/notes/1/tweet-video").param("id", "12.*").param("token", "t"))
                 .andExpect(status().isNotFound());
