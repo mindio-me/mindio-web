@@ -136,4 +136,20 @@ class NoteServiceShareCardTest {
                 req("upload", "https://evil.example/x.png", "T", null, false)))
                 .isInstanceOf(BadRequestException.class);
     }
+
+    @Test
+    void rejectsImageUrlLongerThan500() {
+        note(false);
+        assertThatThrownBy(() -> service.saveShareCard(42L, "alice",
+                req("upload", IMG + "?" + "x".repeat(500), "T", null, false)))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void rejectsBackgroundUrlLongerThan500() {
+        note(false);
+        ShareCardSaveRequest r = new ShareCardSaveRequest("ai", IMG, IMG + "?" + "x".repeat(500), 3, "p", "T", false, false);
+        assertThatThrownBy(() -> service.saveShareCard(42L, "alice", r))
+                .isInstanceOf(BadRequestException.class);
+    }
 }

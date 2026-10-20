@@ -354,6 +354,10 @@ public class NoteService {
         if (req.backgroundUrl() != null && !req.backgroundUrl().isBlank() && !isUploadsUrl(req.backgroundUrl())) {
             throw new BadRequestException("卡片背景地址无效");
         }
+        if (req.imageUrl().trim().length() > 500
+                || (req.backgroundUrl() != null && req.backgroundUrl().length() > 500)) {
+            throw new BadRequestException("卡片图片地址过长（最多 500 字）");
+        }
         if (req.title() != null && req.title().length() > 200) {
             throw new BadRequestException("卡片标题过长（最多 200 字）");
         }
