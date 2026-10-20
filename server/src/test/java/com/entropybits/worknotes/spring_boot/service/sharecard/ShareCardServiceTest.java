@@ -35,11 +35,23 @@ import static org.mockito.Mockito.when;
 
 class ShareCardServiceTest {
 
+    /** 记录"当前是否在事务里"，用来证明 agent 调用和上传不在事务内 */
+    static class TrackingTxManager extends org.springframework.transaction.support.AbstractPlatformTransactionManager {
+        boolean active;
+        int begun;
+
+        @Override protected Object doGetTransaction() { return new Object(); }
+        @Override protected void doBegin(Object tx, org.springframework.transaction.TransactionDefinition d) { active = true; begun++; }
+        @Override protected void doCommit(org.springframework.transaction.support.DefaultTransactionStatus s) { active = false; }
+        @Override protected void doRollback(org.springframework.transaction.support.DefaultTransactionStatus s) { active = false; }
+    }
+
     NoteRepository noteRepository = mock(NoteRepository.class);
     UserRepository userRepository = mock(UserRepository.class);
     AiSettingsService aiSettings = mock(AiSettingsService.class);
     AgentServiceClient agent = mock(AgentServiceClient.class);
     UploadService uploadService = mock(UploadService.class);
+    TrackingTxManager txManager = new TrackingTxManager();
     AiProperties props = new AiProperties();
     User owner = User.builder().id(1L).build();
 
@@ -51,7 +63,7 @@ class ShareCardServiceTest {
     }
 
     private ShareCardService service(boolean aiEnabled) {
-        return new ShareCardService(noteRepository, userRepository, aiSettings, agent, uploadService, aiEnabled);
+        return new ShareCardService(noteRepository, userRepository, aiSettings, agent, uploadService, txManager, aiEnabled);
     }
 
     @Test
@@ -188,5 +200,25 @@ class ShareCardServiceTest {
         assertThatThrownBy(() -> service(true).generateBackground(3L, "alice", null))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("image provider rejected the request");
+    }
+
+    @Test
+    void generateBackgroundCallsAgentAndUploadOutsideTransaction() {
+        configureAvailable();
+        ownedNote();
+        java.util.concurrent.atomic.AtomicBoolean agentInTx = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicBoolean uploadInTx = new java.util.concurrent.atomic.AtomicBoolean(true);
+        when(agent.shareCardBackground(any(), any(), any())).thenAnswer(inv -> {
+            agentInTx.set(txManager.active);
+            return Map.of("prompt", "p", "imageBase64", "AAA", "mimeType", "image/png");
+        });
+        when(uploadService.base64Upload(anyString(), anyString(), any())).thenAnswer(inv -> {
+            uploadInTx.set(txManager.active);
+            return new FileResultVo();
+        });
+        service(true).generateBackground(3L, "alice", null);
+        assertThat(txManager.begun).isEqualTo(1);
+        assertThat(agentInTx).isFalse();
+        assertThat(uploadInTx).isFalse();
     }
 }

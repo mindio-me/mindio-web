@@ -9,6 +9,8 @@ import com.entropybits.worknotes.spring_boot.integration.wechat.EditorJsToHtmlCo
 import com.entropybits.worknotes.spring_boot.integration.wechat.MarkdownToHtmlConverter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jsoup.Jsoup;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
@@ -19,6 +21,8 @@ public final class NotePlainText {
 
     private static final EditorJsToHtmlConverter EDITOR_JS = new EditorJsToHtmlConverter(new ObjectMapper());
     private static final MarkdownToHtmlConverter MARKDOWN = new MarkdownToHtmlConverter();
+
+    private static final Logger log = LoggerFactory.getLogger(NotePlainText.class);
 
     private NotePlainText() {
     }
@@ -39,6 +43,7 @@ public final class NotePlainText {
                 html = content;
             }
         } catch (Exception e) {
+            log.debug("Plain-text conversion failed, falling back to raw content", e);
             html = content;
         }
         String text = Jsoup.parse(html).text().strip();

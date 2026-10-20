@@ -23,7 +23,9 @@ import com.entropybits.worknotes.spring_boot.service.AgentUnavailableException;
 import com.entropybits.worknotes.spring_boot.service.UploadService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Map;
 
@@ -40,6 +42,7 @@ public class ShareCardService {
     private final AiSettingsService aiSettingsService;
     private final AgentServiceClient agentServiceClient;
     private final UploadService uploadService;
+    private final TransactionTemplate readTx;
     private final boolean aiEnabled;
 
     public ShareCardService(NoteRepository noteRepository,
@@ -47,25 +50,31 @@ public class ShareCardService {
                             AiSettingsService aiSettingsService,
                             AgentServiceClient agentServiceClient,
                             UploadService uploadService,
+                            PlatformTransactionManager transactionManager,
                             @Value("${worknotes.share-card.ai-enabled:true}") boolean aiEnabled) {
         this.noteRepository = noteRepository;
         this.userRepository = userRepository;
         this.aiSettingsService = aiSettingsService;
         this.agentServiceClient = agentServiceClient;
         this.uploadService = uploadService;
+        this.readTx = new TransactionTemplate(transactionManager);
+        this.readTx.setReadOnly(true);
         this.aiEnabled = aiEnabled;
     }
 
     /** 调 agents 生成背景图并存进上传目录；只返回 URL，不改动笔记（保存由 PUT 完成） */
-    @Transactional(readOnly = true)
     public ShareCardBackgroundResponse generateBackground(Long noteId, String username, String prompt) {
-        Note note = noteRepository.findById(noteId)
-                .orElseThrow(() -> new ResourceNotFoundException("笔记", "id", noteId));
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("用户", "username", username));
-        if (!note.getOwner().getId().equals(user.getId())) {
-            throw new UnauthorizedException("无权限为此笔记生成分享卡片");
-        }
+        // 数据库读取放进短事务（owner 是懒加载）；120 秒的生图调用和上传都不占着连接
+        String[] titleAndText = readTx.execute(status -> {
+            Note note = noteRepository.findById(noteId)
+                    .orElseThrow(() -> new ResourceNotFoundException("笔记", "id", noteId));
+            User user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new ResourceNotFoundException("用户", "username", username));
+            if (!note.getOwner().getId().equals(user.getId())) {
+                throw new UnauthorizedException("无权限为此笔记生成分享卡片");
+            }
+            return new String[]{note.getTitle(), NotePlainText.extract(note, TEXT_MAX_CHARS)};
+        });
         String availability = aiAvailability();
         if ("disabled".equals(availability)) {
             throw new BadRequestException("AI 生成背景功能已被关闭");
@@ -75,8 +84,7 @@ public class ShareCardService {
         }
         Map<String, Object> result;
         try {
-            result = agentServiceClient.shareCardBackground(
-                    note.getTitle(), NotePlainText.extract(note, TEXT_MAX_CHARS), prompt);
+            result = agentServiceClient.shareCardBackground(titleAndText[0], titleAndText[1], prompt);
         } catch (AgentCallException | AgentUnavailableException e) {
             throw new BadRequestException(e.getMessage());
         }
