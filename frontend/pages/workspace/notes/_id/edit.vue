@@ -147,11 +147,21 @@
         <el-button @click="uploadDialogVisible = false">关闭</el-button>
       </span>
     </el-dialog>
+
+    <ShareCardDialog
+      :visible.sync="shareCardVisible"
+      :note="shareCardNote"
+      @published="onShareCardPublished"
+      @update:visible="onShareCardVisibleChange"
+    />
   </div>
 </template>
 
 <script>
 export default {
+  components: {
+    ShareCardDialog: () => import('~/components/ShareCardDialog.vue')
+  },
   name: 'NoteEditPage',
   layout: 'workspace',
   middleware: 'auth',
@@ -166,6 +176,7 @@ export default {
       const note = noteRes.data
       return {
         noteId: params.id,
+        originalIsPublic: !!note.isPublic,
         tags: tagsRes.data || [],
         projects: projectsRes.data || [],
         noteForm: {
@@ -193,6 +204,10 @@ export default {
       editor: null,
       uploadDialogVisible: false,
       noteId: null,
+      originalIsPublic: false,
+      shareCardVisible: false,
+      shareCardNote: { id: null, title: '', isPublic: false },
+      shareCardPublished: false,
       tags: [],
       projects: [],
       newTagName: '',
@@ -403,8 +418,17 @@ export default {
 
         this.saving = true
         try {
-          await this.$axios.put(`/v1/notes/${this.noteId}`, this.noteForm)
+          // 原本私密、本次勾选公开：先以私密保存，再走分享卡片弹窗，确认后才真正公开
+          const makingPublic = this.noteForm.isPublic && !this.originalIsPublic
+          const payload = makingPublic ? { ...this.noteForm, isPublic: false } : this.noteForm
+          const { data } = await this.$axios.put(`/v1/notes/${this.noteId}`, payload)
           this.$message.success('笔记更新成功')
+          if (makingPublic) {
+            this.shareCardPublished = false
+            this.shareCardNote = { id: this.noteId, title: data?.title || this.noteForm.title, isPublic: false }
+            this.shareCardVisible = true
+            return
+          }
           this.$router.push('/workspace/notes')
         } catch (error) {
           const message = error.response?.data?.message || '保存失败'
@@ -413,6 +437,17 @@ export default {
           this.saving = false
         }
       })
+    },
+    onShareCardPublished() {
+      this.shareCardPublished = true
+      this.$router.push('/workspace/notes')
+    },
+    onShareCardVisibleChange(visible) {
+      // 取消 / 关闭弹窗：笔记保持私密，照常跳转
+      if (!visible && !this.shareCardPublished) {
+        this.$message.info(this.$t('shareCard.savedPrivate'))
+        this.$router.push('/workspace/notes')
+      }
     }
   }
 }

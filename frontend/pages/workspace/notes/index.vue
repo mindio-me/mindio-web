@@ -339,6 +339,10 @@
                       <i :class="activeNote.isPublic ? 'el-icon-lock' : 'el-icon-unlock'"></i>
                       {{ activeNote.isPublic ? $t('workspace.notes.makePrivate') : $t('workspace.notes.makePublic') }}
                     </el-dropdown-item>
+                    <el-dropdown-item v-if="activeNote.isPublic" command="share-card">
+                      <i class="el-icon-picture-outline"></i>
+                      {{ $t('workspace.notes.shareCard') }}
+                    </el-dropdown-item>
                     <el-dropdown-item v-if="isEditorjsNote && this.$i18n.locale === 'zh-CN'" command="translate-english">
                       <i class="el-icon-s-opportunity" style="margin-right:4px;"></i>
                       {{ $t('workspace.notes.translate') }}
@@ -698,6 +702,13 @@
       </span>
     </el-dialog>
 
+    <ShareCardDialog
+      :visible.sync="shareCardVisible"
+      :note="shareCardNote"
+      @published="onShareCardPublished"
+      @saved="onShareCardSaved"
+    />
+
     <el-dialog :title="$t('workspace.notes.viewOriginalMarkdown')" :visible.sync="originalDialog.visible" width="720px" append-to-body>
       <p v-if="originalDialog.convertedAt" style="margin:0 0 8px;color:var(--text-muted, #999);font-size:12px;">
         {{ $t('workspace.notes.originalMarkdownConvertedAt', { time: String(originalDialog.convertedAt).replace('T', ' ').slice(0, 16) }) }}
@@ -737,7 +748,8 @@ export default {
     ImportNoteDialog: () => import('~/components/ImportNoteDialog.vue'),
     NoteImportDialog: () => import('~/components/NoteImportDialog.vue'),
     TranslationDialog: () => import('~/components/TranslationDialog.vue'),
-    LinkedinShareDialog: () => import('~/components/LinkedinShareDialog.vue')
+    LinkedinShareDialog: () => import('~/components/LinkedinShareDialog.vue'),
+    ShareCardDialog: () => import('~/components/ShareCardDialog.vue')
   },
   async asyncData({ $axios }) {
     try {
@@ -764,6 +776,9 @@ export default {
   },
   data() {
     return {
+      // 分享卡片弹窗（公开笔记 / 编辑分享卡片）
+      shareCardVisible: false,
+      shareCardNote: { id: null, title: '', isPublic: false },
       // 笔记备份：导入 .mindio
       noteImportDialogVisible: false,
       noteImportFile: null,
@@ -2140,6 +2155,7 @@ export default {
     },
     handleNoteAction(command, note) {
       if (command === 'toggle-public') this.toggleNotePublic(note)
+      else if (command === 'share-card') this.openShareCard(note)
       else if (command === 'delete') this.deleteNote(note)
       else if (command === 'publish-wechat') this.openWechatPublish(note)
       else if (command === 'translate-english') this.openTranslationDialog(note)
@@ -2323,28 +2339,51 @@ export default {
           await this.saveToBackend()
         }
         
-        // 调用后端 API 切换公开状态
+        // 当前私密 -> 公开：必须经过分享卡片弹窗，确认后才真正公开
+        if (!this.activeNote.isPublic) {
+          this.openShareCard(note)
+          return
+        }
+
+        // 取消公开：调用后端 API 切换公开状态
         const response = await this.$axios.patch(`/v1/notes/${note.id}/toggle-public`)
         
         // 从后端响应中获取更新后的状态
         const newIsPublic = response.data?.isPublic ?? !this.activeNote.isPublic
-        
-        // 更新本地状态
-        this.activeNote.isPublic = newIsPublic
-        
-        // 更新列表中的笔记状态
-        const listNote = this.notes.find(n => n.id === note.id)
-        if (listNote) {
-          listNote.isPublic = newIsPublic
-        }
-        
-        // 刷新最近笔记列表
-        await this.loadRecentNotes()
-        
-        this.$message.success(newIsPublic ? this.$t('workspace.notes.notePublished') : this.$t('workspace.notes.noteUnpublished'))
+        await this.applyNotePublicState(note.id, newIsPublic)
       } catch (error) {
         this.$message.error(this.$t('workspace.notes.togglePublicFailed') + (error.response?.data?.message || error.message))
       }
+    },
+    async applyNotePublicState(noteId, newIsPublic) {
+      // 更新本地状态
+      if (this.activeNote && this.activeNote.id === noteId) this.activeNote.isPublic = newIsPublic
+
+      // 更新列表中的笔记状态
+      const listNote = this.notes.find(n => n.id === noteId)
+      if (listNote) {
+        listNote.isPublic = newIsPublic
+      }
+
+      // 刷新最近笔记列表
+      await this.loadRecentNotes()
+
+      this.$message.success(newIsPublic ? this.$t('workspace.notes.notePublished') : this.$t('workspace.notes.noteUnpublished'))
+    },
+    openShareCard(note) {
+      if (!note || !note.id) return
+      this.shareCardNote = { id: note.id, title: note.title || '', isPublic: !!this.activeNote.isPublic }
+      this.shareCardVisible = true
+    },
+    async onShareCardPublished(noteResponse) {
+      try {
+        await this.applyNotePublicState(this.shareCardNote.id, noteResponse?.isPublic ?? true)
+      } catch (error) {
+        this.$message.error(this.$t('workspace.notes.togglePublicFailed') + (error.response?.data?.message || error.message))
+      }
+    },
+    onShareCardSaved() {
+      // 编辑模式：弹窗自己已提示保存成功，笔记公开状态不变
     },
     deleteNote(note) {
       this.$confirm(this.$t('workspace.notes.confirmDeleteNote', { title: note.title }), this.$t('workspace.notes.confirmTitle'), {

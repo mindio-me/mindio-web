@@ -72,6 +72,25 @@
               <div class="hint-text">{{ $t('aiSettings.autoTranscribeTip') }}</div>
             </el-form-item>
           </el-collapse-item>
+
+          <el-collapse-item name="image" :title="$t('aiSettings.imageTitle')">
+            <p class="section-tip">{{ $t('aiSettings.imageTip') }}</p>
+            <el-form-item :label="$t('aiSettings.imageProvider')">
+              <el-select v-model="form['ai.image.provider']" style="width: 100%">
+                <el-option value="" :label="$t('aiSettings.imageProviderNone')" />
+                <el-option value="openai" label="OpenAI" />
+                <el-option value="doubao" label="豆包 / Doubao" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="$t('aiSettings.imageModel')">
+              <el-input
+                v-model="form['ai.image.model']"
+                :placeholder="imageModelPlaceholder"
+                :disabled="!form['ai.image.provider']"
+                clearable
+              />
+            </el-form-item>
+          </el-collapse-item>
         </el-collapse>
 
         <div class="inline-actions">
@@ -118,6 +137,11 @@ const PROVIDERS = [
   { id: 'doubao', label: '豆包 / Doubao' }
 ]
 
+const IMAGE_DEFAULT_MODELS = {
+  openai: 'gpt-image-1',
+  doubao: 'doubao-seedream-4-0-250828'
+}
+
 export default {
   name: 'AiSettingsCard',
   components: { AiSettingSecret },
@@ -131,6 +155,11 @@ export default {
       form: {},
       openSections: [],
       providers: PROVIDERS
+    }
+  },
+  computed: {
+    imageModelPlaceholder() {
+      return IMAGE_DEFAULT_MODELS[this.form['ai.image.provider']] || ''
     }
   },
   mounted() {
