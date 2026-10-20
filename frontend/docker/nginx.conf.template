@@ -1,7 +1,22 @@
+# 链接预览爬虫（只收纯爬虫，不含微信/飞书/QQ 等真人使用的内置浏览器）
+# 命中后 /notes/{id} 改走后端的 Open Graph meta 页，见 deploy/DEV.md 第⑥步
+map $http_user_agent $mindio_link_preview_bot {
+    default 0;
+    "~*(twitterbot|linkedinbot|redditbot|facebookexternalhit|facebookcatalog|slackbot|slack-imgproxy|discordbot|telegrambot|whatsapp|applebot|skypeuripreview|embedly|pinterestbot|mastodon)" 1;
+}
+
 server {
     listen 80;
     root /usr/share/nginx/html;
     index index.html;
+
+    # 笔记详情页：链接预览爬虫改走后端 meta 页，真人照常走 SPA
+    location ~ "^/notes/(\d+)/?$" {
+        if ($mindio_link_preview_bot) {
+            rewrite "^/notes/(\d+)/?$" /api/v1/share/notes/$1 last;
+        }
+        try_files $uri $uri/ /index.html;
+    }
 
     location / {
         try_files $uri $uri/ /index.html;
@@ -17,6 +32,8 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_read_timeout 300s;
         # 不小于后端上传上限（WORKNOTES_UPLOAD_MAX_FILE_SIZE_MB，默认 500MB），否则长录音会被这里 413 拦掉
         client_max_body_size 600M;
