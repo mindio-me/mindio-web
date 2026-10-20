@@ -2372,7 +2372,7 @@ export default {
     },
     openShareCard(note) {
       if (!note || !note.id) return
-      this.shareCardNote = { id: note.id, title: note.title || '', isPublic: !!this.activeNote.isPublic }
+      this.shareCardNote = { id: note.id, title: note.title || '', isPublic: !!note.isPublic }
       this.shareCardVisible = true
     },
     async onShareCardPublished(noteResponse) {

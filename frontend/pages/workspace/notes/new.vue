@@ -98,11 +98,21 @@
         </el-form-item>
       </el-form>
     </el-card>
+
+    <ShareCardDialog
+      :visible.sync="shareCardVisible"
+      :note="shareCardNote"
+      @published="onShareCardPublished"
+      @update:visible="onShareCardVisibleChange"
+    />
   </div>
 </template>
 
 <script>
 export default {
+  components: {
+    ShareCardDialog: () => import('~/components/ShareCardDialog.vue')
+  },
   name: 'NoteNewPage',
   async asyncData({ $axios }) {
     try {
@@ -119,6 +129,9 @@ export default {
   data() {
     return {
       saving: false,
+      shareCardVisible: false,
+      shareCardNote: { id: null, title: '', isPublic: false },
+      shareCardPublished: false,
       editor: null,
       tags: [],
       newTagName: '',
@@ -238,8 +251,17 @@ export default {
 
         this.saving = true
         try {
-          await this.$axios.post('/v1/notes', this.noteForm)
+          // 勾选公开：先以私密创建，再走分享卡片弹窗，确认后才真正公开
+          const makingPublic = !!this.noteForm.isPublic
+          const payload = makingPublic ? { ...this.noteForm, isPublic: false } : this.noteForm
+          const { data } = await this.$axios.post('/v1/notes', payload)
           this.$message.success('笔记创建成功')
+          if (makingPublic && data && data.id) {
+            this.shareCardPublished = false
+            this.shareCardNote = { id: data.id, title: data.title || this.noteForm.title, isPublic: false }
+            this.shareCardVisible = true
+            return
+          }
           this.$router.push('/notes')
         } catch (error) {
           const message = error.response?.data?.message || '保存失败'
@@ -248,6 +270,17 @@ export default {
           this.saving = false
         }
       })
+    },
+    onShareCardPublished() {
+      this.shareCardPublished = true
+      this.$router.push('/notes')
+    },
+    onShareCardVisibleChange(visible) {
+      // 取消 / 关闭弹窗：笔记保持私密，照常跳转
+      if (!visible && !this.shareCardPublished) {
+        this.$message.info(this.$t('shareCard.savedPrivate'))
+        this.$router.push('/notes')
+      }
     }
   }
 }
