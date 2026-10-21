@@ -496,7 +496,9 @@ export default {
           { default: Marker },
           { default: InlineCode },
           { default: StrikethroughTool },
-          { default: MathTool }
+          { default: MathTool },
+          { default: AudioTool },
+          { default: RecordTool }
         ] = await Promise.all([
           import('@editorjs/editorjs'),
           import('@editorjs/header'),
@@ -517,7 +519,9 @@ export default {
           import('@editorjs/marker'),
           import('@editorjs/inline-code'),
           import('~/utils/editorjsStrikethroughTool'),
-          import('~/utils/editorjsMathTool')
+          import('~/utils/editorjsMathTool'),
+          import('~/utils/editorjsAudioTool'),
+          import('~/utils/editorjsRecordTool')
         ])
 
         // 解析笔记内容
@@ -557,6 +561,10 @@ export default {
             checklist: { class: Checklist, inlineToolbar: false },
             warning: { class: Warning, inlineToolbar: false },
             linkTool: { class: LinkTool },
+            // 音频/录音块：只读时显示播放器和块里存的文字稿/摘要（访客匿名，不加载需要登录的转写记录）；
+            // 注册名要和编辑器（editorjsHost）一致，否则这两类块在公开页整块不显示
+            audio: { class: AudioTool },
+            audioRecord: { class: RecordTool },
             attaches: {
               class: AttachesTool,
               config: {
@@ -1499,8 +1507,9 @@ export default {
   .note-title {
     margin: 0;
     color: var(--text-color);
-    font-size: clamp(38px, 7vw, 72px);
-    line-height: 1;
+    // 标题只需比正文一级标题（2em × 18px = 36px）大一档：越大越占首屏高度
+    font-size: clamp(30px, 4vw, 40px);
+    line-height: 1.2;
     letter-spacing: 0;
     overflow-wrap: anywhere;
   }
@@ -1842,8 +1851,9 @@ export default {
       display: none;
     }
 
+    // 窄屏正文 16px，一级标题 32px
     .note-title {
-      font-size: 40px;
+      font-size: 34px;
     }
 
     .rich-content,
