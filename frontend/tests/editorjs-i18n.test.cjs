@@ -21,7 +21,8 @@ const TOOLS = {
   'utils/editorjsTimelineTool.js': ['tools', 'timeline'],
   'utils/editorjs-markdown-block.js': ['tools', 'markdown'],
   'utils/editorjsMathTool.js': ['tools', 'math'],
-  'utils/editorjsCodeWrapTune.js': ['blockTunes', 'codeWrap']
+  'utils/editorjsCodeWrapTune.js': ['blockTunes', 'codeWrap'],
+  'utils/editorjsImageCopy.js': ['blockTunes', 'imageCopy']
 }
 
 // 抓 _t('...') / _t("...") 以及灯箱里的 t('...')，三元表达式里的两个分支都要抓到

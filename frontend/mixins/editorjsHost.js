@@ -5,6 +5,7 @@
 
 import { createEditorImageResizer } from '~/utils/editorjsImageResize'
 import { clipboardMayContainImage, getClipboardImagePayload, uploadClipboardImage } from '~/utils/clipboardImage'
+import { parseImageCopyMarker } from '~/utils/editorjsImageCopy'
 import { confirmDiscardEdits } from '~/utils/audioTranscriptionStore'
 import { tweetSyndicationToken } from '~/utils/videoEmbedResolver'
 import { editorjsI18nConfig } from '~/utils/editorjsI18n'
@@ -57,7 +58,7 @@ export default {
         { default: Marker }, { default: Checklist }, { default: Warning }, { default: LinkTool }, { default: AttachesTool }, { default: MarkdownBlock },
         { default: VideoTool }, { default: EmbedVideoTool }, { default: AudioTool },
         { default: RecordTool },
-        { default: CodeWrapTune }, { default: Undo },
+        { default: CodeWrapTune }, { default: ImageCopyTune }, { default: Undo },
         { default: ReferencesTool }, { default: GalleryTool }, { default: TimelineTool }, { default: MathTool }, { default: StrikethroughTool }, { default: SuperscriptTool }
       ] = await Promise.all([
         import('@editorjs/editorjs'), import('@editorjs/header'), import('@editorjs/list'),
@@ -70,7 +71,7 @@ export default {
         import('~/utils/editorjsVideoTool'), import('~/utils/editorjsEmbedVideoTool'),
         import('~/utils/editorjsAudioTool'),
         import('~/utils/editorjsRecordTool'),
-        import('~/utils/editorjsCodeWrapTune'),
+        import('~/utils/editorjsCodeWrapTune'), import('~/utils/editorjsImageCopy'),
         import('editorjs-undo'),
         import('~/utils/editorjsReferencesTool'), import('~/utils/editorjsGalleryTool'), import('~/utils/editorjsTimelineTool'), import('~/utils/editorjsMathTool'), import('~/utils/editorjsStrikethroughTool'), import('~/utils/editorjsSuperscriptTool')
       ])
@@ -110,8 +111,10 @@ export default {
         quote: { class: Quote, inlineToolbar: true, config: { quotePlaceholder: ph.quote, captionPlaceholder: ph.quoteCaption }, shortcut: 'CMD+SHIFT+O' },
         table: { class: Table, inlineToolbar: true, config: { rows: 3, cols: 3, withHeadings: true } },
         inlineCode: { class: InlineCode, shortcut: 'CMD+SHIFT+M' },
+        imageCopy: { class: ImageCopyTune, config: { notify: (type, message) => this.$message[type](message) } },
         image: {
           class: ImageTool,
+          tunes: ['imageCopy'],
           config: {
             features: { caption: 'optional' },
             uploader: {
@@ -386,6 +389,14 @@ export default {
 
       const handler = async (e) => {
         const clipboardData = e.clipboardData
+        const copiedImage = clipboardData && parseImageCopyMarker(clipboardData.getData('text/html'))
+        if (copiedImage) {
+          e.stopPropagation()
+          e.preventDefault()
+          await this.insertCopiedImageBlock(copiedImage)
+          if (onPasted) onPasted()
+          return
+        }
         if (!clipboardMayContainImage(clipboardData)) return
 
         e.stopPropagation()
@@ -425,6 +436,19 @@ export default {
 
       container.addEventListener('paste', handler, true)
       this._imagePasteHandler = () => container.removeEventListener('paste', handler, true)
+    },
+
+    // 站内「复制图片」粘贴回来：直接引用原文件，说明/边框/背景/拉伸/宽度一并带过来
+    async insertCopiedImageBlock(data) {
+      const { widthPercent, ...imageData } = data
+      const block = await this.editor.blocks.insert('image', imageData)
+      if (!widthPercent || !block) return
+      // 宽度不在 ImageTool 的数据里，由 imageResizer 按 DOM 宽度在保存时回写；它给新图片按序号套旧宽度
+      // 的 MutationObserver 回调先于下一帧执行，这里等一帧再写，保证以复制来的宽度为准
+      requestAnimationFrame(() => {
+        const el = block.holder && block.holder.querySelector('.image-tool__image')
+        if (el) el.style.width = widthPercent + '%'
+      })
     },
 
     setupCodeBlockAutoResizeHost(container) {
