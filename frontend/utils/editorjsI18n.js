@@ -90,7 +90,10 @@ const ZH_MESSAGES = {
     embed: {
       'Paste a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video link...': '粘贴 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频链接...',
       Embed: '嵌入',
-      "Can't recognize this link. Paste a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video URL": '无法识别链接，请粘贴 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频地址'
+      "Can't recognize this link. Paste a YouTube / Bilibili / Vimeo / Douyin / X (Twitter) video URL": '无法识别链接，请粘贴 YouTube / Bilibili / Vimeo / 抖音 / X(Twitter) 视频地址',
+      // 推文在原位播放 mp4 时的加载遮罩（editorjsMediaLightbox 的 attachVideoLoading）
+      'Loading video...': '视频加载中...',
+      'Failed to load video': '视频加载失败'
     },
     references: {
       '+ Add reference': '+ 添加资料',

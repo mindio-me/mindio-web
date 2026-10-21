@@ -22,8 +22,8 @@ function createFrame(aspectRatio) {
  * video.twimg.com 有防盗链：带别的站点的 Referer 会 403，不带 Referer 正常返回。<video> 元素没有
  * referrerpolicy 属性，所以把播放器放进一个 srcdoc 内嵌页，在里面声明 no-referrer。
  */
-function createNoReferrerVideo(videoUrl) {
-  const iframe = createEl('iframe', 'media-lightbox__media', { allowFullscreen: true })
+export function createNoReferrerVideo(videoUrl, className = 'media-lightbox__media') {
+  const iframe = createEl('iframe', className, { allowFullscreen: true })
   iframe.setAttribute('allow', 'autoplay; fullscreen')
   iframe.srcdoc = '<!doctype html><meta name="referrer" content="no-referrer">' +
     '<style>html,body{margin:0;height:100%;background:#000}video{display:block;width:100%;height:100%}</style>' +
@@ -34,13 +34,16 @@ function createNoReferrerVideo(videoUrl) {
 /**
  * 长视频的 mp4 开头有几 MB 的索引，网络慢时要等很久才出第一帧，期间盖一层封面加"加载中"。
  * srcdoc 内嵌页和本页同源，可以直接监听里面的 <video>（内嵌页继承本页 CSP，不能放内联脚本）。
+ * prefix 是样式类名前缀：弹窗用 media-lightbox，单个嵌入推文在原位播放时用 embed-video-tool。
+ * iframe 传 null 时只盖上遮罩（还在取视频直链），返回遮罩，由调用方移除。
  */
-function attachVideoLoading(frame, iframe, posterUrl, t) {
-  const overlay = createEl('div', 'media-lightbox__video-loading')
+export function attachVideoLoading(frame, iframe, posterUrl, t, prefix = 'media-lightbox') {
+  const overlay = createEl('div', `${prefix}__video-loading`)
   if (posterUrl) overlay.style.backgroundImage = `url(${posterUrl})`
-  const hint = createEl('span', 'media-lightbox__video-loading-hint', { textContent: t('Loading video...') })
-  overlay.append(createEl('span', 'media-lightbox__spinner'), hint)
+  const hint = createEl('span', `${prefix}__video-loading-hint`, { textContent: t('Loading video...') })
+  overlay.append(createEl('span', `${prefix}__spinner`), hint)
   frame.appendChild(overlay)
+  if (!iframe) return overlay
   iframe.addEventListener('load', () => {
     const video = iframe.contentDocument && iframe.contentDocument.querySelector('video')
     if (!video) return
@@ -54,6 +57,7 @@ function attachVideoLoading(frame, iframe, posterUrl, t) {
       hint.textContent = t('Failed to load video')
     }, { once: true })
   })
+  return overlay
 }
 
 /**

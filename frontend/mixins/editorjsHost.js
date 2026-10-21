@@ -102,6 +102,30 @@ export default {
         : null
       const ph = options.placeholders
 
+      // X 推文封面浏览器跨域拿不到，经后端转一手；失败返回 null，退回通用占位图（画廊和单个嵌入推文共用）
+      const fetchTweetPoster = async (tweetId) => {
+        try {
+          const res = await this.$axios.get('/v1/embed/tweet-poster', {
+            params: { id: tweetId, token: tweetSyndicationToken(tweetId) }
+          })
+          return res.data?.posterUrl || null
+        } catch (e) {
+          return null
+        }
+      }
+      // 用原生播放器播推文视频：点开时现取 mp4 直链（不存进笔记，避免过期）；
+      // 失败返回 null，退回推文卡片
+      const fetchTweetVideo = async (tweetId) => {
+        try {
+          const res = await this.$axios.get('/v1/embed/tweet-video', {
+            params: { id: tweetId, token: tweetSyndicationToken(tweetId) }
+          })
+          return res.data?.videoUrl ? res.data : null
+        } catch (e) {
+          return null
+        }
+      }
+
       const tools = {
         header: { class: Header, inlineToolbar: true, config: { placeholder: ph.header, levels: [1, 2, 3, 4, 5, 6], defaultLevel: 2 }, shortcut: 'CMD+SHIFT+H' },
         list: { class: List, inlineToolbar: true, config: { defaultStyle: 'unordered' } },
@@ -222,34 +246,13 @@ export default {
                 }
               }
             },
-            // X 推文封面浏览器跨域拿不到，经后端转一手；失败返回 null，画廊退回通用占位图
-            fetchTweetPoster: async (tweetId) => {
-              try {
-                const res = await this.$axios.get('/v1/embed/tweet-poster', {
-                  params: { id: tweetId, token: tweetSyndicationToken(tweetId) }
-                })
-                return res.data?.posterUrl || null
-              } catch (e) {
-                return null
-              }
-            },
-            // 弹窗里用原生播放器播推文视频：点开时现取 mp4 直链（不存进笔记，避免过期）；
-            // 失败返回 null，弹窗退回推文卡片
-            fetchTweetVideo: async (tweetId) => {
-              try {
-                const res = await this.$axios.get('/v1/embed/tweet-video', {
-                  params: { id: tweetId, token: tweetSyndicationToken(tweetId) }
-                })
-                return res.data?.videoUrl ? res.data : null
-              } catch (e) {
-                return null
-              }
-            }
+            fetchTweetPoster,
+            fetchTweetVideo
           }
         },
         timeline: { class: TimelineTool },
         markdown: { class: MarkdownBlock, inlineToolbar: false, config: { axiosBaseURL: options.axiosBaseURL || '' } },
-        embed: { class: EmbedVideoTool, tunes: ['mediaCopy'] },
+        embed: { class: EmbedVideoTool, tunes: ['mediaCopy'], config: { fetchTweetPoster, fetchTweetVideo } },
         video: {
           class: VideoTool,
           tunes: ['mediaCopy'],
