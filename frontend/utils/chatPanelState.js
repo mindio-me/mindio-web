@@ -51,5 +51,7 @@ export default Vue.observable({
   conversationsLoaded: false,
   conversationListOpen: false,
   pendingTurnEdit: null,
+  // 这一轮 AI 新建的笔记（note_created 事件），回复结束时挂到助手消息上显示"已新建"卡片；不持久化
+  pendingCreatedNotes: [],
   undoingTurnId: null,
 })

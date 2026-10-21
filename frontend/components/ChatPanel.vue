@@ -80,6 +80,15 @@
                   >{{ $t('workspace.chat.linkToNote') }}</button>
                 </div>
               </div>
+              <div v-for="created in msg.createdNotes || []" :key="'created-' + created.noteId" class="chat-edit-card">
+                <i class="el-icon-document-add"></i>
+                <span class="chat-edit-card-text">{{ $t('workspace.chat.createdNote', { title: created.title || $t('workspace.notes.untitledNote') }) }}</span>
+                <button
+                  type="button"
+                  class="chat-edit-undo-btn"
+                  @click="$nuxt.$emit('workspace:open-note-request', created.noteId)"
+                >{{ $t('workspace.chat.openNote') }}</button>
+              </div>
               <div v-if="msg.editedNotes && msg.editedNotes.length" class="chat-edit-card">
                 <i :class="msg.undone ? 'el-icon-refresh-left' : 'el-icon-edit-outline'"></i>
                 <span class="chat-edit-card-text">{{ msg.undone ? $t('workspace.chat.editsUndone') : $t('workspace.chat.editedNotes', { titles: noteTitles(msg.editedNotes) }) }}</span>
@@ -457,6 +466,7 @@ export default {
           id: event.id, role: 'ASSISTANT', content: event.content,
           citations: event.citations || [], createdAt: event.createdAt
         })
+        this.attachCreatedNotes(this.messages[this.messages.length - 1])
         this.attachTurnEdit(this.messages[this.messages.length - 1])
         this.liveAssistantText = ''
         this.searchingQuery = null
@@ -465,6 +475,7 @@ export default {
           id: `error-${Date.now()}`, role: 'ASSISTANT', content: event.content,
           citations: [], createdAt: new Date().toISOString()
         })
+        this.attachCreatedNotes(this.messages[this.messages.length - 1])
         this.attachTurnEdit(this.messages[this.messages.length - 1])
         this.liveAssistantText = ''
         this.searchingQuery = null
@@ -507,6 +518,11 @@ export default {
           }
         }
         this.$nuxt.$emit('note-content-updated', { ...data, noteId: event.noteId })
+      } else if (event.type === 'note_created') {
+        const created = { noteId: event.noteId, title: (event.data && event.data.title) || '' }
+        this.pendingCreatedNotes.push(created)
+        // 笔记页收到后刷新左侧列表；当前打开的笔记不切换
+        this.$nuxt.$emit('workspace:note-created', { id: created.noteId, title: created.title })
       } else if (event.type === 'project_field_updated') {
         this.$nuxt.$emit('project-field-updated', {
           projectId: event.projectId,
@@ -594,6 +610,11 @@ export default {
       } finally {
         this.linkingCitationKey = null
       }
+    },
+    attachCreatedNotes(msg) {
+      const created = this.pendingCreatedNotes
+      this.pendingCreatedNotes = []
+      if (msg && created.length) this.$set(msg, 'createdNotes', created)
     },
     async attachTurnEdit(msg) {
       const pending = this.pendingTurnEdit

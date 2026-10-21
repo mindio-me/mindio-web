@@ -871,6 +871,8 @@
       "copied": "Copied",
       "copyFailed": "Copy failed, please retry",
       "editedNotes": "Edited {titles}",
+      "createdNote": "Created \"{title}\"",
+      "openNote": "Open",
       "editsUndone": "Edits in this turn undone",
       "undoTurn": "Undo this turn's edits",
       "undoFailed": "Undo failed, please retry",
