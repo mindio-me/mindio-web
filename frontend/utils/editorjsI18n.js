@@ -137,9 +137,11 @@ const ZH_MESSAGES = {
     moveUp: { 'Move up': '上移' },
     moveDown: { 'Move down': '下移' },
     codeWrap: { 'Word wrap': '自动换行', 'Turn off word wrap': '取消自动换行' },
-    imageCopy: {
+    mediaCopy: {
       'Copy image': '复制图片',
+      'Copy video': '复制视频',
       'Image copied': '图片已复制',
+      'Video copied': '视频已复制',
       'Copied as link only; the image itself could not be copied': '只复制了图片链接，图片本身未能复制',
       'Copy failed': '复制失败'
     }
