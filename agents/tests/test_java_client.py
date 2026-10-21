@@ -503,3 +503,37 @@ async def test_list_clips_sends_only_given_filters(test_settings):
     assert captured["url"].path == "/internal/documents/clips"
     assert dict(captured["url"].params) == {"username": "alice", "domain": "github.com", "limit": "50"}
     assert result == {"total": 0, "items": []}
+
+
+async def test_create_note_posts_title(test_settings):
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"], captured["url"] = request.method, request.url
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"noteId": 31, "title": "English"})
+
+    client = _client_with_transport(test_settings, handler)
+    result = await client.create_note("alice", "English")
+
+    assert captured["method"] == "POST"
+    assert captured["url"].path == "/internal/documents/notes"
+    assert dict(captured["url"].params) == {"username": "alice"}
+    assert captured["body"] == {"title": "English"}
+    assert result == {"noteId": 31, "title": "English"}
+
+
+async def test_edit_note_snapshot_false_adds_query_param(test_settings):
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json={"ops": []})
+
+    client = _client_with_transport(test_settings, handler)
+    await client.edit_note("alice", 31, "5", [{"op": "insert", "after": "end", "markdown": "x"}], snapshot=False)
+    await client.edit_note("alice", 9, "5", [{"op": "insert", "after": "end", "markdown": "x"}])
+
+    assert seen[0] == {"username": "alice", "conversationId": "5", "snapshot": "false"}
+    assert "snapshot" not in seen[1]
+

@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 
 import app.routes.chat as chat_route
 from app.graph import build_graph_builder
-from app.routes.chat import ChatStreamRequest, _dedupe_citations, _run_agent
+from app.routes.chat import ChatStreamRequest, _dedupe_citations, _drain_note_content_updates, _run_agent
 
 
 class FakeJavaClient:
@@ -616,7 +616,7 @@ async def test_edit_event_is_streamed_as_soon_as_tool_ends(monkeypatch, fake_jav
     from tools.edit_note import make_note_edit_tools
     from tools.search_workspace import make_search_workspace_tool
 
-    fake_java_client.edit_note = lambda username, note_id, conversation_id, operations: _async_return(
+    fake_java_client.edit_note = lambda username, note_id, conversation_id, operations, snapshot=True: _async_return(
         {"noteId": note_id, "contentType": "editorjs", "turnId": "77", "ops": []})
     model = FakeMessagesListChatModel(responses=[
         AIMessage(content="", tool_calls=[{"name": "edit_note", "args": {
@@ -638,3 +638,16 @@ async def test_edit_event_is_streamed_as_soon_as_tool_ends(monkeypatch, fake_jav
 
     types = [e["type"] for e in events]
     assert types.index("note_content_updated") < types.index("tool_call")
+
+
+def test_drain_emits_note_created_and_content_updates_in_order():
+    updates = [{"type": "note_created", "noteId": 31, "title": "E"}, {"noteId": 9, "data": {"ops": []}}]
+
+    lines = [json.loads(chunk) for chunk in _drain_note_content_updates(updates)]
+
+    assert lines == [
+        {"type": "note_created", "noteId": 31, "title": "E"},
+        {"type": "note_content_updated", "noteId": 9, "data": {"ops": []}},
+    ]
+    assert updates == []
+

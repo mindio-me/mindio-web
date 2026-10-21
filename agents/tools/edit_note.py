@@ -20,6 +20,10 @@ SUMMARY_CHARS = 2000
 
 
 def make_note_edit_tools(java_client: JavaClient, cache: ContentCache, note_content_updates: list | None = None) -> list:
+    # 本次请求里 create_note 新建的笔记：往里写时不存撤销快照（撤销会把新笔记清空成空笔记）。
+    # 只在一次请求内有效：中途弹确认卡片、确认后续跑是新请求，集合会丢——罕见路径，接受。
+    created_note_ids: set[int] = set()
+
     @tool
     async def read_note_blocks(state: Annotated[AgentState, InjectedState], note_id: int | None = None) -> str:
         """读取笔记正文的块视图：每块一行"[块id | 类型 | hash=指纹] 内容"，内容是 Markdown。
@@ -55,6 +59,10 @@ def make_note_edit_tools(java_client: JavaClient, cache: ContentCache, note_cont
         - {"op":"replace","blockId":"<块id>","hash":"<该块hash>","markdown":"..."}  用新内容替换该块（可变成多块）
         - {"op":"delete","blockIds":["<块id>",...],"hashes":["<对应hash>",...]}
         - {"op":"move","blockId":"<块id>","hash":"<该块hash>","after":"<块id>|start|end"}
+        - {"op":"copy","fromNoteId":<来源笔记id>,"blockIds":["<来源块id>",...],"after":"<块id>|start|end"}
+          把来源笔记（可以就是本篇）的块原样复制过来，按 blockIds 的顺序插入；来源块 id 来自对来源笔记的
+          read_note_blocks(note_id=来源id)。图片、视频、网络视频、媒体集等非文字块要放进另一篇时用 copy，
+          不要用 Markdown 重写（图片也用 copy，才能保留宽度等设置）；录音/音频块不能复制。只支持 Editor.js 笔记。
         块 id 和 hash 必须来自最近一次 read_note_blocks；标注"只能删除/移动"的块不能 replace；同一批里同一块只能引用一次。
         markdown 支持段落、#标题、列表、- [ ] 任务、| 表格 |、```代码```、> 引用、---、![图注](图片地址)。
         用户要求把你回复中的内容写进笔记时，用 insert 写入对应的 Markdown；位置不明确时插到 end。
@@ -65,7 +73,10 @@ def make_note_edit_tools(java_client: JavaClient, cache: ContentCache, note_cont
         if not operations:
             return "operations 不能为空。"
         try:
-            result = await java_client.edit_note(state["username"], target, state.get("conversation_id"), operations)
+            result = await java_client.edit_note(
+                state["username"], target, state.get("conversation_id"), operations,
+                snapshot=target not in created_note_ids,
+            )
         except Exception as e:
             return f"修改笔记失败：{e}"
         if note_content_updates is not None:
@@ -73,4 +84,20 @@ def make_note_edit_tools(java_client: JavaClient, cache: ContentCache, note_cont
         return (f"已修改笔记 id={target}（{len(operations)} 个操作）。块 id 和 hash 已经变化，"
                 f"如需继续修改请先重新 read_note_blocks。")
 
-    return [read_note_blocks, edit_note]
+    @tool
+    async def create_note(title: str, state: Annotated[AgentState, InjectedState]) -> str:
+        """新建一篇空白笔记（Editor.js，不公开、无标签、无项目），返回新笔记 id。用于"翻译成另一篇""另存为
+        新笔记"等：建好后用 edit_note(note_id=新id) 往里写内容。title 写合适的标题（翻译时用译文标题）。
+        不会切换用户当前打开的笔记，也不要让用户去切换。"""
+        try:
+            note = await java_client.create_note(state["username"], title)
+        except Exception as e:
+            return f"新建笔记失败：{e}"
+        note_id = note["noteId"]
+        created_note_ids.add(note_id)
+        if note_content_updates is not None:
+            note_content_updates.append({"type": "note_created", "noteId": note_id, "title": note["title"]})
+        return (f"已新建笔记《{note['title']}》（id={note_id}）。现在可以用 edit_note(note_id={note_id}) 往里写内容；"
+                f"不要切换用户当前打开的笔记。")
+
+    return [read_note_blocks, edit_note, create_note]

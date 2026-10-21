@@ -66,7 +66,11 @@ def _drain_note_content_updates(note_content_updates: list[dict] | None) -> Iter
     清空是为了后面正常结束时不重复发送。"""
     while note_content_updates:
         update = note_content_updates.pop(0)
-        yield _event("note_content_updated", noteId=update["noteId"], data=update["data"])
+        if update.get("type") == "note_created":
+            # create_note 新建的笔记：前端刷新笔记列表、回复下方显示"已新建"
+            yield _event("note_created", noteId=update["noteId"], title=update["title"])
+        else:
+            yield _event("note_content_updated", noteId=update["noteId"], data=update["data"])
 
 
 def _dedupe_citations(citations: list[dict]) -> list[dict]:

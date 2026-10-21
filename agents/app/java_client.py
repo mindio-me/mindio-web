@@ -274,11 +274,20 @@ class JavaClient:
             raise JavaClientError(_error_message(resp))
         return resp.json()
 
-    async def edit_note(self, username: str, note_id: int, conversation_id: str | None, operations: list[dict]) -> dict:
+    async def edit_note(
+        self, username: str, note_id: int, conversation_id: str | None, operations: list[dict], snapshot: bool = True,
+    ) -> dict:
+        """snapshot=False：写的是本轮刚新建的笔记，Java 不存撤销快照。"""
+        params = _conversation(conversation_id)
+        if not snapshot:
+            params["snapshot"] = "false"
         return await self._write_document(
-            "POST", f"/internal/documents/notes/{note_id}/edits", username,
-            {"operations": operations}, params=_conversation(conversation_id),
+            "POST", f"/internal/documents/notes/{note_id}/edits", username, {"operations": operations}, params=params,
         )
+
+    async def create_note(self, username: str, title: str) -> dict:
+        """按系统默认值新建空白 Editor.js 笔记，返回 {"noteId", "title"}。"""
+        return await self._write_document("POST", "/internal/documents/notes", username, {"title": title})
 
     async def _read_document(self, username: str, kind: str, doc_id: int) -> dict | None:
         try:
