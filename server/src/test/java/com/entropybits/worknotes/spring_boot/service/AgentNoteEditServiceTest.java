@@ -388,8 +388,17 @@ class AgentNoteEditServiceTest {
                 Note.builder().id(10L).title("bob 的").owner(bob).contentType("editorjs").content(SRC).build()));
 
         assertThatThrownBy(() -> service.applyAsAgent("alice", 9L, "5", List.of(copy(10L, List.of("img"), "end"))))
-                .isInstanceOf(ResourceNotFoundException.class);
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("来源笔记 id=10 不存在或不属于你，请确认 fromNoteId");
         verify(noteRepository, never()).save(any());
+    }
+
+    @Test
+    void copyFromMissingNoteNamesTheSource() {
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(editorjsNote()));
+        when(noteRepository.findById(11L)).thenReturn(Optional.empty());
+
+        assertCopyRejected(copy(11L, List.of("img"), "end"), "来源笔记 id=11 不存在或不属于你，请确认 fromNoteId");
     }
 
     @Test

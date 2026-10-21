@@ -63,7 +63,9 @@ def make_note_edit_tools(java_client: JavaClient, cache: ContentCache, note_cont
           把来源笔记（可以就是本篇）的块原样复制过来，按 blockIds 的顺序插入；来源块 id 来自对来源笔记的
           read_note_blocks(note_id=来源id)。图片、视频、网络视频、媒体集等非文字块要放进另一篇时用 copy，
           不要用 Markdown 重写（图片也用 copy，才能保留宽度等设置）；录音/音频块不能复制。只支持 Editor.js 笔记。
-        块 id 和 hash 必须来自最近一次 read_note_blocks；标注"只能删除/移动"的块不能 replace；同一批里同一块只能引用一次。
+        块 id 和 hash 必须来自最近一次 read_note_blocks；标注"只能删除/移动"的块不能 replace；同一批里同一块只能被replace/delete/move 引用一次。
+        copy 的来源块 id 来自对来源笔记的读取、after 来自对目标笔记的读取（跨笔记复制且要插到指定位置时，两篇都要读）；
+        copy 不受"只能引用一次"限制，同一个来源块可以复制多次。
         markdown 支持段落、#标题、列表、- [ ] 任务、| 表格 |、```代码```、> 引用、---、![图注](图片地址)。
         用户要求把你回复中的内容写进笔记时，用 insert 写入对应的 Markdown；位置不明确时插到 end。
         失败（比如提示文档被修改过）时重新 read_note_blocks 后再改。note_id 不传时改当前正在编辑的笔记。"""

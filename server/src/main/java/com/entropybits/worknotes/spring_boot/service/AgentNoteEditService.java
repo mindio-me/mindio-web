@@ -292,7 +292,10 @@ public class AgentNoteEditService {
         List<String> ids = strList(op, "blockIds");
         if (ids.isEmpty()) throw new BadRequestException("copy 缺少 blockIds");
         Map<String, ObjectNode> sourceById = sourceCache.computeIfAbsent(fromNoteId, id -> {
-            Note source = loadOwnedNote(user, id);
+            // 不能直接用 loadOwnedNote 的"笔记不存在"：模型分不清是目标还是来源错了
+            Note source = noteRepository.findById(id)
+                    .filter(n -> n.getOwner().getId().equals(user.getId()))
+                    .orElseThrow(() -> new BadRequestException("来源笔记 id=" + id + " 不存在或不属于你，请确认 fromNoteId"));
             if (!"editorjs".equals(source.getContentType())) throw new BadRequestException(COPY_EDITORJS_ONLY);
             List<AgentNoteBlocks.Block> view = AgentNoteBlocks.editorjsBlocks(source.getContent(), om);
             Map<String, ObjectNode> byId = new HashMap<>();

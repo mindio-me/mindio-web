@@ -129,3 +129,11 @@ async def test_every_batch_to_created_note_skips_snapshot():
     await edit.ainvoke({"operations": ops, "note_id": 31, "state": _state()})
 
     assert java.snapshots == [(31, False), (31, False)]
+
+
+def test_edit_note_doc_explains_where_copy_ids_come_from():
+    _, edit, _ = make_note_edit_tools(FakeJavaClient(), ContentCache())
+
+    doc = edit.description
+    assert "copy 的来源块 id 来自对来源笔记的读取" in doc
+    assert "copy 不受" in doc
