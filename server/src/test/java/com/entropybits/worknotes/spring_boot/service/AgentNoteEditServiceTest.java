@@ -231,4 +231,177 @@ class AgentNoteEditServiceTest {
         assertThat(result).containsEntry("reload", true);
         assertThat((List<?>) result.get("ops")).isEmpty();
     }
+
+    // ---------- copy ----------
+
+    static final String SRC = """
+            {"time":1,"blocks":[
+              {"id":"img","type":"image","data":{"file":{"url":"/uploads/public/note/a.gif"},"caption":"动图","withBorder":true,"withBackground":false,"stretched":false,"widthPercent":60}},
+              {"id":"emb","type":"embed","data":{"embedUrl":"https://platform.twitter.com/embed/Tweet.html?id=1","sourceUrl":"https://x.com/a/status/1","posterUrl":"https://pbs.twimg.com/p.jpg","fixedWidth":550,"fixedHeight":700}},
+              {"id":"gal","type":"mediaGallery","data":{"items":[{"type":"image","url":"/b.png"}]}},
+              {"id":"rec","type":"audioRecord","data":{"url":"/r.webm"}},
+              {"type":"video","data":{"url":"/uploads/public/note/v.mp4","caption":"无 id 的视频"}}
+            ],"version":"2.31.6"}""";
+
+    private Note sourceNote() {
+        return Note.builder().id(10L).title("来源").owner(alice).contentType("editorjs").content(SRC).build();
+    }
+
+    private Map<String, Object> copy(Long from, List<String> ids, String after) {
+        return Map.of("op", "copy", "fromNoteId", from, "blockIds", ids, "after", after);
+    }
+
+    private JsonNode blocksOf(String content) throws Exception {
+        return om.readTree(content).path("blocks");
+    }
+
+    @Test
+    void copyBlocksToEndKeepsDataAndAssignsNewIds() throws Exception {
+        Note note = editorjsNote();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        Map<String, Object> result = service.applyAsAgent("alice", 9L, "5", List.of(copy(10L, List.of("img", "emb"), "end")));
+
+        JsonNode blocks = blocksOf(note.getContent());
+        JsonNode src = blocksOf(SRC);
+        assertThat(blocks).hasSize(6);
+        assertThat(blocks.get(4).path("type").asText()).isEqualTo("image");
+        assertThat(blocks.get(4).path("data")).isEqualTo(src.get(0).path("data"));
+        assertThat(blocks.get(5).path("data")).isEqualTo(src.get(1).path("data"));
+        String id1 = blocks.get(4).path("id").asText();
+        String id2 = blocks.get(5).path("id").asText();
+        assertThat(id1).isNotBlank().isNotEqualTo("img").isNotEqualTo(id2);
+        assertThat(id2).isNotBlank().isNotEqualTo("emb");
+        List<Map<String, Object>> ops = (List<Map<String, Object>>) result.get("ops");
+        assertThat(ops).extracting(o -> o.get("op")).containsExactly("insert", "insert");
+        assertThat(ops.get(0)).containsEntry("afterBlockId", "a");
+        assertThat((Map<String, Object>) ops.get(0).get("block")).containsEntry("id", id1);
+        verify(imageEditService, never()).localize(any(), any());
+    }
+
+    @Test
+    void copyInterleavesWithInsertInOrder() throws Exception {
+        Note note = editorjsNote();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        service.applyAsAgent("alice", 9L, "5", List.of(
+                Map.of("op", "insert", "after", "end", "markdown", "译文一"),
+                copy(10L, List.of("emb"), "end"),
+                Map.of("op", "insert", "after", "end", "markdown", "译文二")));
+
+        JsonNode blocks = blocksOf(note.getContent());
+        assertThat(blocks).extracting(b -> b.path("type").asText())
+                .containsExactly("header", "paragraph", "paragraph", "audioRecord", "paragraph", "embed", "paragraph");
+        assertThat(blocks.get(4).path("data").path("text").asText()).isEqualTo("译文一");
+        assertThat(blocks.get(6).path("data").path("text").asText()).isEqualTo("译文二");
+    }
+
+    @Test
+    void copyFromBlocksWithoutIds() throws Exception {
+        Note note = editorjsNote();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        service.applyAsAgent("alice", 9L, "5", List.of(copy(10L, List.of("b4"), "start")));
+
+        JsonNode first = blocksOf(note.getContent()).get(0);
+        assertThat(first.path("type").asText()).isEqualTo("video");
+        assertThat(first.path("data").path("caption").asText()).isEqualTo("无 id 的视频");
+        assertThat(first.path("id").asText()).isNotBlank();
+    }
+
+    @Test
+    void copyWithinSameNoteAfterItself() throws Exception {
+        Note note = editorjsNote();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        service.applyAsAgent("alice", 9L, "5", List.of(copy(9L, List.of("p1"), "p1")));
+
+        JsonNode blocks = blocksOf(note.getContent());
+        assertThat(blocks).hasSize(5);
+        assertThat(blockIds(note.getContent())).startsWith("h", "p1").endsWith("p2", "a");
+        assertThat(blocks.get(2).path("data").path("text").asText()).isEqualTo("旧段落");
+        assertThat(blocks.get(2).path("id").asText()).isNotEqualTo("p1");
+    }
+
+    @Test
+    void copySameBlockTwiceGetsDistinctIds() throws Exception {
+        Note note = editorjsNote();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        service.applyAsAgent("alice", 9L, "5", List.of(copy(10L, List.of("img", "img"), "end")));
+
+        JsonNode blocks = blocksOf(note.getContent());
+        assertThat(blocks).hasSize(6);
+        assertThat(blocks.get(4).path("id").asText()).isNotEqualTo(blocks.get(5).path("id").asText());
+    }
+
+    private void assertCopyRejected(Map<String, Object> op, String message) {
+        assertThatThrownBy(() -> service.applyAsAgent("alice", 9L, "5", List.of(op)))
+                .isInstanceOf(BadRequestException.class).hasMessage(message);
+        verify(noteRepository, never()).save(any());
+        verify(revisionService, never()).snapshotBeforeEdit(any(), any(), any());
+    }
+
+    @Test
+    void copyAudioBlockRejected() {
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(editorjsNote()));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        assertCopyRejected(copy(10L, List.of("rec"), "end"), "录音/音频块不支持复制：它的转写记录跟原笔记绑定");
+    }
+
+    @Test
+    void copyUnknownBlockRejected() {
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(editorjsNote()));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        assertCopyRejected(copy(10L, List.of("nope"), "end"),
+                "来源笔记在你读取后被修改过或块 id 不对（块 nope），请重新 read_note_blocks(note_id=10)");
+    }
+
+    @Test
+    void copyFromMarkdownNoteRejected() {
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(editorjsNote()));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(
+                Note.builder().id(10L).title("md").owner(alice).contentType("markdown").content("# 标题").build()));
+
+        assertCopyRejected(copy(10L, List.of("m0-0000"), "end"), "只支持 Editor.js 笔记之间复制块");
+    }
+
+    @Test
+    void copyIntoMarkdownNoteRejected() {
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(
+                Note.builder().id(9L).title("md").owner(alice).contentType("markdown").content("# 标题").build()));
+        lenient().when(noteRepository.findById(10L)).thenReturn(Optional.of(sourceNote()));
+
+        assertCopyRejected(copy(10L, List.of("img"), "end"), "只支持 Editor.js 笔记之间复制块");
+    }
+
+    @Test
+    void copyFromOthersNoteNotFound() {
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(editorjsNote()));
+        when(noteRepository.findById(10L)).thenReturn(Optional.of(
+                Note.builder().id(10L).title("bob 的").owner(bob).contentType("editorjs").content(SRC).build()));
+
+        assertThatThrownBy(() -> service.applyAsAgent("alice", 9L, "5", List.of(copy(10L, List.of("img"), "end"))))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(noteRepository, never()).save(any());
+    }
+
+    @Test
+    void snapshotFalseSkipsRevisionAndReturnsNullTurn() {
+        Note note = editorjsNote();
+        when(noteRepository.findById(9L)).thenReturn(Optional.of(note));
+
+        Map<String, Object> result = service.applyAsAgent("alice", 9L, "5",
+                List.of(Map.of("op", "insert", "after", "end", "markdown", "新段落")), false);
+
+        assertThat(result.get("turnId")).isNull();
+        verify(revisionService, never()).resolveAgentTurn(any(), any());
+        verify(revisionService).snapshotBeforeEdit(any(), eq(null), eq(NoteRevision.Source.AGENT));
+    }
 }

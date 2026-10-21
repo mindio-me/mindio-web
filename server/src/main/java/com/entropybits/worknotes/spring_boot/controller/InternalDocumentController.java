@@ -109,7 +109,8 @@ public class InternalDocumentController {
     @PostMapping("/notes/{noteId}/edits")
     public Map<String, Object> editNote(@RequestParam String username, @PathVariable Long noteId,
                                         @RequestParam(required = false) String conversationId,
+                                        @RequestParam(defaultValue = "true") boolean snapshot,
                                         @RequestBody Map<String, List<Map<String, Object>>> body) {
-        return agentNoteEditService.applyAsAgent(username, noteId, conversationId, body.get("operations"));
+        return agentNoteEditService.applyAsAgent(username, noteId, conversationId, body.get("operations"), snapshot);
     }
 }

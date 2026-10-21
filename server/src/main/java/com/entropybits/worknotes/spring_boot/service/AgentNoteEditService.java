@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,9 @@ import java.util.UUID;
 public class AgentNoteEditService {
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+    private static final String COPY_EDITORJS_ONLY = "只支持 Editor.js 笔记之间复制块";
+    // 录音/音频块的转写记录按笔记存，复制过去会和原笔记的转写纠缠在一起
+    private static final Set<String> NON_COPYABLE_TYPES = Set.of("audio", "audioRecord");
 
     private final UserRepository userRepository;
     private final NoteRepository noteRepository;
@@ -76,10 +80,19 @@ public class AgentNoteEditService {
 
     public Map<String, Object> applyAsAgent(String username, Long noteId, String conversationId,
                                             List<Map<String, Object>> operations) {
+        return applyAsAgent(username, noteId, conversationId, operations, true);
+    }
+
+    /**
+     * snapshot=false：写的是 agent 本轮刚新建的笔记，不存快照（撤销会把新笔记清空成空笔记，没有意义），
+     * 返回的 turnId 为 null，前端也就不挂"撤销本轮修改"。
+     */
+    public Map<String, Object> applyAsAgent(String username, Long noteId, String conversationId,
+                                            List<Map<String, Object>> operations, boolean snapshot) {
         User user = getUser(username);
         Note note = loadOwnedNote(user, noteId);
-        return apply(user, note, revisionService.resolveAgentTurn(user, conversationId), NoteRevision.Source.AGENT,
-                operations);
+        String turnId = snapshot ? revisionService.resolveAgentTurn(user, conversationId) : null;
+        return apply(user, note, turnId, NoteRevision.Source.AGENT, operations);
     }
 
     public Map<String, Object> applyAsReplyInsert(String username, Long noteId, String markdown, String after) {
@@ -96,6 +109,9 @@ public class AgentNoteEditService {
                                       List<Map<String, Object>> operations) {
         if (operations == null || operations.isEmpty()) throw new BadRequestException("operations 不能为空");
         String contentType = editableContentType(note);
+        if (!"editorjs".equals(contentType) && operations.stream().anyMatch(op -> "copy".equals(opName(op)))) {
+            throw new BadRequestException(COPY_EDITORJS_ONLY);
+        }
         List<Map<String, Object>> ops = new ArrayList<>();
         String newContent = "editorjs".equals(contentType)
                 ? applyEditorjs(user, note.getContent(), operations, ops)
@@ -150,10 +166,17 @@ public class AgentNoteEditService {
             viewById.put(view.get(i).id(), view.get(i));
         }
 
-        // 第一步：解析与校验（不改动任何东西）
+        // 第一步：解析与校验（不改动任何东西）。copy 的来源块在这里按读取时的内容取好，
+        // 第二步只拷贝——同一篇里复制时，来源也是批次开始前的内容
         Set<String> referenced = new HashSet<>();
+        Map<Long, Map<String, ObjectNode>> sourceCache = new HashMap<>();
+        Map<Map<String, Object>, List<ObjectNode>> copySources = new IdentityHashMap<>();
         for (Map<String, Object> op : operations) {
             switch (opName(op)) {
+                case "copy" -> {
+                    copySources.put(op, copySourceBlocks(user, op, sourceCache));
+                    requireAnchor(str(op, "after", "end"), viewById);
+                }
                 case "insert" -> {
                     requireMarkdown(op);
                     requireAnchor(str(op, "after", "end"), viewById);
@@ -186,12 +209,22 @@ public class AgentNoteEditService {
             switch (opName(op)) {
                 case "insert" -> {
                     int at = insertIndex(list, str(op, "after", "end"), byId);
-                    insertBlocks(user, list, at, convert(op), ops);
+                    insertBlocks(user, list, at, convert(op), ops, true);
+                }
+                case "copy" -> {
+                    List<ObjectNode> copies = new ArrayList<>();
+                    for (ObjectNode source : copySources.get(op)) {
+                        ObjectNode copy = source.deepCopy();
+                        copy.put("id", AgentEditorjsImageEditor.newBlockId());
+                        copies.add(copy);
+                    }
+                    // 图片原样引用来源地址，不再 localize（来源本来就是笔记里在用的地址）
+                    insertBlocks(user, list, insertIndex(list, str(op, "after", "end"), byId), copies, ops, false);
                 }
                 case "replace" -> {
                     ObjectNode target = byId.get(str(op, "blockId", null));
                     int at = indexOf(list, target);
-                    insertBlocks(user, list, at + 1, convert(op), ops);
+                    insertBlocks(user, list, at + 1, convert(op), ops, true);
                     list.remove(at);
                     ops.add(Map.of("op", "delete", "blockId", target.path("id").asText()));
                 }
@@ -230,9 +263,9 @@ public class AgentNoteEditService {
     }
 
     private void insertBlocks(User user, List<ObjectNode> list, int at, List<ObjectNode> newBlocks,
-                              List<Map<String, Object>> ops) {
+                              List<Map<String, Object>> ops, boolean localizeImages) {
         for (ObjectNode block : newBlocks) {
-            if ("image".equals(block.path("type").asText())) {
+            if (localizeImages && "image".equals(block.path("type").asText())) {
                 ObjectNode file = (ObjectNode) block.path("data").path("file");
                 file.put("url", imageEditService.localize(user, file.path("url").asText()));
             }
@@ -243,6 +276,45 @@ public class AgentNoteEditService {
             ops.add(insert);
             list.add(at++, block);
         }
+    }
+
+    /** 按 blockIds 的顺序取出来源块（同一来源笔记在一批里只读一次）；块 id 规则同块视图（没 id 的旧块是 b<序号>） */
+    private List<ObjectNode> copySourceBlocks(User user, Map<String, Object> op,
+                                              Map<Long, Map<String, ObjectNode>> sourceCache) {
+        Object from = op.get("fromNoteId");
+        if (from == null) throw new BadRequestException("copy 缺少 fromNoteId");
+        Long fromNoteId;
+        try {
+            fromNoteId = Long.valueOf(String.valueOf(from));
+        } catch (NumberFormatException e) {
+            throw new BadRequestException("copy 的 fromNoteId 不是数字: " + from);
+        }
+        List<String> ids = strList(op, "blockIds");
+        if (ids.isEmpty()) throw new BadRequestException("copy 缺少 blockIds");
+        Map<String, ObjectNode> sourceById = sourceCache.computeIfAbsent(fromNoteId, id -> {
+            Note source = loadOwnedNote(user, id);
+            if (!"editorjs".equals(source.getContentType())) throw new BadRequestException(COPY_EDITORJS_ONLY);
+            List<AgentNoteBlocks.Block> view = AgentNoteBlocks.editorjsBlocks(source.getContent(), om);
+            Map<String, ObjectNode> byId = new HashMap<>();
+            int i = 0;
+            for (JsonNode b : parseRoot(source.getContent()).path("blocks")) {
+                byId.put(view.get(i++).id(), (ObjectNode) b);
+            }
+            return byId;
+        });
+        List<ObjectNode> result = new ArrayList<>();
+        for (String id : ids) {
+            ObjectNode block = sourceById.get(id);
+            if (block == null) {
+                throw new BadRequestException("来源笔记在你读取后被修改过或块 id 不对（块 " + id
+                        + "），请重新 read_note_blocks(note_id=" + fromNoteId + ")");
+            }
+            if (NON_COPYABLE_TYPES.contains(block.path("type").asText())) {
+                throw new BadRequestException("录音/音频块不支持复制：它的转写记录跟原笔记绑定");
+            }
+            result.add(block);
+        }
+        return result;
     }
 
     private List<ObjectNode> convert(Map<String, Object> op) {
