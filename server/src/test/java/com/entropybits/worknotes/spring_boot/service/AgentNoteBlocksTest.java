@@ -96,6 +96,29 @@ class AgentNoteBlocksTest {
     }
 
     @Test
+    void placeholdersDescribeVideosAndGalleries() {
+        String json = """
+                {"blocks":[
+                  {"id":"e1","type":"embed","data":{"embedUrl":"https://www.youtube.com/embed/abc","sourceUrl":"https://www.youtube.com/watch?v=abc","caption":"<b>演示</b>"}},
+                  {"id":"e2","type":"embed","data":{"embedUrl":"https://player.bilibili.com/x","caption":""}},
+                  {"id":"v1","type":"video","data":{"url":"/u/v.mp4","caption":"发布会"}},
+                  {"id":"v2","type":"video","data":{"url":"/u/w.mp4"}},
+                  {"id":"g","type":"mediaGallery","data":{"items":[
+                    {"type":"image","url":"/a.png"},{"type":"video","embedUrl":"https://www.youtube.com/embed/x"},{"type":"image","url":"/b.png"}]}}
+                ]}""";
+
+        List<AgentNoteBlocks.Block> blocks = AgentNoteBlocks.editorjsBlocks(json, om);
+
+        assertThat(blocks).extracting(AgentNoteBlocks.Block::text).containsExactly(
+                "[网络视频 https://www.youtube.com/watch?v=abc 说明：演示]",
+                "[网络视频 https://player.bilibili.com/x]",
+                "[视频 发布会]",
+                "[视频]",
+                "[媒体集 3 项：图片 2 张、视频 1 个、音频 0 个]");
+        assertThat(blocks).noneMatch(AgentNoteBlocks.Block::editable);
+    }
+
+    @Test
     void htmlToMarkdown_keepsStrikethroughAndHighlight() {
         assertThat(AgentNoteBlocks.htmlToMarkdown("<s>删</s> <mark class=\"cdx-marker\">亮</mark>"))
                 .isEqualTo("~~删~~ ==亮==");

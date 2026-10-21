@@ -182,12 +182,35 @@ final class AgentNoteBlocks {
         return url.isBlank() ? data.path("url").asText("") : url;
     }
 
+    // agent 要能认出"第二个画廊""有视频的那个媒体集"，按类型数一下
+    private static String galleryPlaceholder(JsonNode items) {
+        int images = 0, videos = 0, audios = 0;
+        for (JsonNode item : items) {
+            switch (item.path("type").asText()) {
+                case "video" -> videos++;
+                case "audio" -> audios++;
+                default -> images++;
+            }
+        }
+        return "[媒体集 " + items.size() + " 项：图片 " + images + " 张、视频 " + videos + " 个、音频 " + audios + " 个]";
+    }
+
     private static String placeholder(String type, JsonNode data) {
         return switch (type) {
             case "audio", "audioRecord" -> "[音频]";
             case "attaches" -> "[附件 " + data.path("title").asText(data.path("file").path("name").asText("")) + "]";
             case "references" -> "[参考资料 " + data.path("items").size() + " 条]";
-            case "mediaGallery" -> "[媒体集 " + data.path("items").size() + " 项]";
+            case "mediaGallery" -> galleryPlaceholder(data.path("items"));
+            case "embed" -> {
+                String link = data.path("sourceUrl").asText("");
+                if (link.isBlank()) link = data.path("embedUrl").asText("");
+                String caption = AgentImageLocator.stripHtml(data.path("caption").asText(""));
+                yield "[网络视频 " + link + (caption.isBlank() ? "" : " 说明：" + caption) + "]";
+            }
+            case "video" -> {
+                String caption = AgentImageLocator.stripHtml(data.path("caption").asText(""));
+                yield caption.isBlank() ? "[视频]" : "[视频 " + caption + "]";
+            }
             case "timeline" -> "[时间线 " + data.path("items").size() + " 条]";
             case "linkTool" -> "[链接卡片 " + data.path("link").asText("") + "]";
             case "warning" -> "[提示框 " + AgentImageLocator.stripHtml(data.path("title").asText("")) + "："
