@@ -228,7 +228,20 @@ code, .inline-code {
 .pdf-gallery { display: flex; flex-wrap: wrap; gap: 8px; margin: 1em 0; }
 .pdf-gallery__card { width: 150px; }
 .pdf-gallery__card img { width: 100%; border-radius: 4px; }
-.pdf-gallery__video { width: 100%; height: 100px; border: none; }
+
+/* ── 嵌入视频（打印成封面 + 链接） ── */
+.pdf-embed { text-align: center; margin: 1em 0; page-break-inside: avoid; }
+.pdf-embed figcaption { font-size: 12px; color: #718096; margin-top: 6px; }
+.pdf-video-card { display: block; position: relative; text-decoration: none; }
+.pdf-video-card img { max-width: 100%; height: auto; border-radius: 4px; display: block; margin: 0 auto; }
+.pdf-video-card__placeholder {
+  display: flex; align-items: center; justify-content: center;
+  height: 120px; border: 1px solid #e2e8f0; border-radius: 4px;
+  background: #f8fafc; color: #a0aec0; font-size: 32px;
+}
+.pdf-video-card__link { font-size: 11px; color: #718096; margin-top: 4px; word-break: break-all; }
+.pdf-video-card__link a { color: inherit; }
+.pdf-gallery__card .pdf-video-card__placeholder { height: 84px; font-size: 24px; }
 
 /* ── 时间线 ── */
 .pdf-timeline { margin: 1em 0; border-left: 2px solid #e2e8f0; padding-left: 16px; }

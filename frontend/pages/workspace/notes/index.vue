@@ -2236,7 +2236,7 @@ export default {
       }
     },
     async _buildNoteContentHtml(note) {
-      const { editorjsToHtml } = await import('~/utils/editorjs-to-html')
+      const { editorjsToHtml, fillMissingTweetPosters } = await import('~/utils/editorjs-to-html')
       if (note.contentType === 'editorjs') {
         let editorData = null
         if (this.editor) {
@@ -2245,7 +2245,15 @@ export default {
         if (!editorData && note.content) {
           try { editorData = JSON.parse(note.content) } catch (e) { /* ignore */ }
         }
-        return editorjsToHtml(editorData || { blocks: [] })
+        const { tweetSyndicationToken } = await import('~/utils/videoEmbedResolver')
+        const withPosters = await fillMissingTweetPosters(editorData, async (tweetId) => {
+          const res = await this.$axios.get('/v1/embed/tweet-poster', {
+            params: { id: tweetId, token: tweetSyndicationToken(tweetId) },
+            timeout: 8000
+          })
+          return res.data?.posterUrl || null
+        })
+        return editorjsToHtml(withPosters)
       }
       if (note.contentType === 'markdown') {
         return `<div class="pdf-markdown">${this.renderMarkdown(note.content || '')}</div>`

@@ -6,6 +6,7 @@
 import { renderMarkdown } from './markdown'
 import { parseListItems } from './editorjs-list'
 import { renderTex } from './mathRender'
+import { getTweetIdFromEmbedUrl } from './videoEmbedResolver'
 
 function esc(str) {
   if (str == null) return ''
@@ -32,6 +33,16 @@ function renderListItems(items, tag) {
     return `<li>${item.content || ''}${children}</li>`
   }).join('\n')
   return `<${tag} class="pdf-list">\n${rows}\n</${tag}>`
+}
+
+// 打印窗口是 blob: 页面，嵌入播放器拿不到 Referer（YouTube 会报"视频播放器配置错误"），
+// 纸上也放不了视频：嵌入视频打印成封面图（没有封面时是占位框）+ 原视频链接
+function renderVideoCard(posterUrl, link) {
+  const cover = posterUrl
+    ? `<img src="${esc(posterUrl)}" alt="">`
+    : '<span class="pdf-video-card__placeholder">&#9654;</span>'
+  return `<a class="pdf-video-card" href="${esc(link)}">${cover}</a>` +
+    `<div class="pdf-video-card__link"><a href="${esc(link)}">${esc(link)}</a></div>`
 }
 
 function renderBlock(block) {
@@ -141,7 +152,7 @@ function renderBlock(block) {
       if (!items.length) return ''
       const cards = items.map(item => {
         if (item.type === 'video') {
-          return `<div class="pdf-gallery__card"><iframe src="${esc(item.embedUrl || '')}" class="pdf-gallery__video"></iframe></div>`
+          return `<div class="pdf-gallery__card">${renderVideoCard(item.posterUrl, item.sourceUrl || item.embedUrl || '')}</div>`
         }
         if (item.type === 'audio') {
           return `<div class="pdf-gallery__card"><audio controls src="${esc(item.url || '')}"></audio></div>`
@@ -185,7 +196,7 @@ function renderBlock(block) {
       const src = d.embedUrl || d.embed
       if (!src) return ''
       const caption = d.caption ? `<figcaption>${esc(d.caption)}</figcaption>` : ''
-      return `<figure class="pdf-embed"><iframe src="${esc(src)}" height="${d.fixedHeight || d.height || 360}" frameborder="0" allowfullscreen style="width:100%"></iframe>${caption}</figure>`
+      return `<figure class="pdf-embed">${renderVideoCard(d.posterUrl, d.sourceUrl || src)}${caption}</figure>`
     }
 
     default:
@@ -197,4 +208,31 @@ export function editorjsToHtml(editorjsData) {
   if (!editorjsData) return ''
   const blocks = Array.isArray(editorjsData.blocks) ? editorjsData.blocks : []
   return blocks.map(renderBlock).join('\n')
+}
+
+/**
+ * 单个嵌入的推文块不存封面（只有画廊会取），打印出来只有占位框。导出前现取一次封面，
+ * 只用于这次打印，返回新对象、不改笔记数据；取不到（网络/私有推文）就保持占位框。
+ * fetchPoster(tweetId) => Promise<posterUrl|null>
+ */
+export async function fillMissingTweetPosters(editorjsData, fetchPoster) {
+  const data = JSON.parse(JSON.stringify(editorjsData || { blocks: [] }))
+  const targets = []
+  for (const block of data.blocks || []) {
+    if (block.type === 'embed' && block.data) targets.push(block.data)
+    if (block.type === 'mediaGallery' && block.data) {
+      for (const item of block.data.items || []) if (item.type === 'video') targets.push(item)
+    }
+  }
+  await Promise.all(targets.map(async (target) => {
+    const tweetId = !target.posterUrl && getTweetIdFromEmbedUrl(target.embedUrl)
+    if (!tweetId) return
+    try {
+      const posterUrl = await fetchPoster(tweetId)
+      if (posterUrl) target.posterUrl = posterUrl
+    } catch (e) {
+      // 取不到就保持占位框
+    }
+  }))
+  return data
 }
