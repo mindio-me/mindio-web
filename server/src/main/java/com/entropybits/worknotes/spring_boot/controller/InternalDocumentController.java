@@ -9,9 +9,11 @@ import com.entropybits.worknotes.spring_boot.dto.AgentDocumentContent;
 import com.entropybits.worknotes.spring_boot.dto.AgentDocumentSummary;
 import com.entropybits.worknotes.spring_boot.dto.AgentImageRef;
 import com.entropybits.worknotes.spring_boot.dto.AgentInsertImageRequest;
+import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
 import com.entropybits.worknotes.spring_boot.service.AgentDocumentService;
 import com.entropybits.worknotes.spring_boot.service.AgentImageEditService;
 import com.entropybits.worknotes.spring_boot.service.AgentNoteEditService;
+import com.entropybits.worknotes.spring_boot.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,6 +32,7 @@ public class InternalDocumentController {
     private final AgentDocumentService agentDocumentService;
     private final AgentImageEditService agentImageEditService;
     private final AgentNoteEditService agentNoteEditService;
+    private final NoteService noteService;
 
     @GetMapping("/notes")
     public List<AgentDocumentSummary> findNotes(@RequestParam String username, @RequestParam String title) {
@@ -99,6 +102,13 @@ public class InternalDocumentController {
                                                    @RequestParam(required = false) String conversationId,
                                                    @RequestBody Map<String, String> body) {
         return agentImageEditService.setImageCaption(username, noteId, index, body.get("caption"), conversationId);
+    }
+
+    /** AI 助手新建笔记（系统默认值），之后用 edits 往里写内容 */
+    @PostMapping("/notes")
+    public Map<String, Object> createNote(@RequestParam String username, @RequestBody Map<String, String> body) {
+        NoteResponse note = noteService.createBlankEditorjsNote(body.get("title"), username);
+        return Map.of("noteId", note.getId(), "title", note.getTitle());
     }
 
     @GetMapping("/notes/{noteId}/blocks")

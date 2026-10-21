@@ -100,6 +100,23 @@ public class NoteService {
     }
 
     /**
+     * AI 助手新建笔记：和前端"新建空白笔记"同样的默认值（Editor.js、不公开、无标签、无项目、空正文）。
+     * 标题去首尾空白，空的用"未命名笔记"，超过 200 字截断（NoteRequest 的长度上限）。
+     */
+    @Transactional
+    public NoteResponse createBlankEditorjsNote(String title, String username) {
+        String t = title == null ? "" : title.strip();
+        if (t.isEmpty()) t = "未命名笔记";
+        if (t.length() > 200) t = t.substring(0, 200);
+        NoteRequest request = new NoteRequest();
+        request.setTitle(t);
+        request.setContentType("editorjs");
+        request.setContent("{\"time\":" + System.currentTimeMillis() + ",\"blocks\":[],\"version\":\"2.28.2\"}");
+        request.setIsPublic(false);
+        return createNote(request, username);
+    }
+
+    /**
      * 更新笔记
      */
     @Transactional

@@ -285,4 +285,56 @@ class NoteServiceTest {
 
         assertThat(service.getNoteById(9L, "alice").getConvertRevisionTurnId()).isEqualTo("convert-abc");
     }
+
+    // ---------- createBlankEditorjsNote（AI 助手新建笔记） ----------
+
+    private Note createBlankAndCaptureSaved(String title) throws Exception {
+        NoteRepository noteRepository = mock(NoteRepository.class);
+        UserRepository userRepository = mock(UserRepository.class);
+        FeishuWikiImportMappingRepository feishuWikiImportMappingRepository = mock(FeishuWikiImportMappingRepository.class);
+        NoteService service = new NoteService(noteRepository, userRepository, mock(TagRepository.class),
+                mock(ProjectRepository.class), feishuWikiImportMappingRepository,
+                mock(FeishuDocumentSnapshotRepository.class), mock(FeishuImageMappingRepository.class),
+                mock(ContentIndexingService.class), mock(NoteImageRefRepository.class),
+                mock(AudioTranscriptionRepository.class), mock(NoteRevisionRepository.class));
+        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(User.builder().id(1L).build()));
+        when(noteRepository.save(any())).thenAnswer(inv -> {
+            Note n = inv.getArgument(0);
+            n.setId(31L);
+            return n;
+        });
+        when(feishuWikiImportMappingRepository.findByNote(any())).thenReturn(Optional.empty());
+
+        service.createBlankEditorjsNote(title, "alice");
+
+        org.mockito.ArgumentCaptor<Note> saved = org.mockito.ArgumentCaptor.forClass(Note.class);
+        verify(noteRepository).save(saved.capture());
+        return saved.getValue();
+    }
+
+    @Test
+    void createBlankEditorjsNoteUsesDefaults() throws Exception {
+        Note note = createBlankAndCaptureSaved("  Translated  ");
+
+        assertThat(note.getTitle()).isEqualTo("Translated");
+        assertThat(note.getContentType()).isEqualTo("editorjs");
+        assertThat(note.getIsPublic()).isFalse();
+        assertThat(note.getTags()).isEmpty();
+        assertThat(note.getProject()).isNull();
+        com.fasterxml.jackson.databind.JsonNode content = new com.fasterxml.jackson.databind.ObjectMapper().readTree(note.getContent());
+        assertThat(content.path("blocks").isArray()).isTrue();
+        assertThat(content.path("blocks")).isEmpty();
+        assertThat(content.path("version").asText()).isEqualTo("2.28.2");
+    }
+
+    @Test
+    void createBlankEditorjsNoteBlankTitleFallsBack() throws Exception {
+        assertThat(createBlankAndCaptureSaved("   ").getTitle()).isEqualTo("未命名笔记");
+        assertThat(createBlankAndCaptureSaved(null).getTitle()).isEqualTo("未命名笔记");
+    }
+
+    @Test
+    void createBlankEditorjsNoteTruncatesLongTitle() throws Exception {
+        assertThat(createBlankAndCaptureSaved("a".repeat(250)).getTitle()).hasSize(200);
+    }
 }
