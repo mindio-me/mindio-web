@@ -23,6 +23,7 @@ import java.util.Map;
  * - block_updated: noteId, blockId, blockType, items（专题块的items数组型更新）
  * - media_block_updated: noteId, blockId, blockType, data（图片/音频block的标量字段更新）
  * - note_content_updated: noteId, data（agent 改了笔记正文里的图片：op/blockId/afterBlockId/replacedBlockId/data/contentType）
+ * - note_created: noteId, data.title（agent 新建了笔记，前端刷新列表、回复下方显示"已新建"）
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ChatStreamEvent(
@@ -77,5 +78,11 @@ public record ChatStreamEvent(
 
     public static ChatStreamEvent noteContentUpdated(Long noteId, Map<String, Object> data) {
         return new ChatStreamEvent("note_content_updated", null, null, null, null, null, null, null, null, null, noteId, null, null, null, data, null);
+    }
+
+    public static ChatStreamEvent noteCreated(Long noteId, String title) {
+        Map<String, Object> data = new java.util.HashMap<>();
+        data.put("title", title);
+        return new ChatStreamEvent("note_created", null, null, null, null, null, null, null, null, null, noteId, null, null, null, data, null);
     }
 }

@@ -197,6 +197,11 @@ public class GlobalChatService {
                             public void onNoteContentUpdated(Long noteId, Map<String, Object> data) {
                                 sendEvent(emitter, ChatStreamEvent.noteContentUpdated(noteId, data), disconnected);
                             }
+
+                            @Override
+                            public void onNoteCreated(Long noteId, String title) {
+                                sendEvent(emitter, ChatStreamEvent.noteCreated(noteId, title), disconnected);
+                            }
                         });
             } catch (Exception e) {
                 log.error("agent service call failed for user {}", username, e);
@@ -306,6 +311,11 @@ public class GlobalChatService {
                             @Override
                             public void onNoteContentUpdated(Long noteId, Map<String, Object> data) {
                                 sendEvent(emitter, ChatStreamEvent.noteContentUpdated(noteId, data), disconnected);
+                            }
+
+                            @Override
+                            public void onNoteCreated(Long noteId, String title) {
+                                sendEvent(emitter, ChatStreamEvent.noteCreated(noteId, title), disconnected);
                             }
                         });
             } catch (Exception e) {

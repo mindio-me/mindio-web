@@ -69,6 +69,8 @@ class AgentServiceClientTest {
         Map<String, Object> mediaBlockUpdatedData;
         Long noteContentUpdatedNoteId;
         Map<String, Object> noteContentUpdatedData;
+        Long noteCreatedNoteId;
+        String noteCreatedTitle;
 
         @Override
         public void onTextDelta(String text) { textDeltas.add(text); }
@@ -113,6 +115,12 @@ class AgentServiceClientTest {
         public void onNoteContentUpdated(Long noteId, Map<String, Object> data) {
             noteContentUpdatedNoteId = noteId;
             noteContentUpdatedData = data;
+        }
+
+        @Override
+        public void onNoteCreated(Long noteId, String title) {
+            noteCreatedNoteId = noteId;
+            noteCreatedTitle = title;
         }
     }
 
@@ -453,6 +461,17 @@ class AgentServiceClientTest {
 
         assertThat(listener.noteContentUpdatedNoteId).isEqualTo(9L);
         assertThat(listener.noteContentUpdatedData).containsEntry("op", "insert").containsEntry("blockId", "nb1");
+    }
+
+    @Test
+    void dispatchesNoteCreated() throws Exception {
+        setUp(200, "{\"type\":\"note_created\",\"noteId\":42,\"title\":\"English notes\"}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "翻译成英文另存一篇", "alice", null, null, List.of(), 9L, null, listener);
+
+        assertThat(listener.noteCreatedNoteId).isEqualTo(42L);
+        assertThat(listener.noteCreatedTitle).isEqualTo("English notes");
     }
 
     @Test
