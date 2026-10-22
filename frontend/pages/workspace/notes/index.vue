@@ -448,7 +448,8 @@
               <div class="summary-header"><i class="el-icon-document"></i><span>{{ $t('workspace.notes.summary') }}</span></div>
               <p class="summary-content">{{ activeNote.summary }}</p>
             </div>
-            <div class="note-main-content">
+            <div ref="noteMainContent" class="note-main-content">
+              <NoteFindBar ref="findBar" :get-root="() => $refs.noteMainContent" />
               <!-- EditorJS 格式 -->
               <div v-if="isEditorjsNote" ref="editorContainer" class="editorjs-workspace-container editorjs-container"></div>
               <!-- Markdown 格式 -->
@@ -935,6 +936,8 @@ export default {
     // 是因为activeNoteId有好几个赋值点，watch能保证全覆盖不遗漏。
     activeNoteId(newId) {
       this.$nuxt.$emit('workspace:current-note-id', newId || null)
+      // 换了笔记，上一篇的查找结果没有意义了
+      if (this.$refs.findBar) this.$refs.findBar.close()
     }
   },
   created() {
@@ -990,6 +993,14 @@ export default {
       }
     }
     document.addEventListener('keydown', this._onDateNav)
+    // Ctrl/Cmd+F：在当前笔记正文里查找（桌面版 Electron 没有浏览器自带的查找栏）
+    this._onFind = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || (e.key || '').toLowerCase() !== 'f') return
+      if (!this.activeNote || this.showMonthCalendar || !this.$refs.findBar) return
+      e.preventDefault()
+      this.$refs.findBar.open()
+    }
+    document.addEventListener('keydown', this._onFind)
     this.loadRedditStatus()
     if (this.$route.query.reddit_connected === '1') {
       this.$message.success(this.$t('workspace.notes.redditConnected'))
@@ -1030,6 +1041,7 @@ export default {
     if (this._onTopbarToggle) this.$nuxt.$off('workspace:topbar:toggle', this._onTopbarToggle)
     if (this._onEsc) document.removeEventListener('keydown', this._onEsc)
     if (this._onDateNav) document.removeEventListener('keydown', this._onDateNav)
+    if (this._onFind) document.removeEventListener('keydown', this._onFind)
     this.$nuxt.$off('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
