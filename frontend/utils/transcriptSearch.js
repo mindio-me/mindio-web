@@ -24,11 +24,11 @@ export function findMatches(texts, query) {
 }
 
 /** 原文区标题下方的搜索框；输入只回调，不重建自身，保证不失焦 */
-export function mountSearchBox(parent, { query, onQuery, onStep }) {
+export function mountSearchBox(parent, { query, placeholder, onQuery, onStep }) {
   const wrap = el('span', 'atp-search')
   const input = el('input')
   input.type = 'search'
-  input.placeholder = '搜索原文'
+  input.placeholder = placeholder || ''
   input.value = query || ''
   const counter = el('span', 'atp-search-count')
   const up = el('button', 'atp-btn', '↑')

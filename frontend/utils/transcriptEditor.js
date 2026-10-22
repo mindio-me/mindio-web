@@ -23,11 +23,11 @@ export function hasFailedPlaceholder(utterances) {
   return (utterances || []).some((u) => String(u.text || '').startsWith('[第 '))
 }
 
-/** 总结里的 {{S1}} 换成说话人名字，没改过名的显示"说话人 1" */
-export function speakerText(text, names) {
+/** 总结里的 {{S1}} 换成说话人名字，没改过名的显示 fallback(n)（默认"说话人 1"，面板传入按界面语言翻译的版本） */
+export function speakerText(text, names, fallback = (n) => `说话人 ${n}`) {
   return String(text == null ? '' : text).replace(/\{\{S(\d+)\}\}/g, (_, n) => {
     const name = names && names[n]
-    return name ? String(name) : `说话人 ${n}`
+    return name ? String(name) : fallback(n)
   })
 }
 

@@ -48,6 +48,28 @@ for (const [file, [section, name]] of Object.entries(TOOLS)) {
   })
 }
 
+// 转写面板挂在音频块和录音块下面，用的是宿主工具的翻译函数：两个命名空间都要有译文
+const PANEL_FILES = ['utils/audioTranscriptionPanel.js', 'utils/transcriptSearch.js']
+for (const name of ['audio', 'audioRecord']) {
+  test(`转写面板里要翻译的英文都有中文（tools.${name}）`, () => {
+    const keys = keysOf('utils/audioTranscriptionPanel.js')
+    assert.ok(keys.size > 0, '没抓到任何翻译键，正则可能失效了')
+    const missing = [...keys].filter(k => !(k in zh.tools[name]))
+    assert.deepEqual(missing, [])
+  })
+}
+
+test('转写面板里不再有写死的中文界面文案', () => {
+  const CJK = /[一-鿿]/
+  for (const file of PANEL_FILES) {
+    const lines = fs.readFileSync(path.join(FRONTEND, file), 'utf8').split(/\r?\n/)
+    const offending = lines
+      .map(line => line.replace(/\/\/.*$/, '').replace(/^\s*(\/?\*).*$/, ''))
+      .filter(line => CJK.test(line) && !/console\.(log|warn|error)/.test(line))
+    assert.deepEqual(offending, [], file)
+  }
+})
+
 test('自定义工具在工具栏里的英文名都有中文', () => {
   for (const file of Object.keys(TOOLS)) {
     const source = fs.readFileSync(path.join(FRONTEND, file), 'utf8')

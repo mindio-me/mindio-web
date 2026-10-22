@@ -7,6 +7,55 @@
 // 自定义工具里的文案一律写英文原文，经 this.api.i18n.t() 取译文（命名空间是 tools.<注册名>，
 // tune 是 blockTunes.<注册名>，工具栏里的工具名走 toolNames），中文都放在这里。
 // 所以这里 tools 下的键必须和 editorjsHost、公开笔记页注册工具时用的名字一致。
+// 音频块 / 录音块下方共用的转写面板（audioTranscriptionPanel），两个工具命名空间都要有
+const TRANSCRIPTION_PANEL_ZH = {
+  Meeting: '会议',
+  Lecture: '课堂',
+  Interview: '访谈',
+  Memo: '闪念',
+  'System audio': '内录',
+  'Speaker {n}': '说话人 {n}',
+  'Play from here': '从这里播放',
+  'Failed to start, please try again later': '触发失败，请稍后重试',
+  'Re-transcribing will overwrite your edits to the transcript. Continue?': '重新转写会覆盖你对原文的修改，确定继续？',
+  'Re-transcribe': '重新转写',
+  Transcribe: '转写',
+  'Organizing…': '整理中…',
+  'Transcribing…': '转写中…',
+  'Transcription failed': '转写失败',
+  'Re-organize': '重新整理',
+  Retry: '重试',
+  'Organizing failed': '整理失败',
+  'Some segments failed to transcribe': '部分片段转写失败',
+  'Some segments failed to transcribe; you can re-transcribe': '部分片段转写失败，可以重新转写',
+  'Scene: ': '场景：',
+  'Not detected': '未判断',
+  'Will re-organize with the new scene, about 1–2 minutes': '将按新场景重新整理，约需 1–2 分钟',
+  'Switch scene': '切换场景',
+  'Failed to switch scene, please try again later': '切换场景失败，请稍后重试',
+  'Skip silence': '跳过静音',
+  'Click to rename': '点击改名',
+  'Key points': '要点',
+  Chapters: '章节',
+  Highlights: '重点片段',
+  Quotes: '金句',
+  '({category})': '（{category}）',
+  'To-dos': '待办',
+  Transcript: '原文',
+  'AI polished': 'AI优化版',
+  Original: '原文',
+  'Search transcript': '搜索原文',
+  Edit: '编辑',
+  'Some segments failed to transcribe; please re-transcribe first': '有转写失败的片段，请先重新转写',
+  Done: '完成',
+  Cancel: '取消',
+  'The recording is being processed; changes not saved': '录音正在处理，修改未保存',
+  'Save failed, please try again later': '保存失败，请稍后重试',
+  'Discard your edits to the transcript?': '放弃对原文的修改？',
+  'Cancel editing': '取消编辑',
+  'Verbatim transcript': '逐字稿'
+}
+
 const ZH_MESSAGES = {
   ui: {
     blockTunes: { toggler: { 'Click to tune': '点击调整', 'or drag to move': '或拖动移动' } },
@@ -42,6 +91,7 @@ const ZH_MESSAGES = {
       'Failed to load video': '视频加载失败'
     },
     audio: {
+      ...TRANSCRIPTION_PANEL_ZH,
       'Click to add audio': '点击添加音频',
       'View full transcript': '查看完整逐字稿',
       'Hide transcript': '收起逐字稿',
@@ -71,6 +121,7 @@ const ZH_MESSAGES = {
       'QR code expired': '二维码已过期'
     },
     audioRecord: {
+      ...TRANSCRIPTION_PANEL_ZH,
       'Already recording, see the capsule at the bottom right': '已经在录音了，看右下角胶囊',
       'Click to start recording': '点击开始录音',
       'Recording, see the capsule at the bottom right': '录音中，看右下角胶囊',

@@ -487,7 +487,7 @@ class AudioTool {
       return
     }
     this._panel = mountTranscriptionPanel({
-      container: wrapper, audio, noteId, blockId, readOnly: this.readOnly, service,
+      container: wrapper, audio, noteId, blockId, readOnly: this.readOnly, service, t: this._t,
       legacy: { transcript: this.data.transcript, summary: this.data.summary }
     })
   }

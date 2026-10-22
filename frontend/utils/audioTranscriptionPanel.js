@@ -82,7 +82,8 @@ function richText(text) {
   return frag
 }
 
-export function mountTranscriptionPanel({ container, audio, noteId, blockId, legacy, readOnly, service: rawService }) {
+// t：宿主工具的 Editor.js 翻译函数（文案写英文原文，中文在 editorjsI18n 的 tools.audio / tools.audioRecord 里）
+export function mountTranscriptionPanel({ container, audio, noteId, blockId, legacy, readOnly, service: rawService, t = (s) => s }) {
   injectStyles()
   // 只读（公开笔记页等）：兜底拒绝所有写操作，只放行 list；UI 上写入口本来就已隐藏，这里防止漏网
   const service = readOnly && rawService
@@ -97,11 +98,13 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   container.appendChild(root)
   let record = null
   const playback = createPlayback(audio)
-  const SCENES = [['MEETING', '会议'], ['LECTURE', '课堂'], ['INTERVIEW', '访谈'], ['MEMO', '闪念'], ['SYSTEM_AUDIO', '内录']]
+  const SCENES = [['MEETING', t('Meeting')], ['LECTURE', t('Lecture')], ['INTERVIEW', t('Interview')], ['MEMO', t('Memo')], ['SYSTEM_AUDIO', t('System audio')]]
   const SPEAKER_COLORS = ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399', '#9b59b6', '#16a085', '#d35400', '#2c3e50', '#c0392b']
   const isBusy = () => !!record && (record.status === 'PENDING' || record.status === 'PROCESSING')
   const names = () => (record && record.speakerNames) || {}
-  const speakerName = (n) => names()[n] || `说话人 ${n}`
+  const defaultSpeaker = (n) => t('Speaker {n}').replace('{n}', n)
+  const speakerName = (n) => names()[n] || defaultSpeaker(n)
+  const spkText = (text) => speakerText(text, names(), defaultSpeaker)
   const multiSpeaker = (utts) => new Set(utts.map((u) => u.speaker).filter((s) => s != null)).size > 1
   let transcriptMode = 'polished'
   const openState = { keyPoints: true }
@@ -119,7 +122,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
   }
   const ts = (ms) => {
     const a = el('span', 'atp-ts', fmt(ms))
-    a.title = '从这里播放'
+    a.title = t('Play from here')
     a.addEventListener('click', () => seek(ms))
     return a
   }
@@ -131,7 +134,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       await service.trigger(noteId, blockId, 'MANUAL', stage)
     } catch (e) {
       console.warn('触发转写失败:', e)
-      triggerError = '触发失败，请稍后重试'
+      triggerError = t('Failed to start, please try again later')
       render()
     }
     if (btn && !editing) btn.disabled = false
@@ -143,7 +146,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     b.addEventListener('click', async () => {
       if (stage === 'FULL' && record && record.editedAt) {
         try {
-          await MessageBox.confirm('重新转写会覆盖你对原文的修改，确定继续？', '重新转写', { type: 'warning' })
+          await MessageBox.confirm(t('Re-transcribing will overwrite your edits to the transcript. Continue?'), t('Re-transcribe'), { type: 'warning' })
         } catch (e) {
           return
         }
@@ -168,21 +171,21 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     if (triggerError) line.appendChild(el('span', null, triggerError))
     if (!r) {
       if (readOnly) return null
-      line.appendChild(button(legacy && legacy.transcript ? '重新转写' : '转写', 'FULL'))
+      line.appendChild(button(legacy && legacy.transcript ? t('Re-transcribe') : t('Transcribe'), 'FULL'))
       return line
     }
     if (r.status === 'PENDING' || r.status === 'PROCESSING') {
       line.appendChild(el('span', 'atp-spin'))
-      line.appendChild(el('span', null, (r.utterances || []).length ? '整理中…' : '转写中…'))
+      line.appendChild(el('span', null, (r.utterances || []).length ? t('Organizing…') : t('Transcribing…')))
       return line
     }
     if (r.status === 'FAILED') {
       line.classList.add('error')
-      line.appendChild(el('span', null, r.errorMessage || '转写失败'))
+      line.appendChild(el('span', null, r.errorMessage || t('Transcription failed')))
       if (!readOnly) {
         // 逐句原文已经存下来了（ASR 已付费）：只需重做整理，不必整段重新转写
         const hasUtterances = (r.utterances || []).length > 0
-        line.appendChild(hasUtterances ? button('重新整理', 'SUMMARY') : button('重试', 'FULL'))
+        line.appendChild(hasUtterances ? button(t('Re-organize'), 'SUMMARY') : button(t('Retry'), 'FULL'))
       }
       return line
     }
@@ -190,14 +193,14 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     const placeholders = hasFailedPlaceholder(r.utterances)
     if (r.errorKind === 'SUMMARY_FAILED') {
       line.classList.add('error')
-      line.appendChild(el('span', null, r.errorMessage || '整理失败'))
-      if (!readOnly) line.appendChild(button('重新整理', 'SUMMARY'))
-      if (!readOnly && placeholders) line.appendChild(button('重新转写', 'FULL'))
+      line.appendChild(el('span', null, r.errorMessage || t('Organizing failed')))
+      if (!readOnly) line.appendChild(button(t('Re-organize'), 'SUMMARY'))
+      if (!readOnly && placeholders) line.appendChild(button(t('Re-transcribe'), 'FULL'))
       return line
     }
     if (r.errorKind === 'PARTIAL_SEGMENTS' || r.errorKind === 'NO_SPEECH' || placeholders) {
-      line.appendChild(el('span', null, r.errorMessage || (readOnly ? '部分片段转写失败' : '部分片段转写失败，可以重新转写')))
-      if (!readOnly) line.appendChild(button('重新转写', 'FULL'))
+      line.appendChild(el('span', null, r.errorMessage || (readOnly ? t('Some segments failed to transcribe') : t('Some segments failed to transcribe; you can re-transcribe'))))
+      if (!readOnly) line.appendChild(button(t('Re-transcribe'), 'FULL'))
       return line
     }
     return null
@@ -207,9 +210,9 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     const r = record
     const bar = el('div', 'atp-bar')
     if (!readOnly) {
-      const sceneLabel = el('label', null, '场景：')
+      const sceneLabel = el('label', null, t('Scene: '))
       const select = el('select', 'atp-scene')
-      if (!r.scene) select.appendChild(el('option', null, '未判断')).value = ''
+      if (!r.scene) select.appendChild(el('option', null, t('Not detected'))).value = ''
       SCENES.forEach(([v, label]) => {
         const o = el('option', null, label)
         o.value = v
@@ -222,7 +225,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
         if (editing) return
         const v = select.value
         try {
-          await MessageBox.confirm('将按新场景重新整理，约需 1–2 分钟', '切换场景', { type: 'info' })
+          await MessageBox.confirm(t('Will re-organize with the new scene, about 1–2 minutes'), t('Switch scene'), { type: 'info' })
         } catch (e) {
           render()
           return
@@ -231,7 +234,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
           await service.update(noteId, blockId, { scene: v })
         } catch (e) {
           console.warn('切换场景失败:', e)
-          triggerError = '切换场景失败，请稍后重试'
+          triggerError = t('Failed to switch scene, please try again later')
           render() // 记录没变时订阅回调不会重绘，这里自己把错误显示出来并复原下拉框
         }
         notifyChanged(noteId, blockId)
@@ -255,7 +258,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       box.checked = playback.getSkipSilence()
       box.addEventListener('change', () => playback.setSkipSilence(box.checked))
       skip.appendChild(box)
-      skip.appendChild(document.createTextNode('跳过静音'))
+      skip.appendChild(document.createTextNode(t('Skip silence')))
       bar.appendChild(skip)
     }
     return bar
@@ -266,13 +269,13 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     chip.style.background = SPEAKER_COLORS[(n - 1) % SPEAKER_COLORS.length]
     // 处理中改名会被后台整理完成时的整条保存冲掉（后端也会 409），编辑原文时也不让改
     if (readOnly || isBusy()) return chip
-    chip.title = '点击改名'
+    chip.title = t('Click to rename')
     chip.addEventListener('click', (e) => {
       e.stopPropagation()
       if (editing || isBusy()) return
       const input = el('input', 'atp-spk-input')
       input.value = names()[n] || ''
-      input.placeholder = `说话人 ${n}`
+      input.placeholder = defaultSpeaker(n)
       chip.replaceWith(input)
       input.focus()
       let done = false
@@ -303,46 +306,46 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
 
   function renderSummary(s) {
     const frag = document.createDocumentFragment()
-    if (s.overview) frag.appendChild(el('div', 'atp-overview', speakerText(s.overview, names())))
+    if (s.overview) frag.appendChild(el('div', 'atp-overview', spkText(s.overview)))
     const items = [
-      section('keyPoints', '要点', (s.keyPoints || []).length, (d) => {
+      section('keyPoints', t('Key points'), (s.keyPoints || []).length, (d) => {
         s.keyPoints.forEach((k) => {
-          if (k.topic) d.appendChild(el('div', 'atp-topic', speakerText(k.topic, names())))
+          if (k.topic) d.appendChild(el('div', 'atp-topic', spkText(k.topic)))
           const ul = el('ul')
-          ;(k.points || []).forEach((p) => { const li = el('li'); li.appendChild(richText(speakerText(p, names()))); ul.appendChild(li) })
+          ;(k.points || []).forEach((p) => { const li = el('li'); li.appendChild(richText(spkText(p))); ul.appendChild(li) })
           d.appendChild(ul)
         })
       }),
-      section('chapters', '章节', (s.chapters || []).length, (d) => {
+      section('chapters', t('Chapters'), (s.chapters || []).length, (d) => {
         const ul = el('ul')
         s.chapters.forEach((c) => {
           const li = el('li')
           li.appendChild(ts(c.start))
-          li.appendChild(el('strong', null, speakerText(c.title, names())))
-          if (c.desc) li.appendChild(document.createTextNode(' ' + speakerText(c.desc, names())))
+          li.appendChild(el('strong', null, spkText(c.title)))
+          if (c.desc) li.appendChild(document.createTextNode(' ' + spkText(c.desc)))
           ul.appendChild(li)
         })
         d.appendChild(ul)
       }),
-      section('highlights', '重点片段', (s.highlights || []).length, (d) => {
+      section('highlights', t('Highlights'), (s.highlights || []).length, (d) => {
         const ul = el('ul')
-        s.highlights.forEach((h) => { const li = el('li'); li.appendChild(ts(h.start)); li.appendChild(document.createTextNode(speakerText(h.text, names()))); ul.appendChild(li) })
+        s.highlights.forEach((h) => { const li = el('li'); li.appendChild(ts(h.start)); li.appendChild(document.createTextNode(spkText(h.text))); ul.appendChild(li) })
         d.appendChild(ul)
       }),
-      section('quotes', '金句', (s.quotes || []).length, (d) => {
+      section('quotes', t('Quotes'), (s.quotes || []).length, (d) => {
         const ul = el('ul')
         s.quotes.forEach((q) => {
           const li = el('li')
           li.appendChild(ts(q.start))
-          li.appendChild(document.createTextNode('“' + speakerText(q.text, names()) + '”'))
-          if (q.category) li.appendChild(el('span', 'atp-quote-cat', '（' + q.category + '）'))
+          li.appendChild(document.createTextNode('“' + spkText(q.text) + '”'))
+          if (q.category) li.appendChild(el('span', 'atp-quote-cat', t('({category})').replace('{category}', q.category)))
           ul.appendChild(li)
         })
         d.appendChild(ul)
       }),
-      section('todos', '待办', (s.todos || []).length, (d) => {
+      section('todos', t('To-dos'), (s.todos || []).length, (d) => {
         const ul = el('ul')
-        s.todos.forEach((t) => ul.appendChild(el('li', null, speakerText(t, names()))))
+        s.todos.forEach((todo) => ul.appendChild(el('li', null, spkText(todo))))
         d.appendChild(ul)
       })
     ]
@@ -394,12 +397,12 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     const utts = r.utterances || []
     const polished = r.polished || []
     if (!utts.length && !polished.length) return null
-    return section('transcript', '原文', utts.length || polished.length, (d) => {
+    return section('transcript', t('Transcript'), utts.length || polished.length, (d) => {
       const head = d.querySelector('summary')
-      head.textContent = '原文'
+      head.textContent = t('Transcript')
       if (polished.length && utts.length) {
         const seg = el('span', 'atp-seg')
-        ;[['polished', 'AI优化版'], ['raw', '原文']].forEach(([mode, label]) => {
+        ;[['polished', t('AI polished')], ['raw', t('Original')]].forEach(([mode, label]) => {
           const b = el('button', transcriptMode === mode ? 'on' : '', label)
           b.type = 'button'
           b.addEventListener('click', (e) => {
@@ -424,6 +427,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       }
       searchBox = mountSearchBox(tools, {
         query: searchQuery,
+        placeholder: t('Search transcript'),
         onQuery: (q) => { searchQuery = q; searchIndex = 0; redraw() },
         onStep: (dir) => {
           const total = findMatches(items.map((u) => u.text), searchQuery).length
@@ -439,10 +443,10 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       })
       redraw()
       if (!readOnly && !usePolished) {
-        const editBtn = el('button', 'atp-btn', '编辑')
+        const editBtn = el('button', 'atp-btn', t('Edit'))
         editBtn.type = 'button'
         editBtn.disabled = r.status !== 'DONE' || hasFailedPlaceholder(utts)
-        if (hasFailedPlaceholder(utts)) editBtn.title = '有转写失败的片段，请先重新转写'
+        if (hasFailedPlaceholder(utts)) editBtn.title = t('Some segments failed to transcribe; please re-transcribe first')
         editBtn.addEventListener('click', () => startEditing(tools, box, utts))
         tools.appendChild(editBtn)
       }
@@ -464,8 +468,8 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     playback.bind({ utterances: utts, lines: [], box: null }) // 原文行被换成输入框：只保留跳过静音
     editing = mountEditor(box, utts, { fmt, onDirty: (dirty) => setUnsavedEdit(editKey, dirty) })
     lockForEditing()
-    const doneBtn = el('button', 'atp-btn primary', '完成')
-    const cancelBtn = el('button', 'atp-btn', '取消')
+    const doneBtn = el('button', 'atp-btn primary', t('Done'))
+    const cancelBtn = el('button', 'atp-btn', t('Cancel'))
     doneBtn.type = cancelBtn.type = 'button'
     const hint = el('span', 'atp-status')
     doneBtn.addEventListener('click', async () => {
@@ -479,14 +483,14 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       } catch (e) {
         doneBtn.disabled = false
         const conflict = e && e.response && e.response.status === 409
-        hint.textContent = conflict ? '录音正在处理，修改未保存' : '保存失败，请稍后重试'
+        hint.textContent = conflict ? t('The recording is being processed; changes not saved') : t('Save failed, please try again later')
         hint.classList.add('error')
       }
     })
     cancelBtn.addEventListener('click', async () => {
       if (diffEdits(utts, editing.texts()).length) {
         try {
-          await MessageBox.confirm('放弃对原文的修改？', '取消编辑', { type: 'warning' })
+          await MessageBox.confirm(t('Discard your edits to the transcript?'), t('Cancel editing'), { type: 'warning' })
         } catch (e) {
           return
         }
@@ -503,8 +507,8 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
     const frag = document.createDocumentFragment()
     if (legacy && legacy.summary) frag.appendChild(el('div', 'atp-overview', legacy.summary))
     if (legacy && legacy.transcript) {
-      const d = section('legacyTranscript', '逐字稿', 1, (det) => det.appendChild(el('div', 'atp-legacy', legacy.transcript)))
-      d.querySelector('summary').textContent = '逐字稿'
+      const d = section('legacyTranscript', t('Verbatim transcript'), 1, (det) => det.appendChild(el('div', 'atp-legacy', legacy.transcript)))
+      d.querySelector('summary').textContent = t('Verbatim transcript')
       frag.appendChild(d)
     }
     return frag
