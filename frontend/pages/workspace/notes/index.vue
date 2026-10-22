@@ -510,7 +510,14 @@
           <div class="right-section">
             <h3 class="right-title">{{ $t('workspace.notes.outline') }}</h3>
             <ul v-if="outline.length" class="outline-list">
-              <li v-for="(item, index) in outline" :key="index" class="outline-item" :style="{ paddingLeft: (item.indent || 0) + 'px' }">
+              <li
+                v-for="(item, index) in outline"
+                :key="index"
+                class="outline-item"
+                :class="{ 'outline-item--link': item.target }"
+                :style="{ paddingLeft: (item.indent || 0) + 'px' }"
+                @click="scrollToOutlineItem(item)"
+              >
                 <span class="outline-text">{{ item.text }}</span>
               </li>
             </ul>
@@ -2057,9 +2064,9 @@ export default {
       if (blocks !== null) {
         const filtered = blocks.filter(b => b.type === 'header')
         const minLevel = filtered.length > 0 ? Math.min(...filtered.map(b => b.data.level || 2)) : 1
-        this.outline = filtered.map(b => {
+        this.outline = filtered.map((b, i) => {
           const text = (b.data.text || '').replace(/<[^>]*>/g, '')
-          return { text: text.length > 40 ? text.slice(0, 40) + '...' : text, indent: ((b.data.level || 2) - minLevel) * 12 }
+          return { text: text.length > 40 ? text.slice(0, 40) + '...' : text, indent: ((b.data.level || 2) - minLevel) * 12, target: { selector: '.ce-header', index: i } }
         })
         if (this.outline.length === 0) this.outline = [{ text: this.$t('workspace.notes.noHeaderBlock'), indent: 0 }]
         return
@@ -2070,9 +2077,9 @@ export default {
           if (data.blocks) {
             const filtered = data.blocks.filter(b => b.type === 'header')
             const minLevel = filtered.length > 0 ? Math.min(...filtered.map(b => b.data.level || 2)) : 1
-            this.outline = filtered.map(b => {
+            this.outline = filtered.map((b, i) => {
               const text = (b.data.text || '').replace(/<[^>]*>/g, '')
-              return { text: text.length > 40 ? text.slice(0, 40) + '...' : text, indent: ((b.data.level || 2) - minLevel) * 12 }
+              return { text: text.length > 40 ? text.slice(0, 40) + '...' : text, indent: ((b.data.level || 2) - minLevel) * 12, target: { selector: '.ce-header', index: i } }
             })
           }
         } catch (e) { /* ignore */ }
@@ -2082,9 +2089,12 @@ export default {
       if (this.activeNote.contentType === 'markdown' && this.activeNote.content) {
         const headingRegex = /^(#{1,6})\s+(.+)$/gm
         const headings = []
+        // 去掉围栏代码块，免得代码里的 # 注释被当成标题、和渲染出来的 h1~h6 对不上号
+        const source = this.activeNote.content.replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '')
         let match
-        while ((match = headingRegex.exec(this.activeNote.content)) !== null) {
-          headings.push({ level: match[1].length, text: match[2].trim() })
+        while ((match = headingRegex.exec(source)) !== null) {
+          // index：在渲染后全部 h1~h6 里的序号，点击大纲时据此定位
+          headings.push({ level: match[1].length, text: match[2].trim(), index: headings.length })
         }
         if (headings.length > 0) {
           const minLevel = Math.min(...headings.map(h => h.level))
@@ -2095,7 +2105,8 @@ export default {
           const filteredMinLevel = filtered.length > 0 ? Math.min(...filtered.map(h => h.level)) : 1
           this.outline = filtered.map(h => ({
             text: h.text.length > 40 ? h.text.slice(0, 40) + '...' : h.text,
-            indent: (h.level - filteredMinLevel) * 12
+            indent: (h.level - filteredMinLevel) * 12,
+            target: { selector: '.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6', index: h.index }
           }))
         }
         return
@@ -2107,8 +2118,17 @@ export default {
       }
       this.outline = sections.map((section, index) => ({
         text: this.extractOutlineTitle(section) || this.$t('workspace.notes.blockN', { n: index + 1 }),
-        indent: 0
+        indent: 0,
+        target: { selector: '.note-main-section', index }
       }))
+    },
+    // 点击右栏大纲：在正文区按"第几个标题/区块"找到对应元素并滚动过去（DOM 顺序和构建大纲时的顺序一致）
+    scrollToOutlineItem(item) {
+      if (!item || !item.target) return
+      const root = this.$el.querySelector('.note-main-content')
+      if (!root) return
+      const el = root.querySelectorAll(item.target.selector)[item.target.index]
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
     },
     extractOutlineTitle(content) {
       if (!content) return ''
@@ -3594,6 +3614,11 @@ export default {
   font-size: 13px;
   color: var(--text-secondary);
   transition: padding-left 0s;
+}
+
+.outline-item--link {
+  cursor: pointer;
+  &:hover { color: var(--color-nav); }
 }
 
 .outline-text { flex: 1; }
