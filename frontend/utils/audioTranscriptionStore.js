@@ -61,18 +61,21 @@ function schedule(noteId) {
   const entry = notes.get(noteId)
   if (!entry) return
   clearTimeout(entry.timer)
+  if (!entry.poll) return
   const busy = [...entry.subs].some((s) => isBusy(entry.records.get(s.blockId)))
   entry.timer = busy ? setTimeout(() => refresh(noteId), POLL_MS) : null
 }
 
 /** 订阅某个音频块的转写记录；返回取消订阅函数。最后一个订阅者离开时停止轮询 */
-export function subscribe(noteId, blockId, service, cb) {
+export function subscribe(noteId, blockId, service, cb, { poll = true } = {}) {
   const key = String(noteId)
   let entry = notes.get(key)
   if (!entry) {
-    entry = { subs: new Set(), records: new Map(), timer: null, inflight: null, dirty: false, service }
+    entry = { subs: new Set(), records: new Map(), timer: null, inflight: null, dirty: false, service, poll }
     notes.set(key, entry)
   }
+  // poll: false（公开笔记页只读）不轮询，只加载一次；同一笔记只要有一个订阅者要轮询就轮询
+  entry.poll = entry.poll || poll
   const sub = { blockId, cb }
   entry.subs.add(sub)
   refresh(key)

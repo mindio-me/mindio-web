@@ -547,7 +547,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       lastJson = json
       if (editing) return // 编辑中只更新数据，不冲掉输入框；退出编辑时再 render
       render()
-    })
+    }, { poll: !readOnly })
   }
 
   return {
