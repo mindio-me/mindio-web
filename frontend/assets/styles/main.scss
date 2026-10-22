@@ -429,6 +429,29 @@ html.theme-dark #__layout {
     }
   }
 
+  // 弹出框（AI 助手的聊天记录搜索、会话列表等）：挂在 body 上，同样要跟随深色背景
+  .el-popover {
+    background: var(--card-bg-color);
+    border-color: var(--border-color);
+    color: var(--text-color);
+
+    &.el-popper[x-placement^='bottom'] .popper__arrow {
+      border-bottom-color: var(--border-color);
+
+      &::after {
+        border-bottom-color: var(--card-bg-color);
+      }
+    }
+
+    &.el-popper[x-placement^='top'] .popper__arrow {
+      border-top-color: var(--border-color);
+
+      &::after {
+        border-top-color: var(--card-bg-color);
+      }
+    }
+  }
+
   // 只处理无 type 的默认按钮；primary/success 等语义按钮保持原样
   .el-button--default {
     background-color: transparent;

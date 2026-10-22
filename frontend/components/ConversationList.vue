@@ -108,10 +108,10 @@ export default {
   font-size: 13px;
 }
 .conversation-list-item:hover {
-  background: var(--hover-bg, #f5f7fa);
+  background: var(--bg-secondary, #f5f7fa);
 }
 .conversation-list-item.is-active {
-  background: var(--el-color-primary-light-9, #ecf5ff);
+  background: rgba(64, 158, 255, 0.12);
 }
 .conversation-list-item-title {
   flex: 1;
