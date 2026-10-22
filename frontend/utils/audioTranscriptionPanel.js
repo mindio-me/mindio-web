@@ -82,8 +82,17 @@ function richText(text) {
   return frag
 }
 
-export function mountTranscriptionPanel({ container, audio, noteId, blockId, legacy, readOnly, service }) {
+export function mountTranscriptionPanel({ container, audio, noteId, blockId, legacy, readOnly, service: rawService }) {
   injectStyles()
+  // 只读（公开笔记页等）：兜底拒绝所有写操作，只放行 list；UI 上写入口本来就已隐藏，这里防止漏网
+  const service = readOnly && rawService
+    ? {
+        list: (...args) => rawService.list(...args),
+        trigger: () => Promise.reject(new Error('read-only')),
+        update: () => Promise.reject(new Error('read-only')),
+        saveUtterances: () => Promise.reject(new Error('read-only'))
+      }
+    : rawService
   const root = el('div', 'atp')
   container.appendChild(root)
   let record = null
@@ -187,7 +196,7 @@ export function mountTranscriptionPanel({ container, audio, noteId, blockId, leg
       return line
     }
     if (r.errorKind === 'PARTIAL_SEGMENTS' || r.errorKind === 'NO_SPEECH' || placeholders) {
-      line.appendChild(el('span', null, r.errorMessage || '部分片段转写失败，可以重新转写'))
+      line.appendChild(el('span', null, r.errorMessage || (readOnly ? '部分片段转写失败' : '部分片段转写失败，可以重新转写')))
       if (!readOnly) line.appendChild(button('重新转写', 'FULL'))
       return line
     }

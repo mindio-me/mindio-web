@@ -545,6 +545,26 @@ export default {
           }
         }
 
+        // 录音/音频块的转写结果（只读）：匿名接口只对公开笔记、且只返回正文里仍存在的块的记录。
+        // 必须是纯对象+函数：Editor.js 会深合并工具 config，类实例会丢原型方法（见 mixins/editorjsHost.js 注释）。
+        // 不提供 trigger/update/saveUtterances；404（无转写 / 非公开）不弹错误提示，当作没有记录。
+        const publicNoteId = this.note.id
+        const transcriptionToolConfig = {
+          getNoteId: () => publicNoteId,
+          transcriptionService: {
+            list: async (noteId) => {
+              try {
+                const res = await this.$axios.get(`/v1/share/notes/${noteId}/audio-transcriptions`, {
+                  suppressErrorToast: true
+                })
+                return res.data || []
+              } catch (e) {
+                return []
+              }
+            }
+          }
+        }
+
         // 初始化 EditorJS（只读模式）
         this.editorInstance = new EditorJS({
           holder: this.$refs.editorjsContainer,
@@ -563,8 +583,8 @@ export default {
             linkTool: { class: LinkTool },
             // 音频/录音块：只读时显示播放器和块里存的文字稿/摘要（访客匿名，不加载需要登录的转写记录）；
             // 注册名要和编辑器（editorjsHost）一致，否则这两类块在公开页整块不显示
-            audio: { class: AudioTool },
-            audioRecord: { class: RecordTool },
+            audio: { class: AudioTool, config: transcriptionToolConfig },
+            audioRecord: { class: RecordTool, config: transcriptionToolConfig },
             attaches: {
               class: AttachesTool,
               config: {

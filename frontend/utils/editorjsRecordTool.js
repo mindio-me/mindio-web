@@ -340,8 +340,9 @@ class RecordTool {
     const noteId = this.config.getNoteId ? this.config.getNoteId() : null
     const blockId = this.block && this.block.id
     const service = this.config.transcriptionService
-    // 没有笔记 id / 块 id / service（只读预览、站点导出等）：退回老的文本展示
-    if (!noteId || !blockId || !service || this.readOnly) {
+    // 没有笔记 id / 块 id / service（站点导出等）：退回老的文本展示。
+    // 只读但配了 service（公开笔记页）：照常挂面板，面板在 readOnly 下不会发任何写请求
+    if (!noteId || !blockId || !service) {
       this._renderTranscriptAndSummary(wrapper)
       return
     }
