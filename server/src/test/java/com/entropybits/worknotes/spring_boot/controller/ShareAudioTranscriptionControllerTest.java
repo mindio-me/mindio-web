@@ -66,14 +66,29 @@ class ShareAudioTranscriptionControllerTest {
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].blockId").value("a1"))
                 .andExpect(jsonPath("$[1].blockId").value("r1"))
-                .andExpect(jsonPath("$[0].utterances[0].text").value("hi"))
-                .andExpect(jsonPath("$[0].errorKind").value("ASR_FAILED"));
+                .andExpect(jsonPath("$[0].utterances[0].text").value("hi"));
     }
 
     @Test
-    void errorMessageIsNotExposed() throws Exception {
+    void errorDetailIsNotExposed() throws Exception {
         mvc.perform(get("/v1/share/notes/1/audio-transcriptions"))
-                .andExpect(jsonPath("$[0].errorMessage").doesNotExist());
+                .andExpect(jsonPath("$[0].errorMessage").doesNotExist())
+                .andExpect(jsonPath("$[0].errorKind").doesNotExist())
+                .andExpect(jsonPath("$[0].status").value("FAILED"));
+    }
+
+    @Test
+    void nullOrInvalidContentReturnsEmptyList() throws Exception {
+        when(notes.findById(4L)).thenReturn(Optional.of(
+                Note.builder().id(4L).isPublic(true).content(null).build()));
+        when(notes.findById(5L)).thenReturn(Optional.of(
+                Note.builder().id(5L).isPublic(true).content("not json {").build()));
+        when(transcriptions.findByNoteId(4L)).thenReturn(List.of(record("a1")));
+        when(transcriptions.findByNoteId(5L)).thenReturn(List.of(record("a1")));
+        mvc.perform(get("/v1/share/notes/4/audio-transcriptions"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/v1/share/notes/5/audio-transcriptions"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
     }
 
     @Test

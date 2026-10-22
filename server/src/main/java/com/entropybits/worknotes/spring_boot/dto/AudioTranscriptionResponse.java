@@ -26,6 +26,12 @@ public record AudioTranscriptionResponse(
                 parse(om, t.getSpeakerNames()), t.getEditedAt());
     }
 
+    /** 公开展示用：去掉内部失败详情（errorKind / errorMessage），其余字段原样保留 */
+    public AudioTranscriptionResponse withoutErrorDetail() {
+        return new AudioTranscriptionResponse(blockId, status, stage, null, null,
+                utterances, polished, summary, updatedAt, scene, sceneSource, speakerNames, editedAt);
+    }
+
     private static JsonNode parse(ObjectMapper om, String json) {
         if (json == null || json.isBlank()) return null;
         try {

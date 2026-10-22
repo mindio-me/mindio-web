@@ -11,6 +11,7 @@ import com.entropybits.worknotes.spring_boot.repository.NoteRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,11 +28,12 @@ import java.util.Set;
  * <p>
  * /v1/notes/{id}/audio-transcriptions 需要登录且要求是笔记主人，匿名访客看不到转写。这里只对公开笔记放行，
  * 并且只返回笔记当前正文里仍然存在的 audio / audioRecord 块对应的记录（块被删后遗留的转写不外泄）。
- * 响应形状与登录版一致，但 errorMessage 置空：它是内部失败原因，展示用不到（前端有通用兜底文案）。
+ * 响应形状与登录版一致，但 errorKind / errorMessage 置空：它是内部失败原因，展示用不到（前端有通用兜底文案）。
  */
 @RestController
 @RequestMapping("/v1/share")
 @RequiredArgsConstructor
+@Slf4j
 public class ShareAudioTranscriptionController {
 
     private final NoteRepository noteRepository;
@@ -52,7 +54,7 @@ public class ShareAudioTranscriptionController {
         List<AudioTranscriptionResponse> body = transcriptionRepository.findByNoteId(noteId).stream()
                 .filter(t -> blockIds.contains(t.getBlockId()))
                 .map(t -> AudioTranscriptionResponse.from(t, objectMapper))
-                .map(ShareAudioTranscriptionController::withoutErrorMessage)
+                .map(AudioTranscriptionResponse::withoutErrorDetail)
                 .toList();
         return ResponseEntity.ok(body);
     }
@@ -72,13 +74,8 @@ public class ShareAudioTranscriptionController {
             }
         } catch (Exception e) {
             // 正文不是合法 JSON（非 editorjs 笔记等）：没有可展示的音频块
+            log.debug("share audio transcriptions: content not parseable, noteContent ignored: {}", e.toString());
         }
         return ids;
-    }
-
-    private static AudioTranscriptionResponse withoutErrorMessage(AudioTranscriptionResponse r) {
-        return new AudioTranscriptionResponse(r.blockId(), r.status(), r.stage(), r.errorKind(), null,
-                r.utterances(), r.polished(), r.summary(), r.updatedAt(),
-                r.scene(), r.sceneSource(), r.speakerNames(), r.editedAt());
     }
 }
