@@ -59,6 +59,8 @@ export default {
     this._wsAiDocked = false
   },
   mounted() {
+    // 只有有右栏的页面才提供AI助手（顶栏图标、窄屏抽屉都看这个计数）
+    chatPanelState.hostPageCount += 1
     this.$nuxt.$on('workspace:chat:toggle', this._wsAiToggle)
     // 告诉 GlobalChatDrawer："这个页面自己有右栏在管 AI，你让开"——直接改共享计数
     // 而不是发事件，避免 GlobalChatDrawer 挂载顺序比页面晚、错过首屏那次通知
@@ -67,6 +69,7 @@ export default {
   beforeDestroy() {
     this.$nuxt.$off('workspace:chat:toggle', this._wsAiToggle)
     this._wsAiSetDocked(false)
+    chatPanelState.hostPageCount = Math.max(0, chatPanelState.hostPageCount - 1)
   },
   methods: {
     // 只有"能真的把 AI 显示在右栏"时才登记，窄屏不算

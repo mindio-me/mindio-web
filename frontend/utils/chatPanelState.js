@@ -19,6 +19,9 @@ import Vue from 'vue'
 // 是因为 GlobalChatDrawer 在 layout 里排在 <nuxt/> 后面挂载，首屏若直接落在有右栏的
 // 页面上，事件早就发完了它才开始监听，会错过——读这个响应式字段就没有先后顺序问题。
 //
+// hostPageCount：当前挂载着的、接了 workspaceAiDock mixin（即有右栏）的页面数，不管宽屏窄屏。
+// 为 0 说明当前页面没有右栏，AI助手在这里不提供：顶栏图标隐藏，抽屉也不弹。
+//
 // activeConversationId：当前正在查看/发送消息的会话，null表示"新建会话但还没发第一条消息"
 // （懒创建——真正在服务端建会话记录发生在第一条消息随请求一起发出时）。conversations是
 // 会话列表缓存，conversationsLoaded避免每次挂载都重新拉取。conversationListOpen是会话
@@ -29,6 +32,7 @@ import Vue from 'vue'
 export default Vue.observable({
   open: false,
   dockMountCount: 0,
+  hostPageCount: 0,
   historyLoaded: false,
   loadingHistory: false,
   historyError: false,

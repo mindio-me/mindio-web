@@ -33,12 +33,16 @@ export default {
     sharedOpen() {
       return chatPanelState.open
     },
-    // 抽屉只在"开关是开的，且当前没有页面自己在管右栏"时才显示；有右栏的页面
+    // 当前页面有右栏（接了 workspaceAiDock）才提供AI助手；没有右栏的页面一律不弹抽屉
+    hostPage() {
+      return chatPanelState.hostPageCount > 0
+    },
+    // 抽屉只在"开关是开的，且当前没有页面自己在管右栏"时才显示（窄屏下有右栏的页面由抽屉兜底）；有右栏的页面
     // （笔记、成就、剪藏……凡是接了 workspaceAiDock mixin 的）会自己停靠，抽屉让位，
     // 不然会同时出现两份
     drawerVisible: {
       get() {
-        return chatPanelState.open && !this.dockMounted
+        return chatPanelState.open && this.hostPage && !this.dockMounted
       },
       set(v) {
         chatPanelState.open = v
@@ -64,7 +68,7 @@ export default {
     toggleOpen() {
       // 有右栏的页面自己处理这次 toggle（写的是同一个 chatPanelState.open），这里
       // 让开、不重复切换，否则一次点击会被两边各切一次、等于没切
-      if (this.dockMounted) return
+      if (this.dockMounted || !this.hostPage) return
       chatPanelState.open = !chatPanelState.open
     },
     closePanel() {

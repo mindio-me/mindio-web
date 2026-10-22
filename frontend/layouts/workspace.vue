@@ -64,7 +64,7 @@
           <button class="theme-toggle lang-toggle" @click="toggleLang" :title="$t('lang.toggle')">
             {{ $t('lang.toggle') }}
           </button>
-          <button class="theme-toggle" @click="$nuxt.$emit('workspace:chat:toggle')" :title="$t('topbar.chatOpen')">
+          <button v-if="aiAvailable" class="theme-toggle" @click="$nuxt.$emit('workspace:chat:toggle')" :title="$t('topbar.chatOpen')">
             <i class="el-icon-chat-dot-round"></i>
           </button>
           <button
@@ -125,6 +125,7 @@
 
 <script>
 import recordingController from '~/utils/recordingController'
+import chatPanelState from '~/utils/chatPanelState'
 
 export default {
   name: 'WorkspaceLayout',
@@ -143,6 +144,10 @@ export default {
   computed: {
     recordingStatus() {
       return recordingController.state.status
+    },
+    // 没有右栏的页面不提供AI助手，顶栏图标也不显示（见 workspaceAiDock）
+    aiAvailable() {
+      return chatPanelState.hostPageCount > 0
     },
     moduleTabs() {
       return [
