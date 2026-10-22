@@ -80,6 +80,8 @@ function injectStyles() {
   line-height: 1.7;
   white-space: pre-wrap;
 }
+.theme-dark .audio-tool__summary { background: rgba(102,126,234,0.12); color: var(--text-secondary); }
+.theme-dark .audio-tool__transcript { background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-secondary); }
 
 /* ── AudioTool: modal overlay ─────────────────────── */
 .at-overlay {

@@ -119,6 +119,8 @@ function injectStyles() {
   line-height: 1.7;
   white-space: pre-wrap;
 }
+.theme-dark .record-tool__summary { background: rgba(102,126,234,0.12); color: var(--text-secondary); }
+.theme-dark .record-tool__transcript { background: var(--bg-tertiary); border-color: var(--border-color); color: var(--text-secondary); }
 `
   document.head.appendChild(el)
 }
