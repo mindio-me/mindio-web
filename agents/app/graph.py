@@ -31,6 +31,7 @@ from tools.analyze_image import make_analyze_image_tool
 from tools.content_cache import ContentCache
 from tools.get_project_notes import make_get_project_notes_tool
 from tools.list_clips import make_list_clips_tool
+from tools.manage_tags import make_tag_tools
 from tools.read_cached_content import make_read_cached_content_tool
 from tools.read_document import make_read_clip_tool, make_read_note_tool
 from tools.read_note_references import make_read_note_references_tool
@@ -62,6 +63,9 @@ SYSTEM_PROMPT = (
     "add_reference_item/add_gallery_item/add_timeline_item/add_checklist_item——这些工具"
     "只能新增内容，不能修改或删除已有条目，调用后会先弹出确认卡片，用户接受后才真正写入。"
     "每次只调用一个写入工具，等这条确认完再决定要不要添加下一条。"
+    "用户要整理标签时：list_tags 查看全部标签，create_tag 新建，delete_tag 删除（会先弹确认卡片），"
+    "tag_note/tag_clip 给笔记或收藏加上、去掉标签（不存在的标签会自动新建）。"
+    "不要在用户没有要求时自作主张删除或改动标签。"
     '如果用户想让你看看笔记里的图片内容（比如"这张图是什么"、"帮我描述一下这张照片"），'
     "调用 analyze_image；这个工具会直接把描述写进图片下方，不需要用户额外确认。"
     "如果只是需要了解某张图的内容来回答问题或写作（比如用户说参考某篇笔记/收藏里的截图、"
@@ -146,6 +150,8 @@ def build_default_graph_builder(
         make_transcribe_audio_tool(java_client, default_asr_client, media_block_update_sink),
         make_get_project_notes_tool(java_client),
         make_update_project_field_tool(java_client, project_field_update_sink),
+        # 标签改动和正文改动一样立即落库，走同一个 sink，确认卡片 / 出错前也会先推给前端
+        *make_tag_tools(java_client, note_content_update_sink),
     ]
     model = resolve_chat_model(provider).bind_tools(tools, parallel_tool_calls=False)
     return build_graph_builder(model, tools), tools

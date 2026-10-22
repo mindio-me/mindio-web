@@ -651,3 +651,12 @@ def test_drain_emits_note_created_and_content_updates_in_order():
     ]
     assert updates == []
 
+
+
+def test_drain_emits_tags_updated():
+    updates = [{"type": "tags_updated", "noteId": None, "clipId": 7}]
+
+    lines = [json.loads(chunk) for chunk in _drain_note_content_updates(updates)]
+
+    assert lines == [{"type": "tags_updated", "noteId": None, "clipId": 7}]
+    assert updates == []

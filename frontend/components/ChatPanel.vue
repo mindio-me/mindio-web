@@ -545,6 +545,12 @@ export default {
         this.pendingCreatedNotes.push(created)
         // 笔记页收到后刷新左侧列表；当前打开的笔记不切换
         this.$nuxt.$emit('workspace:note-created', { id: created.noteId, title: created.title })
+      } else if (event.type === 'tags_updated') {
+        // AI 增删了标签或改了笔记/收藏的标签；data.clipId 是被改的收藏
+        this.$nuxt.$emit('workspace:tags-updated', {
+          noteId: event.noteId || null,
+          clipId: (event.data && event.data.clipId) || null
+        })
       } else if (event.type === 'project_field_updated') {
         this.$nuxt.$emit('project-field-updated', {
           projectId: event.projectId,
@@ -574,6 +580,10 @@ export default {
       }
     },
     confirmationSummary(confirmation) {
+      if (confirmation.blockType === 'deleteTag') {
+        const p = confirmation.preview || {}
+        return this.$t('workspace.chat.confirmDeleteTag', { name: p.name, notes: p.noteCount || 0, clips: p.clipCount || 0 })
+      }
       const labels = { references: '参考资料', mediaGallery: '媒体画廊', timeline: '时间线', checklist: '任务清单' }
       const label = labels[confirmation.blockType] || confirmation.blockType
       const preview = confirmation.preview || {}
@@ -581,6 +591,7 @@ export default {
       return `建议往「${label}」添加：${title}`
     },
     previewEntries(confirmation) {
+      if (confirmation.blockType === 'deleteTag') return [] // 摘要里已经写全了
       const preview = confirmation.preview || {}
       return Object.entries(preview)
         .filter(([, value]) => value !== null && value !== undefined && value !== '')

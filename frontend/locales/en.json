@@ -901,7 +901,8 @@
       "searchPlaceholder": "Search messages in all conversations",
       "searchNoResults": "No matching messages",
       "searchFailed": "Search failed, please try again",
-      "searchRoleUser": "Me"
+      "searchRoleUser": "Me",
+      "confirmDeleteTag": "Delete the tag \"{name}\"? It will be removed from {notes} notes and {clips} clips. This cannot be undone."
     },
     "bookmarkImport": {
       "title": "Import Bookmarks",

@@ -69,6 +69,9 @@ def _drain_note_content_updates(note_content_updates: list[dict] | None) -> Iter
         if update.get("type") == "note_created":
             # create_note 新建的笔记：前端刷新笔记列表、回复下方显示"已新建"
             yield _event("note_created", noteId=update["noteId"], title=update["title"])
+        elif update.get("type") == "tags_updated":
+            # 标签工具增删了标签或改了笔记/收藏的标签：前端刷新标签列表和当前笔记的标签
+            yield _event("tags_updated", noteId=update.get("noteId"), clipId=update.get("clipId"))
         else:
             yield _event("note_content_updated", noteId=update["noteId"], data=update["data"])
 

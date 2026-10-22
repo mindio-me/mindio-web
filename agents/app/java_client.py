@@ -289,6 +289,34 @@ class JavaClient:
         """按系统默认值新建空白 Editor.js 笔记，返回 {"noteId", "title"}。"""
         return await self._write_document("POST", "/internal/documents/notes", username, {"title": title})
 
+    async def list_tags(self, username: str) -> list[dict]:
+        """全部标签：[{"id", "name", "noteCount", "clipCount"}]，按名字排序。"""
+        try:
+            resp = await self._client.get("/internal/documents/tags", params={"username": username})
+        except httpx.HTTPError as e:
+            raise JavaClientError(f"list_tags failed: {e}") from e
+        if resp.status_code >= 400:
+            raise JavaClientError(_error_message(resp))
+        return resp.json()
+
+    async def create_tag(self, username: str, name: str, scope: str = "note") -> dict:
+        """已存在同名标签时不重复建，返回 {"id", "name", "created"}。"""
+        return await self._write_document("POST", "/internal/documents/tags", username, {"name": name, "scope": scope})
+
+    async def delete_tag(self, username: str, name: str) -> dict:
+        return await self._write_document("DELETE", "/internal/documents/tags", username, params={"name": name})
+
+    async def update_note_tags(self, username: str, note_id: int, add: list[str], remove: list[str]) -> dict:
+        """返回 {"noteId", "tags": [笔记现在的全部标签名]}；add 里不存在的标签会自动新建。"""
+        return await self._write_document(
+            "POST", f"/internal/documents/notes/{note_id}/tags", username, {"add": add, "remove": remove},
+        )
+
+    async def update_clip_tags(self, username: str, clip_id: int, add: list[str], remove: list[str]) -> dict:
+        return await self._write_document(
+            "POST", f"/internal/documents/clips/{clip_id}/tags", username, {"add": add, "remove": remove},
+        )
+
     async def _read_document(self, username: str, kind: str, doc_id: int) -> dict | None:
         try:
             resp = await self._client.get(f"/internal/documents/{kind}/{doc_id}", params={"username": username})

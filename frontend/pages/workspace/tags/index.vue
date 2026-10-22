@@ -148,10 +148,13 @@ export default {
     this.loadTagList()
     // 监听 layout 触发的创建事件
     this.$nuxt.$on('workspace:create:tags', this.showCreateTagDialog)
+    // AI 助手增删了标签
+    this.$nuxt.$on('workspace:tags-updated', this.loadTagList)
   },
   beforeDestroy() {
     // 移除事件监听器
     this.$nuxt.$off('workspace:create:tags', this.showCreateTagDialog)
+    this.$nuxt.$off('workspace:tags-updated', this.loadTagList)
   },
   methods: {
     wsLayoutOptions() {

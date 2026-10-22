@@ -71,6 +71,9 @@ class AgentServiceClientTest {
         Map<String, Object> noteContentUpdatedData;
         Long noteCreatedNoteId;
         String noteCreatedTitle;
+        Long tagsUpdatedNoteId;
+        Long tagsUpdatedClipId;
+        boolean tagsUpdated;
 
         @Override
         public void onTextDelta(String text) { textDeltas.add(text); }
@@ -121,6 +124,13 @@ class AgentServiceClientTest {
         public void onNoteCreated(Long noteId, String title) {
             noteCreatedNoteId = noteId;
             noteCreatedTitle = title;
+        }
+
+        @Override
+        public void onTagsUpdated(Long noteId, Long clipId) {
+            tagsUpdated = true;
+            tagsUpdatedNoteId = noteId;
+            tagsUpdatedClipId = clipId;
         }
     }
 
@@ -472,6 +482,18 @@ class AgentServiceClientTest {
 
         assertThat(listener.noteCreatedNoteId).isEqualTo(42L);
         assertThat(listener.noteCreatedTitle).isEqualTo("English notes");
+    }
+
+    @Test
+    void dispatchesTagsUpdated() throws Exception {
+        setUp(200, "{\"type\":\"tags_updated\",\"clipId\":7}\n");
+        RecordingListener listener = new RecordingListener();
+
+        client.streamChat("alice", "给这条收藏打上研究标签", "alice", null, null, List.of(), 9L, null, listener);
+
+        assertThat(listener.tagsUpdated).isTrue();
+        assertThat(listener.tagsUpdatedNoteId).isNull();
+        assertThat(listener.tagsUpdatedClipId).isEqualTo(7L);
     }
 
     @Test

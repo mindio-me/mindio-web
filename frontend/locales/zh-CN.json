@@ -901,7 +901,8 @@
       "searchPlaceholder": "搜索所有会话里的消息",
       "searchNoResults": "没有找到匹配的消息",
       "searchFailed": "搜索失败，请重试",
-      "searchRoleUser": "我"
+      "searchRoleUser": "我",
+      "confirmDeleteTag": "删除标签「{name}」？它会从 {notes} 篇笔记和 {clips} 条收藏上一并去掉，不能撤销。"
     },
     "bookmarkImport": {
       "title": "导入收藏夹",

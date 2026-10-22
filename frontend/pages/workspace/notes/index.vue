@@ -1016,6 +1016,7 @@ export default {
     this.$nuxt.$on('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$on('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$on('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$on('workspace:tags-updated', this.onAiTagsUpdated)
     this.$nuxt.$on('media-block-updated', this.onMediaBlockUpdated)
     this.$nuxt.$on('note-content-updated', this.onNoteContentUpdated)
     this.$nuxt.$on('note-insert-request', this.onNoteInsertRequest)
@@ -1045,6 +1046,7 @@ export default {
     this.$nuxt.$off('workspace:request-current-note-id', this.replyCurrentNoteId)
     this.$nuxt.$off('recording:resolve-block', this.onRecordingResolveBlock)
     this.$nuxt.$off('topic-block-updated', this.onTopicBlockUpdated)
+    this.$nuxt.$off('workspace:tags-updated', this.onAiTagsUpdated)
     this.$nuxt.$off('media-block-updated', this.onMediaBlockUpdated)
     this.$nuxt.$off('note-content-updated', this.onNoteContentUpdated)
     this.$nuxt.$off('note-insert-request', this.onNoteInsertRequest)
@@ -1682,6 +1684,33 @@ export default {
      * 用户在agent写入的同时手动删掉了这个块）就静默忽略——下次重新打开笔记时
      * 内容已经是服务端最新的，不算错误路径。
      */
+    // AI 助手增删了标签或改了某篇笔记的标签：刷新侧栏标签列表，去掉已被删除的标签，
+    // 被改的那篇笔记重新取一次标签（只动标签，不碰正在编辑的正文）
+    async onAiTagsUpdated({ noteId } = {}) {
+      try {
+        const { data } = await this.$axios.get('/v1/tags?scope=note')
+        this.tags = data || []
+      } catch (e) {
+        return
+      }
+      const alive = new Set(this.tags.map(t => t.id))
+      const prune = (list) => Array.isArray(list) ? list.filter(t => alive.has(t.id)) : list
+      if (this.activeNote) this.activeNote.tags = prune(this.activeNote.tags)
+      this.notes.forEach((note) => { note.tags = prune(note.tags) })
+      this.recentNotes.forEach((note) => { note.tags = prune(note.tags) })
+      this.selectedTags = this.selectedTags.filter(id => alive.has(id))
+      if (!noteId) return
+      try {
+        const { data } = await this.$axios.get(`/v1/notes/${noteId}`)
+        const fresh = Array.from((data && data.tags) || [])
+        if (this.activeNote && this.activeNote.id === noteId) this.activeNote.tags = fresh
+        ;[...this.notes, ...this.recentNotes].forEach((note) => {
+          if (note.id === noteId) note.tags = [...fresh]
+        })
+      } catch (e) {
+        // 取不到就保持现状，下次打开这篇笔记时会重新加载
+      }
+    },
     onTopicBlockUpdated({ noteId, blockType, items }) {
       if (!this.editor || !this.activeNote || String(this.activeNote.id) !== String(noteId)) return
       const blocks = this.editor.blocks

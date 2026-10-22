@@ -448,9 +448,11 @@ export default {
   },
   mounted() {
     this.$nuxt.$on('workspace:create:clips', this.openCreate)
+    this.$nuxt.$on('workspace:tags-updated', this.onAiTagsUpdated)
   },
   beforeDestroy() {
     this.$nuxt.$off('workspace:create:clips', this.openCreate)
+    this.$nuxt.$off('workspace:tags-updated', this.onAiTagsUpdated)
     clearTimeout(this.agentPollTimers.CLUSTER)
     clearTimeout(this.agentPollTimers.TIMELINE)
   },
@@ -751,6 +753,25 @@ export default {
         }))
       } finally {
         this.generateInFlight[type] = false
+      }
+    },
+    // AI 助手增删了标签或改了某条收藏的标签：刷新标签列表和计数，被删的标签从收藏上去掉，
+    // 被改的那条收藏重新取一次标签
+    async onAiTagsUpdated({ clipId } = {}) {
+      await this.loadClipTags()
+      this.loadUntaggedCount()
+      if (!clipId) {
+        const alive = new Set(this.allClipTags.map(t => t.id))
+        this.clips.forEach((c) => { if (Array.isArray(c.tags)) c.tags = c.tags.filter(t => alive.has(t.id)) })
+        return
+      }
+      const clip = this.clips.find(c => c.id === clipId)
+      if (!clip) return
+      try {
+        const fresh = await this.$clipService.getClipById(clipId)
+        clip.tags = fresh.tags || []
+      } catch (e) {
+        // 取不到就保持现状
       }
     },
     async loadClipTags() {

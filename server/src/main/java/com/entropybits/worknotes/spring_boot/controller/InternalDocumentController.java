@@ -13,6 +13,7 @@ import com.entropybits.worknotes.spring_boot.dto.NoteResponse;
 import com.entropybits.worknotes.spring_boot.service.AgentDocumentService;
 import com.entropybits.worknotes.spring_boot.service.AgentImageEditService;
 import com.entropybits.worknotes.spring_boot.service.AgentNoteEditService;
+import com.entropybits.worknotes.spring_boot.service.AgentTagService;
 import com.entropybits.worknotes.spring_boot.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +34,7 @@ public class InternalDocumentController {
     private final AgentImageEditService agentImageEditService;
     private final AgentNoteEditService agentNoteEditService;
     private final NoteService noteService;
+    private final AgentTagService agentTagService;
 
     @GetMapping("/notes")
     public List<AgentDocumentSummary> findNotes(@RequestParam String username, @RequestParam String title) {
@@ -122,5 +124,34 @@ public class InternalDocumentController {
                                         @RequestParam(defaultValue = "true") boolean snapshot,
                                         @RequestBody Map<String, List<Map<String, Object>>> body) {
         return agentNoteEditService.applyAsAgent(username, noteId, conversationId, body.get("operations"), snapshot);
+    }
+
+    // ===== 标签（AI 助手的 list_tags / create_tag / delete_tag / tag_note / tag_clip）=====
+
+    @GetMapping("/tags")
+    public List<Map<String, Object>> listTags(@RequestParam String username) {
+        return agentTagService.listTags(username);
+    }
+
+    @PostMapping("/tags")
+    public Map<String, Object> createTag(@RequestParam String username, @RequestBody Map<String, String> body) {
+        return agentTagService.createTag(username, body.get("name"), body.get("scope"));
+    }
+
+    @DeleteMapping("/tags")
+    public Map<String, Object> deleteTag(@RequestParam String username, @RequestParam String name) {
+        return agentTagService.deleteTag(username, name);
+    }
+
+    @PostMapping("/notes/{noteId}/tags")
+    public Map<String, Object> updateNoteTags(@RequestParam String username, @PathVariable Long noteId,
+                                              @RequestBody Map<String, List<String>> body) {
+        return agentTagService.updateNoteTags(username, noteId, body.get("add"), body.get("remove"));
+    }
+
+    @PostMapping("/clips/{clipId}/tags")
+    public Map<String, Object> updateClipTags(@RequestParam String username, @PathVariable Long clipId,
+                                              @RequestBody Map<String, List<String>> body) {
+        return agentTagService.updateClipTags(username, clipId, body.get("add"), body.get("remove"));
     }
 }

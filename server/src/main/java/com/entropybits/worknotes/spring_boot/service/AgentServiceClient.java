@@ -54,6 +54,8 @@ public class AgentServiceClient {
         default void onNoteContentUpdated(Long noteId, Map<String, Object> data) {}
         /** agent 新建了笔记（create_note），前端刷新笔记列表并在回复下方显示"已新建" */
         default void onNoteCreated(Long noteId, String title) {}
+        /** agent 增删了标签或改了某篇笔记/收藏的标签，前端刷新标签列表（noteId/clipId 可能为空） */
+        default void onTagsUpdated(Long noteId, Long clipId) {}
     }
 
     private final String baseUrl;
@@ -160,6 +162,9 @@ public class AgentServiceClient {
             case "note_created" -> listener.onNoteCreated(
                     toLong(event.get("noteId")),
                     (String) event.get("title"));
+            case "tags_updated" -> listener.onTagsUpdated(
+                    toLong(event.get("noteId")),
+                    toLong(event.get("clipId")));
             default -> log.warn("unknown agent service event type: {}", type);
         }
     }
