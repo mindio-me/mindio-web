@@ -896,7 +896,12 @@
       "delete": "删除",
       "deleteConfirm": "确定删除这个会话吗？聊天记录也会一并删除。",
       "renameFailed": "改名失败，请重试",
-      "deleteFailed": "删除失败，请重试"
+      "deleteFailed": "删除失败，请重试",
+      "searchHistory": "搜索聊天记录",
+      "searchPlaceholder": "搜索所有会话里的消息",
+      "searchNoResults": "没有找到匹配的消息",
+      "searchFailed": "搜索失败，请重试",
+      "searchRoleUser": "我"
     },
     "bookmarkImport": {
       "title": "导入收藏夹",

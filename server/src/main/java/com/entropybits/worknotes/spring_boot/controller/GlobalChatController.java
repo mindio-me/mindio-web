@@ -6,6 +6,7 @@ package com.entropybits.worknotes.spring_boot.controller;
 
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChatResumeRequest;
+import com.entropybits.worknotes.spring_boot.dto.ChatSearchHitResponse;
 import com.entropybits.worknotes.spring_boot.dto.SendChatMessageRequest;
 import com.entropybits.worknotes.spring_boot.exception.BadRequestException;
 import com.entropybits.worknotes.spring_boot.service.GlobalChatService;
@@ -30,6 +31,13 @@ public class GlobalChatController {
     public ResponseEntity<List<com.entropybits.worknotes.spring_boot.dto.ConversationResponse>> listConversations(
             @AuthenticationPrincipal UserDetails user) {
         return ResponseEntity.ok(chatService.listConversations(user.getUsername()));
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<ChatSearchHitResponse>> searchMessages(
+            @RequestParam("q") String query,
+            @AuthenticationPrincipal UserDetails user) {
+        return ResponseEntity.ok(chatService.searchMessages(user.getUsername(), query));
     }
 
     @GetMapping("/conversations/{id}/messages")

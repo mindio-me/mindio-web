@@ -13,6 +13,12 @@
         <button class="chat-header-new" :title="$t('workspace.chat.newConversation')" @click="startNewConversation">
           <i class="el-icon-plus"></i>
         </button>
+        <el-popover placement="bottom-end" trigger="click" width="340" v-model="historySearchOpen" @show="$refs.historySearch && $refs.historySearch.focus()">
+          <ChatHistorySearch ref="historySearch" @select="onSearchHitSelect" />
+          <button slot="reference" class="chat-header-history" :title="$t('workspace.chat.searchHistory')">
+            <i class="el-icon-search"></i>
+          </button>
+        </el-popover>
         <el-popover placement="bottom-end" trigger="click" width="280" v-model="conversationListOpen" @show="loadConversations">
           <ConversationList
             :conversations="conversations"
@@ -53,7 +59,8 @@
           v-for="msg in messages"
           :key="msg.id"
           class="chat-turn"
-          :class="msg.role === 'USER' ? 'is-user' : 'is-assistant'"
+          :class="[msg.role === 'USER' ? 'is-user' : 'is-assistant', { 'is-search-target': msg.id === highlightMessageId }]"
+          :data-message-id="msg.id"
         >
           <div v-if="msg.role === 'USER'" class="chat-user-bubble">
             <div v-if="msg.attachments && msg.attachments.length" class="chat-attachment-preview chat-attachment-preview-sent">
@@ -301,6 +308,21 @@ export default {
     onSelectFromList(id) {
       this.conversationListOpen = false
       this.selectConversation(id)
+    },
+    // 聊天记录搜索点中一条：打开那个会话，滚到那条消息并短暂高亮，方便看上下文
+    async onSearchHitSelect(hit) {
+      this.historySearchOpen = false
+      await this.selectConversation(hit.conversationId)
+      // loadHistory 会在 nextTick + rAF 里滚到底部，这里排在它之后再定位
+      this.$nextTick(() => window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const box = this.$refs.messages
+        const el = box && box.querySelector(`[data-message-id="${hit.messageId}"]`)
+        if (!el) return
+        el.scrollIntoView({ block: 'center' })
+        this.highlightMessageId = hit.messageId
+        clearTimeout(this._highlightTimer)
+        this._highlightTimer = setTimeout(() => { this.highlightMessageId = null }, 2500)
+      })))
     },
     onNewFromList() {
       this.conversationListOpen = false
@@ -876,7 +898,9 @@ export default {
   gap: 8px;
 }
 
-.chat-turn { margin-bottom: 20px; }
+.chat-turn { margin-bottom: 20px; border-radius: 8px; transition: box-shadow 0.3s, background-color 0.3s; }
+// 从聊天记录搜索跳过来的那条消息，短暂高亮
+.chat-turn.is-search-target { background-color: rgba(255, 213, 79, 0.18); box-shadow: 0 0 0 6px rgba(255, 213, 79, 0.18); }
 .chat-turn.is-user { display: flex; justify-content: flex-end; }
 
 .chat-user-bubble {

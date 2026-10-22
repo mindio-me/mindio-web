@@ -10,6 +10,7 @@ import com.entropybits.worknotes.spring_boot.dto.AttachmentPayload;
 import com.entropybits.worknotes.spring_boot.dto.ChatAttachmentRef;
 import com.entropybits.worknotes.spring_boot.dto.ChatCitation;
 import com.entropybits.worknotes.spring_boot.dto.ChatMessageResponse;
+import com.entropybits.worknotes.spring_boot.dto.ChatSearchHitResponse;
 import com.entropybits.worknotes.spring_boot.dto.ChatStreamEvent;
 import com.entropybits.worknotes.spring_boot.dto.ConversationResponse;
 import com.entropybits.worknotes.spring_boot.entity.AiChatConversation;
@@ -31,13 +32,16 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Slf4j
@@ -45,6 +49,10 @@ import java.util.Map;
 public class GlobalChatService {
 
     private static final int FALLBACK_TITLE_CHAR_CAP = 20;
+    private static final int SEARCH_HIT_LIMIT = 50;
+    private static final int SEARCH_QUERY_MAX_CHARS = 100;
+    private static final int SNIPPET_BEFORE_CHARS = 30;
+    private static final int SNIPPET_AFTER_CHARS = 60;
 
     private final AiChatMessageRepository chatMessageRepository;
     private final AiChatConversationRepository conversationRepository;
@@ -463,6 +471,45 @@ public class GlobalChatService {
         // 独立存取，见AgentConversationState类注释），LangGraph checkpointer的序列化状态里
         // 复制了一份对话内容，不清掉的话用户删会话后这份内容副本会一直留在这张表里。
         agentConversationStateRepository.deleteByConversationId(String.valueOf(conversationId));
+    }
+
+    /**
+     * 在当前用户的全部聊天记录里按子串搜索（忽略大小写），新的在前，最多 {@link #SEARCH_HIT_LIMIT} 条。
+     * 前端据 conversationId + messageId 打开会话并滚到那条消息。
+     */
+    public List<ChatSearchHitResponse> searchMessages(String username, String query) {
+        String q = query == null ? "" : query.trim();
+        if (q.isEmpty()) return List.of();
+        if (q.length() > SEARCH_QUERY_MAX_CHARS) q = q.substring(0, SEARCH_QUERY_MAX_CHARS);
+        User user = getUser(username);
+        String pattern = "%" + q.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        List<AiChatMessage> hits = chatMessageRepository.searchByOwner(user, pattern, PageRequest.of(0, SEARCH_HIT_LIMIT));
+        // 同一个会话的多条命中只算一次标题（无标题会话的兜底标题要多查一次库）
+        Map<Long, String> titles = new HashMap<>();
+        String needle = q;
+        return hits.stream().map(m -> {
+            AiChatConversation c = m.getConversation();
+            String title = titles.computeIfAbsent(c.getId(), id -> toConversationResponse(c).getTitle());
+            return ChatSearchHitResponse.builder()
+                    .conversationId(c.getId())
+                    .conversationTitle(title)
+                    .messageId(m.getId())
+                    .role(m.getRole().name())
+                    .snippet(searchSnippet(m.getContent(), needle))
+                    .createdAt(m.getCreatedAt())
+                    .build();
+        }).toList();
+    }
+
+    /** 命中处前后各取一小段，空白折叠成一个空格；截断处加省略号 */
+    static String searchSnippet(String content, String query) {
+        String text = content == null ? "" : content;
+        int idx = text.toLowerCase(Locale.ROOT).indexOf(query.toLowerCase(Locale.ROOT));
+        if (idx < 0) idx = 0;
+        int from = Math.max(0, idx - SNIPPET_BEFORE_CHARS);
+        int to = Math.min(text.length(), idx + query.length() + SNIPPET_AFTER_CHARS);
+        String snippet = text.substring(from, to).replaceAll("\\s+", " ").trim();
+        return (from > 0 ? "…" : "") + snippet + (to < text.length() ? "…" : "");
     }
 
     private ConversationResponse toConversationResponse(AiChatConversation c) {

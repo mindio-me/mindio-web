@@ -54,6 +54,9 @@ export default Vue.observable({
   conversations: [],
   conversationsLoaded: false,
   conversationListOpen: false,
+  // 聊天记录搜索弹层是否展开；highlightMessageId 是从搜索结果跳过来、正在短暂高亮的那条消息
+  historySearchOpen: false,
+  highlightMessageId: null,
   pendingTurnEdit: null,
   // 这一轮 AI 新建的笔记（note_created 事件），回复结束时挂到助手消息上显示"已新建"卡片；不持久化
   pendingCreatedNotes: [],

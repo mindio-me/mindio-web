@@ -14,6 +14,10 @@ class GlobalChatService extends ApiService {
     return this.get(`/v1/chat/conversations/${conversationId}/messages`, { suppressErrorToast: true })
   }
 
+  searchMessages(query) {
+    return this.get('/v1/chat/search', { params: { q: query }, suppressErrorToast: true })
+  }
+
   renameConversation(conversationId, title) {
     return this.patch(`/v1/chat/conversations/${conversationId}`, { title })
   }

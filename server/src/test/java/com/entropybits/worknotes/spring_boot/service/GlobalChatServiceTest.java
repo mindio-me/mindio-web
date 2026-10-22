@@ -677,6 +677,36 @@ class GlobalChatServiceTest {
     }
 
     @Test
+    void searchMessages_escapesWildcardsAndReturnsHitsWithSnippetAndTitle() {
+        AiChatConversation conversation = AiChatConversation.builder().id(7L).owner(user).title("部署讨论").build();
+        AiChatMessage hit = AiChatMessage.builder().id(70L).conversation(conversation).role(AiChatMessage.Role.ASSISTANT)
+                .content("第一行\n\n完成率 100% 了").createdAt(java.time.Instant.parse("2026-10-01T00:00:00Z")).build();
+        when(chatMessageRepository.searchByOwner(eq(user), eq("%100!%%"), any())).thenReturn(List.of(hit));
+
+        List<com.entropybits.worknotes.spring_boot.dto.ChatSearchHitResponse> result = service.searchMessages("alice", " 100% ");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getConversationId()).isEqualTo(7L);
+        assertThat(result.get(0).getConversationTitle()).isEqualTo("部署讨论");
+        assertThat(result.get(0).getMessageId()).isEqualTo(70L);
+        assertThat(result.get(0).getRole()).isEqualTo("ASSISTANT");
+        assertThat(result.get(0).getSnippet()).isEqualTo("第一行 完成率 100% 了");
+    }
+
+    @Test
+    void searchMessages_blankQueryReturnsEmptyWithoutQuerying() {
+        assertThat(service.searchMessages("alice", "  ")).isEmpty();
+        verify(chatMessageRepository, never()).searchByOwner(any(), any(), any());
+    }
+
+    @Test
+    void searchSnippet_trimsAroundTheHitWithEllipses() {
+        String content = "a".repeat(100) + "KEY" + "b".repeat(100);
+        String snippet = GlobalChatService.searchSnippet(content, "key");
+        assertThat(snippet).isEqualTo("…" + "a".repeat(30) + "KEY" + "b".repeat(60) + "…");
+    }
+
+    @Test
     void renameConversation_persistsNewTitleAndReturnsIt() {
         AiChatConversation conversation = AiChatConversation.builder().id(5L).owner(user).title("旧标题").build();
         when(conversationRepository.findById(5L)).thenReturn(Optional.of(conversation));
