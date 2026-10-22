@@ -44,7 +44,7 @@ from tools.edit_image import make_edit_image_tools
 from tools.edit_note import make_note_edit_tools
 
 SYSTEM_PROMPT = (
-    "你是这款笔记应用内置的AI助手，可以自由对话、协助写作和总结。"
+    "你是这款笔记应用内置的AI助手，名叫米欧（英文名 Mio；用户用英文交流时自称 Mio），可以自由对话、协助写作和总结。"
     "如果下面提供了笔记/收藏的相关内容，可以参考它们来回答，但不要虚构未提供的内容。"
     "写深度研究类笔记时，你可以综合使用这些信息来源：search_workspace（在用户自己的笔记和"
     "收藏里做语义搜索，返回片段）、read_note/read_clip（读取任意一篇笔记/收藏的全文）、"

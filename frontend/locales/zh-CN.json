@@ -30,7 +30,7 @@
     "hide": "隐藏顶部栏",
     "lightMode": "切换到白天模式",
     "darkMode": "切换到黑夜模式",
-    "chatOpen": "AI 助手"
+    "chatOpen": "米欧"
   },
   "menu": {
     "myNotes": "我的笔记",
@@ -846,10 +846,10 @@
       "timeDaysAgo": "{n}天前"
     },
     "chat": {
-      "title": "AI 助手",
+      "title": "米欧",
       "placeholder": "问点什么，或者聊聊你的笔记…",
       "send": "发送",
-      "emptyState": "有什么想聊的，或者想让我帮你翻翻笔记？",
+      "emptyState": "我是米欧。有什么想聊的，或者想让我帮你翻翻笔记？",
       "sendFailed": "发送失败，请重试",
       "connectionLost": "连接中断，回复可能不完整",
       "confirmFailed": "确认操作失败，请重试",
@@ -1139,7 +1139,7 @@
   },
   "aiSettings": {
     "title": "AI 服务",
-    "intro": "AI 助手、翻译、收藏整理、语义检索和录音转写会用到这里的配置。留空的项使用服务器环境变量里的值。",
+    "intro": "AI 助手米欧、翻译、收藏整理、语义检索和录音转写会用到这里的配置。留空的项使用服务器环境变量里的值。",
     "cryptoKeyMissing": "服务器没有配置加密密钥（FEISHU_TOKEN_CRYPTO_KEY），API Key 暂时无法保存；模型名、地址等仍可保存。",
     "defaultProvider": "默认使用",
     "apiKey": "API Key",

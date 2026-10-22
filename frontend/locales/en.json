@@ -30,7 +30,7 @@
     "hide": "Hide topbar",
     "lightMode": "Switch to light mode",
     "darkMode": "Switch to dark mode",
-    "chatOpen": "AI Assistant"
+    "chatOpen": "Mio"
   },
   "menu": {
     "myNotes": "My Notes",
@@ -846,10 +846,10 @@
       "timeDaysAgo": "{n}d ago"
     },
     "chat": {
-      "title": "AI Assistant",
+      "title": "Mio",
       "placeholder": "Ask anything, or chat about your notes…",
       "send": "Send",
-      "emptyState": "What's on your mind? I can also dig through your notes.",
+      "emptyState": "I'm Mio. What's on your mind? I can also dig through your notes.",
       "sendFailed": "Failed to send, please retry",
       "connectionLost": "Connection lost, reply may be incomplete",
       "confirmFailed": "Failed to confirm, please retry",
@@ -1145,7 +1145,7 @@
   },
   "aiSettings": {
     "title": "AI Services",
-    "intro": "Used by the AI assistant, translation, clip organizing, semantic search and audio transcription. Empty fields fall back to the server's environment variables.",
+    "intro": "Used by Mio (the AI assistant), translation, clip organizing, semantic search and audio transcription. Empty fields fall back to the server's environment variables.",
     "cryptoKeyMissing": "The server has no encryption key (FEISHU_TOKEN_CRYPTO_KEY), so API keys can't be saved yet; models and URLs can still be saved.",
     "defaultProvider": "Default provider",
     "apiKey": "API key",
