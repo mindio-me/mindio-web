@@ -885,7 +885,7 @@ export default {
   padding: 10px 16px;
   border-radius: 14px;
   max-width: 78%;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -915,24 +915,47 @@ export default {
   min-width: 0;
 }
 
+// 正文排版参考 Gemini / 千问：16px、行高 1.75，段落和列表间距收紧，标题只靠字重和字号区分
 .chat-assistant-text {
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.75;
   color: var(--text-color);
   word-break: break-word;
+
+  ::v-deep {
+    > :first-child { margin-top: 0; }
+    > :last-child { margin-bottom: 0; }
+    p { margin: 0 0 12px; }
+    h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.4; margin: 20px 0 8px; }
+    h1 { font-size: 20px; }
+    h2 { font-size: 18px; }
+    h3, h4, h5, h6 { font-size: 16px; }
+    strong { font-weight: 600; }
+    ul, ol { margin: 0 0 12px; padding-left: 1.5em; }
+    li { margin: 4px 0; }
+    li > p { margin: 0; }
+    blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--border-color); color: var(--text-secondary); }
+    hr { border: 0; border-top: 1px solid var(--border-color); margin: 16px 0; }
+    table { border-collapse: collapse; margin: 0 0 12px; font-size: 14px; line-height: 1.6; }
+    th, td { border: 1px solid var(--border-color); padding: 6px 10px; text-align: left; }
+    th { font-weight: 600; background: var(--bg-secondary, #f4f4f5); }
+    pre, code { font-family: 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace; }
+  }
 
   ::v-deep pre.md-code-block {
     background: var(--bg-secondary, #f4f4f5);
     border-radius: 6px;
     padding: 10px 12px;
+    margin: 0 0 12px;
     overflow-x: auto;
-    font-size: 13px;
+    font-size: 14px;
+    line-height: 1.6;
   }
   ::v-deep code.md-inline-code {
     background: var(--bg-secondary, #f4f4f5);
     border-radius: 4px;
     padding: 1px 5px;
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 
@@ -1023,6 +1046,8 @@ export default {
   padding: 6px 0;
   resize: none;
   background: transparent;
+  font-size: 16px;
+  line-height: 1.6;
   color: var(--text-color) !important;
 
   &::placeholder {
