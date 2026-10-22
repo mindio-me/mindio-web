@@ -3811,7 +3811,8 @@ export default {
   border-right: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
   padding: 6px 6px 4px;
-  overflow: hidden;
+  // 不裁剪：日记名换行后格子要能撑高（行高 1fr 的自动最小值是内容高度），整个网格自己滚动
+  min-width: 0;
   transition: background 0.1s;
 
   &:nth-child(7n) {
@@ -3867,9 +3868,9 @@ export default {
   background: rgba(102, 126, 234, 0.12);
   color: var(--text-color);
   border-left: 2px solid var(--color-nav);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  // 日记名完整显示：自动换行，长英文单词也能断开
+  white-space: normal;
+  overflow-wrap: anywhere;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
